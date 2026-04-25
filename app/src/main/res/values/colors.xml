@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主背景色 -->
+    <color name="background">#1A1A1A</color>
+    
+    <!-- 游戏区域颜色 -->
+    <color name="game_background">#2C2C2C</color>
+    <color name="grid_line">#3C3C3C</color>
+    
+    <!-- 蛇的颜色 -->
+    <color name="snake_head">#4CAF50</color>
+    <color name="snake_body">#81C784</color>
+    
+    <!-- 食物颜色 -->
+    <color name="food">#F44336</color>
+    
+    <!-- 分数区域颜色 -->
+    <color name="score_background">#263238</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="score_text">#FFC107</color>
+    
+    <!-- 控制区域颜色 -->
+    <color name="controls_background">#263238</color>
+    <color name="btn_background">#1565C0</color>
+    <color name="btn_pressed">#0D47A1</color>
+    <color name="btn_text">#FFFFFF</color>
+    
+    <!-- 按钮边框颜色 -->
+    <color name="btn_border">#0D47A1</color>
+    
+    <!-- 文字颜色 -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>
