@@ -24,7 +24,7 @@
     <string name="score_label">分数:</string>
     <string name="score_default">0</string>
     <string name="score_format">%d</string>
-    <string name="final_score_format">最终得分: %d\n最高记录: %d</string>
+    <string name="final_score_format">最终得分: %1$d\n最高记录: %2$d</string>
     <string name="new_record">恭喜打破记录!</string>
     
     <!-- Dialogs -->
