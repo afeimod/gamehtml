@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
         val score = gameView.getScore()
         AlertDialog.Builder(this)
             .setTitle(R.string.game_over)
-            .setMessage(getString(R.string.final_score, score))
+            .setMessage(getString(R.string.final_score_format, score, score))
             .setPositiveButton(R.string.restart) { _, _ ->
                 gameView.restartGame()
             }
