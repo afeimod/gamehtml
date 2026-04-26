@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- 背景 -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M0,0h48v48h-48z" />
+    <!-- 蛇身 -->
+    <path
+        android:fillColor="#81C784"
+        android:pathData="M14,24 L20,24 L20,28 L14,28 Z" />
+    <path
+        android:fillColor="#81C784"
+        android:pathData="M8,24 L14,24 L14,28 L8,28 Z" />
+    <!-- 蛇头 -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M20,18 L30,18 L30,28 L20,28 Z" />
+    <!-- 蛇眼 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,21 A2,2 0 1,1 24,25 A2,2 0 1,1 24,21" />
+    <!-- 食物 -->
+    <path
+        android:fillColor="#F44336"
+        android:pathData="M40,24 A4,4 0 1,1 40,25 A4,4 0 1,1 40,24" />
+</vector>
