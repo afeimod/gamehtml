@@ -8,8 +8,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SnakeGame">
+        
+        <!-- 主菜单界面（启动器） -->
         <activity
-            android:name=".ui.MainActivity"
+            android:name=".ui.MenuActivity"
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
@@ -17,6 +19,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <!-- 游戏界面 -->
+        <activity
+            android:name=".ui.GameActivity"
+            android:screenOrientation="portrait" />
+            
+        <!-- 保留旧的 MainActivity 以兼容 -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+            
     </application>
 
 </manifest>

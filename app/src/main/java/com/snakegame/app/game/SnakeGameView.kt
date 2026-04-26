@@ -12,7 +12,7 @@ import com.snakegame.app.R
 
 /**
  * 贪吃蛇游戏视图
- * 负责游戏绘制和游戏逻辑
+ * 负责游戏绘制和游戏逻辑，支持多难度和障碍物系统
  */
 class SnakeGameView @JvmOverloads constructor(
     context: Context,
@@ -27,10 +27,16 @@ class SnakeGameView @JvmOverloads constructor(
     // 游戏状态
     private var snake: MutableList<Point> = mutableListOf()
     private var food: Point = Point(0, 0)
+    private var obstacles: MutableList<Point> = mutableListOf()
     private var direction: Direction = Direction.RIGHT
     private var isGameRunning = false
     private var isGameOver = false
     private var score = 0
+    
+    // 难度设置
+    private var gameSpeed = 200L  // 游戏速度（毫秒）
+    private var obstacleCount = 0  // 障碍物数量
+    private var enableGrowth = true  // 是否启用蛇身生长
     
     // 画笔
     private val backgroundPaint = Paint()
@@ -38,6 +44,7 @@ class SnakeGameView @JvmOverloads constructor(
     private val snakeHeadPaint = Paint()
     private val snakeBodyPaint = Paint()
     private val foodPaint = Paint()
+    private val obstaclePaint = Paint()
     
     // 单元格尺寸
     private var cellSize = 0f
@@ -46,26 +53,14 @@ class SnakeGameView @JvmOverloads constructor(
     
     // 游戏循环
     private val handler = Handler(Looper.getMainLooper())
-    private val gameLoopRunnable = object : Runnable {
-        override fun run() {
-            if (isGameRunning && !isGameOver) {
-                moveSnake()
-                checkCollision()
-                if (!isGameOver) {
-                    invalidate()
-                    handler.postDelayed(this, GAME_SPEED)
-                }
-            }
-        }
-    }
+    private var gameLoopRunnable: Runnable? = null
     
     // 回调接口
     var onScoreChanged: ((Int) -> Unit)? = null
     var onGameOver: (() -> Unit)? = null
     
-    // 游戏速度（毫秒）
+    // 常量
     companion object {
-        private const val GAME_SPEED = 200L
         private const val INITIAL_SNAKE_LENGTH = 3  // 初始蛇长度
     }
     
@@ -98,6 +93,10 @@ class SnakeGameView @JvmOverloads constructor(
         // 食物画笔
         foodPaint.color = context.getColor(R.color.food)
         foodPaint.style = Paint.Style.FILL
+        
+        // 障碍物画笔
+        obstaclePaint.color = context.getColor(R.color.obstacle)
+        obstaclePaint.style = Paint.Style.FILL
     }
     
     /**
@@ -115,6 +114,10 @@ class SnakeGameView @JvmOverloads constructor(
         // 重置方向
         direction = Direction.RIGHT
         
+        // 重置障碍物
+        obstacles.clear()
+        generateObstacles()
+        
         // 生成食物
         generateFood()
         
@@ -129,8 +132,54 @@ class SnakeGameView @JvmOverloads constructor(
         onScoreChanged?.invoke(score)
         
         // 启动游戏循环
-        handler.removeCallbacks(gameLoopRunnable)
-        handler.post(gameLoopRunnable)
+        startGameLoop()
+    }
+    
+    /**
+     * 生成障碍物
+     */
+    private fun generateObstacles() {
+        if (obstacleCount <= 0) return
+        
+        val random = java.util.Random()
+        var attempts = 0
+        val maxAttempts = 100
+        
+        while (obstacles.size < obstacleCount && attempts < maxAttempts) {
+            val obstacle = Point(
+                random.nextInt(gridWidth),
+                random.nextInt(gridHeight)
+            )
+            
+            // 检查是否与蛇或食物重叠
+            val isValidPosition = !snake.contains(obstacle) &&
+                                   obstacle != food &&
+                                   !obstacles.contains(obstacle) &&
+                                   !isNearSnakeStart(obstacle)
+            
+            if (isValidPosition) {
+                obstacles.add(obstacle)
+            }
+            attempts++
+        }
+    }
+    
+    /**
+     * 检查障碍物是否靠近蛇的起始位置
+     */
+    private fun isNearSnakeStart(point: Point): Boolean {
+        val startX = gridWidth / 2
+        val startY = gridHeight / 2
+        
+        // 在蛇起始位置周围3格内不生成障碍物
+        for (i in -3..3) {
+            for (j in -3..3) {
+                if (point.x == startX + i && point.y == startY + j) {
+                    return true
+                }
+            }
+        }
+        return false
     }
     
     /**
@@ -139,13 +188,42 @@ class SnakeGameView @JvmOverloads constructor(
     private fun generateFood() {
         val random = java.util.Random()
         var newFood: Point
+        var attempts = 0
+        val maxAttempts = 100
+        
         do {
             newFood = Point(
                 random.nextInt(gridWidth),
                 random.nextInt(gridHeight)
             )
-        } while (snake.contains(newFood))
+            attempts++
+            
+            // 检查是否与蛇或障碍物重叠
+        } while ((snake.contains(newFood) || obstacles.contains(newFood)) && attempts < maxAttempts)
+        
         food = newFood
+    }
+    
+    /**
+     * 启动游戏循环
+     */
+    private fun startGameLoop() {
+        handler.removeCallbacks(gameLoopRunnable ?: Runnable { })
+        
+        gameLoopRunnable = object : Runnable {
+            override fun run() {
+                if (isGameRunning && !isGameOver) {
+                    moveSnake()
+                    checkCollision()
+                    if (!isGameOver) {
+                        invalidate()
+                        handler.postDelayed(this, gameSpeed)
+                    }
+                }
+            }
+        }
+        
+        handler.post(gameLoopRunnable!!)
     }
     
     /**
@@ -168,6 +246,11 @@ class SnakeGameView @JvmOverloads constructor(
             score++
             onScoreChanged?.invoke(score)
             generateFood()
+            
+            // 只有启用生长时才保留尾部
+            if (!enableGrowth) {
+                // 不移除尾部，蛇身长度保持不变
+            }
         } else {
             // 没吃到食物，移除尾部
             snake.removeLast()
@@ -191,6 +274,12 @@ class SnakeGameView @JvmOverloads constructor(
             endGame()
             return
         }
+        
+        // 检查是否撞到障碍物
+        if (obstacles.contains(head)) {
+            endGame()
+            return
+        }
     }
     
     /**
@@ -199,7 +288,7 @@ class SnakeGameView @JvmOverloads constructor(
     private fun endGame() {
         isGameOver = true
         isGameRunning = false
-        handler.removeCallbacks(gameLoopRunnable)
+        handler.removeCallbacks(gameLoopRunnable ?: Runnable { })
         onGameOver?.invoke()
     }
     
@@ -254,7 +343,7 @@ class SnakeGameView @JvmOverloads constructor(
      */
     fun pauseGame() {
         isGameRunning = false
-        handler.removeCallbacks(gameLoopRunnable)
+        handler.removeCallbacks(gameLoopRunnable ?: Runnable { })
     }
     
     /**
@@ -263,7 +352,7 @@ class SnakeGameView @JvmOverloads constructor(
     fun resumeGame() {
         if (!isGameOver) {
             isGameRunning = true
-            handler.post(gameLoopRunnable)
+            startGameLoop()
         }
     }
     
@@ -303,6 +392,9 @@ class SnakeGameView @JvmOverloads constructor(
         // 绘制网格
         drawGrid(canvas)
         
+        // 绘制障碍物
+        drawObstacles(canvas)
+        
         // 绘制食物
         drawFood(canvas)
         
@@ -335,6 +427,21 @@ class SnakeGameView @JvmOverloads constructor(
                 offsetX + gridWidth * cellSize, startY,
                 gridPaint
             )
+        }
+    }
+    
+    /**
+     * 绘制障碍物
+     */
+    private fun drawObstacles(canvas: Canvas) {
+        for (obstacle in obstacles) {
+            val rect = RectF(
+                offsetX + obstacle.x * cellSize + 1,
+                offsetY + obstacle.y * cellSize + 1,
+                offsetX + (obstacle.x + 1) * cellSize - 1,
+                offsetY + (obstacle.y + 1) * cellSize - 1
+            )
+            canvas.drawRoundRect(rect, 4f, 4f, obstaclePaint)
         }
     }
     
@@ -393,5 +500,26 @@ class SnakeGameView @JvmOverloads constructor(
         if (width > 0 && height > 0) {
             calculateCellSize(width, height)
         }
+    }
+    
+    /**
+     * 设置游戏速度（毫秒）
+     */
+    fun setGameSpeed(speed: Long) {
+        gameSpeed = speed
+    }
+    
+    /**
+     * 设置障碍物数量
+     */
+    fun setObstacleCount(count: Int) {
+        obstacleCount = count
+    }
+    
+    /**
+     * 设置是否启用蛇身生长
+     */
+    fun setEnableGrowth(enabled: Boolean) {
+        enableGrowth = enabled
     }
 }

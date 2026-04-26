@@ -14,6 +14,9 @@
     <!-- 食物颜色 -->
     <color name="food">#F44336</color>
     
+    <!-- 障碍物颜色 -->
+    <color name="obstacle">#795548</color>
+    
     <!-- 分数区域颜色 -->
     <color name="score_background">#263238</color>
     <color name="text_primary">#FFFFFF</color>
@@ -31,4 +34,16 @@
     <!-- 文字颜色 -->
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
+    
+    <!-- Menu Colors -->
+    <color name="menu_background">#1A1A1A</color>
+    <color name="menu_title">#4CAF50</color>
+    <color name="menu_subtitle">#9E9E9E</color>
+    <color name="menu_desc">#FFC107</color>
+    <color name="menu_btn_start">#4CAF50</color>
+    <color name="menu_btn_start_pressed">#388E3C</color>
+    <color name="menu_btn_exit">#757575</color>
+    <color name="menu_btn_exit_pressed">#616161</color>
+    <color name="menu_btn_selected">#2196F3</color>
+    <color name="menu_btn_normal">#455A64</color>
 </resources>

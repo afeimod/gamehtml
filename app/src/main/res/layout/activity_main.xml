@@ -6,20 +6,76 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background"
-    tools:context=".ui.MainActivity">
+    tools:context=".ui.GameActivity">
+
+    <!-- 顶部状态栏 -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/score_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- 返回菜单按钮 -->
+        <Button
+            android:id="@+id/btnMenu"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/btn_small"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="@string/btn_menu"
+            android:textColor="@color/btn_text"
+            android:textSize="14sp" />
+
+        <!-- 游戏标题 -->
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textColor="@color/menu_title"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            tools:text="简单模式"
+            tools:visibility="visible" />
+
+        <!-- 暂停按钮 -->
+        <Button
+            android:id="@+id/btnPause"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/btn_small"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="@string/btn_pause"
+            android:textColor="@color/btn_text"
+            android:textSize="14sp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+    </LinearLayout>
 
     <!-- 分数显示区域 -->
     <LinearLayout
         android:id="@+id/scoreLayout"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="48dp"
         android:background="@color/score_background"
         android:gravity="center"
         android:orientation="horizontal"
-        android:padding="10dp"
+        android:padding="8dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toBottomOf="@+id/topBar">
 
         <TextView
             android:id="@+id/scoreLabel"
@@ -27,17 +83,17 @@
             android:layout_height="wrap_content"
             android:text="@string/score_label"
             android:textColor="@color/text_primary"
-            android:textSize="20sp"
+            android:textSize="18sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/scoreText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="8dp"
             android:text="@string/score_default"
             android:textColor="@color/score_text"
-            android:textSize="24sp"
+            android:textSize="22sp"
             android:textStyle="bold" />
 
     </LinearLayout>
@@ -56,11 +112,11 @@
     <LinearLayout
         android:id="@+id/controlsLayout"
         android:layout_width="match_parent"
-        android:layout_height="200dp"
+        android:layout_height="180dp"
         android:background="@color/controls_background"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="10dp"
+        android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
@@ -69,7 +125,7 @@
         <Button
             android:id="@+id/btnUp"
             android:layout_width="80dp"
-            android:layout_height="50dp"
+            android:layout_height="48dp"
             android:background="@drawable/btn_direction"
             android:text="@string/btn_up"
             android:textColor="@color/btn_text"
@@ -80,14 +136,15 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:gravity="center"
             android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btnLeft"
                 android:layout_width="80dp"
-                android:layout_height="50dp"
-                android:layout_marginEnd="40dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="60dp"
                 android:background="@drawable/btn_direction"
                 android:text="@string/btn_left"
                 android:textColor="@color/btn_text"
@@ -97,8 +154,8 @@
             <Button
                 android:id="@+id/btnRight"
                 android:layout_width="80dp"
-                android:layout_height="50dp"
-                android:layout_marginStart="40dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="60dp"
                 android:background="@drawable/btn_direction"
                 android:text="@string/btn_right"
                 android:textColor="@color/btn_text"
@@ -111,7 +168,8 @@
         <Button
             android:id="@+id/btnDown"
             android:layout_width="80dp"
-            android:layout_height="50dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
             android:background="@drawable/btn_direction"
             android:text="@string/btn_down"
             android:textColor="@color/btn_text"
