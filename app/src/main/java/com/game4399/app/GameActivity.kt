@@ -65,12 +65,9 @@ class GameActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 沉浸式全屏
+        // 沉浸式全屏：内容延伸到状态栏和导航栏区域，消除黑色地带
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        applyImmersiveFullscreen()
         binding = ActivityGameBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -92,6 +89,14 @@ class GameActivity : AppCompatActivity() {
 
         // 开始加载
         loadGame(currentUrl, currentTitle, currentType)
+    }
+
+    /** 沉浸式全屏：隐藏系统栏并让内容延伸到刘海屏 */
+    private fun applyImmersiveFullscreen() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     // ---------------- WebView ----------------
@@ -244,17 +249,17 @@ class GameActivity : AppCompatActivity() {
         })
     }
 
-    /** 全屏切换：隐藏/显示系统栏 + 顶部工具栏 */
+    /** 全屏切换：隐藏/显示顶部工具栏（系统栏始终保持隐藏） */
     private fun toggleFullscreen() {
         isFullscreen = !isFullscreen
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
         if (isFullscreen) {
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             binding.topBar.visibility = View.GONE
         } else {
-            controller.show(WindowInsetsCompat.Type.systemBars())
             binding.topBar.visibility = View.VISIBLE
+            // 短暂显示工具栏后自动重新隐藏系统栏
+            binding.topBar.postDelayed({
+                applyImmersiveFullscreen()
+            }, 200)
         }
         floatingMenu.isFullscreen = isFullscreen
     }
@@ -382,6 +387,14 @@ class GameActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
+        // 横竖屏切换或从后台返回后重新隐藏系统栏
+        applyImmersiveFullscreen()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 窗口获得焦点时确保系统栏隐藏（处理横竖屏切换后系统栏重新出现）
+        if (hasFocus) applyImmersiveFullscreen()
     }
 
     override fun onDestroy() {
