@@ -74,7 +74,7 @@ class WebFragment : Fragment() {
         }
         override fun onTitle(title: String?) {}
         override fun onConsole(level: String, msg: String, sourceId: String?, line: Int) {}
-        override fun onShowFullscreen(view: View, callback: GameWebChromeClient.CustomViewCallback) {}
+        override fun onShowFullscreen(view: View, callback: android.webkit.WebChromeClient.CustomViewCallback) {}
         override fun onHideFullscreen() {}
         override fun onFileChooser(
             cb: android.webkit.ValueCallback<Array<android.net.Uri>>, accept: String?
