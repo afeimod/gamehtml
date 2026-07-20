@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -103,7 +104,7 @@ class GameActivity : AppCompatActivity() {
             currentTitle = title?.takeIf { it.isNotBlank() } ?: currentTitle
         }
         override fun onConsole(level: String, msg: String, sourceId: String?, line: Int) {}
-        override fun onShowFullscreen(view: View, callback: GameWebChromeClient.CustomViewCallback) {
+        override fun onShowFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
             // Flash 全屏：直接铺满
             binding.topBar.visibility = View.GONE
         }
@@ -248,7 +249,7 @@ class GameActivity : AppCompatActivity() {
         if (keyCode == KeyEvent.KEYCODE_BACK) return super.onKeyDown(keyCode, event)
         // 游戏键交给 WebView 消费
         if (keyCode in GameWebView.GAME_KEYS) {
-            webView.dispatchKeyEvent(event)
+            event?.let { webView.dispatchKeyEvent(it) }
             return true
         }
         return super.onKeyDown(keyCode, event)
@@ -256,7 +257,7 @@ class GameActivity : AppCompatActivity() {
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode in GameWebView.GAME_KEYS) {
-            webView.dispatchKeyEvent(event)
+            event?.let { webView.dispatchKeyEvent(it) }
             return true
         }
         return super.onKeyUp(keyCode, event)
