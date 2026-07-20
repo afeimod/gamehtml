@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- 通用 -->
+    <PreferenceCategory android:title="@string/settings_general" app:iconSpaceReserved="false">
+
+        <SwitchPreferenceCompat
+            android:key="landscape_game"
+            android:title="@string/pref_landscape"
+            android:summary="@string/pref_landscape_summary"
+            android:defaultValue="true"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="block_ads"
+            android:title="@string/pref_block_ads"
+            android:summary="@string/pref_block_ads_summary"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="clear_cache"
+            android:title="@string/pref_clear_cache"
+            android:summary="@string/pref_clear_cache_summary"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <!-- Flash 支持 -->
+    <PreferenceCategory android:title="@string/settings_flash" app:iconSpaceReserved="false">
+
+        <SwitchPreferenceCompat
+            android:key="flash_enabled"
+            android:title="@string/pref_flash_enabled"
+            android:summary="@string/pref_flash_enabled_summary"
+            android:defaultValue="true"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="flash_autoplay"
+            android:title="@string/pref_flash_autoplay"
+            android:summary="@string/pref_flash_autoplay_summary"
+            android:defaultValue="true"
+            android:dependency="flash_enabled"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="flash_cdn"
+            android:title="@string/pref_flash_cdn"
+            android:summary="@string/pref_flash_cdn_summary"
+            android:entries="@array/flash_cdn_entries"
+            android:entryValues="@array/flash_cdn_values"
+            android:defaultValue="jsdelivr"
+            android:dependency="flash_enabled"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="flash_quality"
+            android:title="@string/pref_flash_quality"
+            android:entries="@array/flash_quality_entries"
+            android:entryValues="@array/flash_quality_values"
+            android:defaultValue="high"
+            android:dependency="flash_enabled"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <!-- 虚拟手柄 -->
+    <PreferenceCategory android:title="@string/settings_gamepad" app:iconSpaceReserved="false">
+
+        <SwitchPreferenceCompat
+            android:key="gamepad_enabled"
+            android:title="@string/pref_gamepad_enabled"
+            android:summary="@string/pref_gamepad_enabled_summary"
+            android:defaultValue="true"
+            app:iconSpaceReserved="false" />
+
+        <SeekBarPreference
+            android:key="gamepad_opacity"
+            android:title="@string/pref_gamepad_opacity"
+            android:summary="@string/pref_gamepad_opacity_summary"
+            android:defaultValue="60"
+            android:max="100"
+            android:dependency="gamepad_enabled"
+            app:iconSpaceReserved="false"
+            app:showSeekBarValue="true" />
+
+        <ListPreference
+            android:key="gamepad_a_key"
+            android:title="A 键映射"
+            android:entries="@array/key_mapping_entries"
+            android:entryValues="@array/key_mapping_values"
+            android:defaultValue="SPACE"
+            android:dependency="gamepad_enabled"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="gamepad_b_key"
+            android:title="B 键映射"
+            android:entries="@array/key_mapping_entries"
+            android:entryValues="@array/key_mapping_values"
+            android:defaultValue="ENTER"
+            android:dependency="gamepad_enabled"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <!-- 关于 -->
+    <PreferenceCategory android:title="@string/settings_about" app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="about_version"
+            android:title="@string/pref_about_version"
+            android:summary="1.0.0"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="about_ruffle"
+            android:title="@string/pref_about_ruffle"
+            android:summary="Ruffle 0.3.0 (MIT License)"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="about_body"
+            android:title="@string/pref_about_source"
+            android:summary="@string/about_body"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

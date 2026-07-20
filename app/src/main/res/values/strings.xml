@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">4399 游戏盒</string>
+    <string name="app_subtitle">支持 Flash 的怀旧小游戏中心</string>
+
+    <!-- 底部导航 -->
+    <string name="nav_home">首页</string>
+    <string name="nav_game">游戏</string>
+    <string name="nav_category">分类</string>
+    <string name="nav_me">我的</string>
+
+    <!-- 标题 -->
+    <string name="title_settings">设置</string>
+    <string name="title_favorites">我的收藏</string>
+    <string name="title_history">历史记录</string>
+
+    <!-- 首页快捷入口 -->
+    <string name="quick_4399_mobile">4399 手机版</string>
+    <string name="quick_4399_pc">4399 电脑版(Flash)</string>
+    <string name="quick_popular">热门游戏</string>
+    <string name="quick_classic">经典怀旧</string>
+    <string name="quick_favorites">我的收藏</string>
+
+    <!-- 游戏快捷列表 -->
+    <string name="game_gold_miner">黄金矿工</string>
+    <string name="game_fireboy_watergirl">森林冰火人</string>
+    <string name="game_plants_zombies">植物大战僵尸</string>
+    <string name="game_doudizhu">斗地主</string>
+    <string name="game_bomb">泡泡堂</string>
+    <string name="game_zuma">祖玛</string>
+
+    <!-- 游戏界面 -->
+    <string name="loading">加载中…</string>
+    <string name="load_failed">加载失败，点击重试</string>
+    <string name="open_in_browser">在浏览器打开</string>
+    <string name="refresh">刷新</string>
+    <string name="back">返回</string>
+    <string name="forward">前进</string>
+    <string name="home">主页</string>
+    <string name="share">分享</string>
+    <string name="favorite">收藏</string>
+    <string name="unfavorite">取消收藏</string>
+    <string name="added_to_favorites">已加入收藏</string>
+    <string name="removed_from_favorites">已移出收藏</string>
+
+    <!-- 虚拟手柄 -->
+    <string name="gamepad_show">显示手柄</string>
+    <string name="gamepad_hide">隐藏手柄</string>
+    <string name="gamepad_up">上</string>
+    <string name="gamepad_down">下</string>
+    <string name="gamepad_left">左</string>
+    <string name="gamepad_right">右</string>
+    <string name="gamepad_a">A</string>
+    <string name="gamepad_b">B</string>
+    <string name="gamepad_start">开始</string>
+    <string name="gamepad_select">选择</string>
+
+    <!-- 输入对话框 -->
+    <string name="enter_game_url">输入游戏网址</string>
+    <string name="enter_game_id">输入 4399 游戏 ID</string>
+    <string name="hint_game_url">如 https://www.4399.com/flash/29386.htm</string>
+    <string name="hint_game_id">如 29386 (黄金矿工)</string>
+    <string name="confirm">确定</string>
+    <string name="cancel">取消</string>
+    <string name="go_play">开始游戏</string>
+
+    <!-- 设置 -->
+    <string name="settings_general">通用设置</string>
+    <string name="settings_gamepad">虚拟手柄</string>
+    <string name="settings_flash">Flash 支持</string>
+    <string name="settings_about">关于</string>
+
+    <string name="pref_gamepad_enabled">启用虚拟手柄</string>
+    <string name="pref_gamepad_enabled_summary">在游戏界面显示方向键和动作按钮</string>
+    <string name="pref_gamepad_opacity">手柄透明度</string>
+    <string name="pref_gamepad_opacity_summary">手柄控件的显示透明度</string>
+    <string name="pref_gamepad_size">手柄大小</string>
+    <string name="pref_key_mapping">按键映射</string>
+    <string name="pref_key_mapping_summary">虚拟按钮映射到键盘按键</string>
+
+    <string name="pref_flash_enabled">启用 Flash (Ruffle)</string>
+    <string name="pref_flash_enabled_summary">使用 Ruffle WebAssembly 模拟器运行 SWF</string>
+    <string name="pref_flash_autoplay">自动播放</string>
+    <string name="pref_flash_autoplay_summary">页面加载后自动启动 Flash</string>
+    <string name="pref_flash_quality">画质</string>
+    <string name="pref_flash_cdn">Ruffle 加载源</string>
+    <string name="pref_flash_cdn_summary">选择 Ruffle 脚本的 CDN 地址</string>
+
+    <string name="pref_landscape">横屏游戏</string>
+    <string name="pref_landscape_summary">游戏界面强制横屏</string>
+    <string name="pref_block_ads">屏蔽广告</string>
+    <string name="pref_block_ads_summary">拦截常见广告域名</string>
+    <string name="pref_clear_cache">清除缓存</string>
+    <string name="pref_clear_cache_summary">清除 WebView 缓存数据</string>
+    <string name="cache_cleared">缓存已清除</string>
+
+    <string name="pref_about_version">版本</string>
+    <string name="pref_about_ruffle">Ruffle 引擎</string>
+    <string name="pref_about_source">项目说明</string>
+    <string name="about_body">本 App 基于 Android WebView + Ruffle WebAssembly 实现，
+        用于在手机上怀旧游玩 4399 小游戏。\n\n
+        • Flash 模拟：Ruffle (MIT)\n
+        • 触屏 + 物理键盘 + 虚拟手柄\n
+        • 4399 仅作为内容入口，版权归原网站所有</string>
+
+    <!-- 对话框 -->
+    <string name="dialog_exit_game">退出游戏？</string>
+    <string name="dialog_exit_game_msg">是否退出当前游戏？</string>
+    <string name="dialog_clear_cache">清除缓存？</string>
+    <string name="dialog_clear_cache_msg">将清除所有 WebView 缓存与表单数据</string>
+
+    <!-- 键盘映射键 -->
+    <string name="key_up">↑</string>
+    <string name="key_down">↓</string>
+    <string name="key_left">←</string>
+    <string name="key_right">→</string>
+
+    <!-- 空状态 -->
+    <string name="empty_favorites">还没有收藏的游戏</string>
+    <string name="empty_favorites_hint">在游戏中点击收藏按钮即可添加</string>
+    <string name="empty_history">暂无历史记录</string>
+
+    <!-- 通知 -->
+    <string name="channel_name">游戏通知</string>
+    <string name="channel_desc">游戏加载与状态通知</string>
+</resources>

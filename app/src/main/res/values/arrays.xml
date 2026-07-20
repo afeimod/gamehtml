@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ruffle CDN 选项 -->
+    <string-array name="flash_cdn_entries">
+        <item>jsDelivr (国内推荐)</item>
+        <item>unpkg</item>
+        <item>本地资源 (assets)</item>
+    </string-array>
+    <string-array name="flash_cdn_values">
+        <item>jsdelivr</item>
+        <item>unpkg</item>
+        <item>local</item>
+    </string-array>
+
+    <!-- Flash 画质 -->
+    <string-array name="flash_quality_entries">
+        <item>低 (流畅省电)</item>
+        <item>中 (平衡)</item>
+        <item>高 (清晰)</item>
+        <item>最佳</item>
+    </string-array>
+    <string-array name="flash_quality_values">
+        <item>low</item>
+        <item>medium</item>
+        <item>high</item>
+        <item>best</item>
+    </string-array>
+
+    <!-- 按键映射选项（对应键盘 KeyCode 名） -->
+    <string-array name="key_mapping_entries">
+        <item>空格 (Space)</item>
+        <item>回车 (Enter)</item>
+        <item>Ctrl</item>
+        <item>Shift</item>
+        <item>Alt</item>
+        <item>Z</item>
+        <item>X</item>
+        <item>C</item>
+        <item>A</item>
+        <item>S</item>
+        <item>D</item>
+        <item>Tab</item>
+    </string-array>
+    <string-array name="key_mapping_values">
+        <item>SPACE</item>
+        <item>ENTER</item>
+        <item>CTRL_LEFT</item>
+        <item>SHIFT_LEFT</item>
+        <item>ALT_LEFT</item>
+        <item>Z</item>
+        <item>X</item>
+        <item>C</item>
+        <item>A</item>
+        <item>S</item>
+        <item>D</item>
+        <item>TAB</item>
+    </string-array>
+</resources>

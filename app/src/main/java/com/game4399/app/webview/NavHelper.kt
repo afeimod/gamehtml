@@ -1,0 +1,60 @@
+package com.game4399.app.webview
+
+import android.net.Uri
+import com.game4399.app.data.GameType
+import com.game4399.app.data.PrefsManager
+
+/**
+ * 导航与 URL 工具：构造 4399 各类页面地址、判断 SWF、生成内置播放器地址。
+ */
+object NavHelper {
+
+    /** 4399 移动版主页 */
+    const val URL_4399_MOBILE = "https://h.4399.com/"
+    /** 4399 PC 版（含 Flash 游戏） */
+    const val URL_4399_PC = "https://www.4399.com/"
+    /** 全部分类 */
+    const val URL_4399_CATEGORY = "https://h.4399.com/wap/allcategory.htm"
+    /** 热门小游戏榜 */
+    const val URL_4399_HOT = "https://h.4399.com/wap/xyxRank.htm"
+
+    /** 根据 ID 与类型构造 4399 游戏页 */
+    fun gameUrl(id: String, type: GameType): String = when (type) {
+        GameType.FLASH -> "https://www.4399.com/flash/$id.htm"
+        GameType.H5    -> "https://h.4399.com/play/$id.htm"
+        GameType.URL   -> id
+    }
+
+    /** 判断是否为 SWF 资源 */
+    fun isSwf(url: String): Boolean =
+        url.endsWith(".swf", ignoreCase = true) || url.contains(".swf?", ignoreCase = true)
+
+    /** 构造内置 Ruffle 播放器地址（带 CDN 与播放参数） */
+    fun playerUrl(swfUrl: String, base: String? = null, title: String? = null): String {
+        val u = Uri.parse("file:///android_asset/player.html")
+            .buildUpon()
+            .appendQueryParameter("swf", swfUrl)
+            .appendQueryParameter("cdn", RuffleInjector.scriptUrl())
+            .appendQueryParameter("path", RuffleInjector.publicPath())
+            .appendQueryParameter("autoplay", if (PrefsManager.isFlashAutoplay) "on" else "off")
+        base?.let { u.appendQueryParameter("base", it) }
+        title?.let { u.appendQueryParameter("title", it) }
+        return u.build().toString()
+    }
+
+    /** 规范化用户输入：自动补 https://、识别纯数字为 4399 游戏 ID */
+    fun normalizeInput(input: String): Pair<String, GameType> {
+        val trimmed = input.trim()
+        // 纯数字 → 4399 游戏 ID（默认 Flash）
+        if (trimmed.matches(Regex("^\\d+$"))) {
+            return gameUrl(trimmed, GameType.FLASH) to GameType.FLASH
+        }
+        // 已带协议
+        var url = trimmed
+        if (!url.startsWith("http://") && !url.startsWith("https://") &&
+            !url.startsWith("file://")) {
+            url = "https://$url"
+        }
+        return url to GameType.URL
+    }
+}

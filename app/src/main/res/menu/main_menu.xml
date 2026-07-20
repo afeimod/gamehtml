@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_open_url"
+        android:icon="@drawable/ic_link"
+        android:title="@string/enter_game_url"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_favorites"
+        android:icon="@drawable/ic_star"
+        android:title="@string/title_favorites"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_settings"
+        android:icon="@drawable/ic_category"
+        android:title="@string/title_settings"
+        app:showAsAction="never" />
+</menu>

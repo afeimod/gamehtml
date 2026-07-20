@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 4399 各域名允许明文（http）流量 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">4399.com</domain>
+        <domain includeSubdomains="true">4399.cn</domain>
+        <domain includeSubdomains="true">5054399.com</domain>
+        <domain includeSubdomains="true">doubaocdn.com</domain>
+        <domain includeSubdomains="true">4399pk.com</domain>
+        <domain includeSubdomains="true">cdn.jsdelivr.net</domain>
+        <domain includeSubdomains="true">unpkg.com</domain>
+    </domain-config>
+    <!-- 其它域名默认走 https -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

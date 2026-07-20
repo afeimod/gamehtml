@@ -1,0 +1,50 @@
+# Android / Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+**/build/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# 本地配置
+local.properties
+keystore.properties
+*.keystore
+*.jks
+release.keystore
+debug.keystore
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.navigation/
+captures/
+
+# Eclipse / Gradle IDE
+.classpath
+.project
+.settings/
+bin/
+gen/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 日志
+*.log
+logs/
+
+# NDK
+.cxx/
+
+# GitHub Actions 临时产物
+artifacts/

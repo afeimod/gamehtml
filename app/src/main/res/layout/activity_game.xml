@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    游戏界面：FrameLayout 分层
+    底层 WebView（游戏画面）
+    顶层 1：顶部工具栏（返回/前进/刷新/手柄开关/收藏/分享）
+    顶层 2：进度条
+    顶层 3：虚拟手柄（左下方向键 + 右下 A/B + 中下 Start/Select）
+    顶层 4：加载遮罩 / 错误页
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- 游戏画面 -->
+    <com.game4399.app.webview.GameWebView
+        android:id="@+id/gameWebView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 进度条 -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/progress_height"
+        android:layout_gravity="top"
+        android:max="100"
+        android:progressDrawable="@drawable/progress_game"
+        android:visibility="gone" />
+
+    <!-- 顶部悬浮工具栏 -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_margin="@dimen/spacing_sm"
+        android:background="@drawable/bg_top_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/spacing_xs">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            style="@style/Widget.GamepadButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/back"
+            android:src="@drawable/ic_back"
+            app:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/btnForward"
+            style="@style/Widget.GamepadButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/forward"
+            android:src="@drawable/ic_forward"
+            app:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/btnRefresh"
+            style="@style/Widget.GamepadButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/refresh"
+            android:src="@drawable/ic_refresh"
+            app:tint="@android:color/white" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/btnGamepad"
+            style="@style/Widget.GamepadButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/gamepad_show"
+            android:src="@drawable/ic_keyboard"
+            app:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/btnFavorite"
+            style="@style/Widget.GamepadButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/favorite"
+            android:src="@drawable/ic_star_outline"
+            app:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/btnShare"
+            style="@style/Widget.GamepadButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/share"
+            android:src="@drawable/ic_share"
+            app:tint="@android:color/white" />
+    </LinearLayout>
+
+    <!-- 虚拟手柄：左下方向键 -->
+    <com.game4399.app.input.DPadView
+        android:id="@+id/dpad"
+        android:layout_width="@dimen/dpad_size"
+        android:layout_height="@dimen/dpad_size"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="@dimen/gamepad_margin"
+        android:visibility="gone" />
+
+    <!-- 虚拟手柄：右下 A/B 按钮 -->
+    <com.game4399.app.input.ActionButtonView
+        android:id="@+id/actionButtons"
+        android:layout_width="@dimen/action_group_size"
+        android:layout_height="@dimen/action_group_size"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="@dimen/gamepad_margin"
+        android:visibility="gone" />
+
+    <!-- Start / Select 中下 -->
+    <LinearLayout
+        android:id="@+id/systemButtons"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="@dimen/gamepad_margin"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btnSelect"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/gamepad_select"
+            android:textColor="@android:color/white" />
+
+        <Button
+            android:id="@+id/btnStart"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_lg"
+            android:text="@string/gamepad_start"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
+    <!-- 加载遮罩 -->
+    <FrameLayout
+        android:id="@+id/loadingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/overlay"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminateTint="@color/brand_orange" />
+
+            <TextView
+                android:id="@+id/loadingText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/loading"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/text_body" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 错误页 -->
+    <LinearLayout
+        android:id="@+id/errorView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/load_failed"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_title" />
+
+        <Button
+            android:id="@+id/btnRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:text="@string/refresh" />
+    </LinearLayout>
+
+</FrameLayout>
