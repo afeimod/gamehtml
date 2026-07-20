@@ -1,0 +1,231 @@
+# 4399 游戏盒 - APK 构建 Workflow
+#
+# 触发方式：
+#   1. 手动触发（GitHub 仓库 → Actions → Build APK → Run workflow）
+#   2. 推送 tag（v* 开头，如 v1.0.0）自动构建 Release APK
+#
+# 功能：
+#   - 构建 Debug / Release APK
+#   - Release 构建自动签名（无 keystore 时回退到 debug 签名）
+#   - 上传 APK 为 Artifact（90 天保存期）
+#   - 推 tag 时自动创建 GitHub Release 并附加 APK
+
+name: Build APK
+
+on:
+  # 手动触发：在 Actions 页面选择 workflow 并点击 Run workflow
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 构建类型
+        required: true
+        type: choice
+        default: debug
+        options:
+          - debug
+          - release
+          - both
+      upload_release:
+        description: 推送 tag 时是否创建 Release（手动触发通常选 no）
+        required: false
+        type: boolean
+        default: false
+
+  # 推送 tag 时自动触发构建 Release
+  push:
+    tags:
+      - 'v*'
+      - 'V*'
+
+# 同一分支新推送时取消旧构建，节省 CI 资源
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ---------- 1. 检出代码 ----------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ---------- 2. 配置 JDK 17 ----------
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # ---------- 3. 配置 Android SDK ----------
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-35
+            build-tools;35.0.0
+
+      # ---------- 4. 配置 Gradle ----------
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      # ---------- 5. 生成 Gradle Wrapper（如果缺失） ----------
+      # 仓库未提交 gradle-wrapper.jar / gradlew 时，CI 自动生成
+      - name: Generate Gradle Wrapper
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ] || [ ! -f gradlew ]; then
+            echo "Gradle wrapper 缺失，正在生成..."
+            gradle wrapper --gradle-version 8.7 --distribution-type bin
+          else
+            echo "Gradle wrapper 已存在"
+          fi
+          chmod +x gradlew
+          ./gradlew --version
+
+      # ---------- 6. 决定构建类型 ----------
+      - name: Determine build type
+        id: meta
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "build_type=both" >> $GITHUB_OUTPUT
+            echo "upload_release=true" >> $GITHUB_OUTPUT
+            echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "build_type=${{ inputs.build_type }}" >> $GITHUB_OUTPUT
+            echo "upload_release=${{ inputs.upload_release }}" >> $GITHUB_OUTPUT
+            echo "tag_name=" >> $GITHUB_OUTPUT
+          fi
+
+      # ---------- 7. 准备 Release 签名 ----------
+      # 若仓库 Secrets 配置了签名信息则使用，否则回退到 debug 签名
+      - name: Prepare signing key
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_KEY_BASE64" ]; then
+            echo "未配置签名 Secrets，Release 将使用 debug 签名"
+            # 复用 Android SDK 的 debug.keystore
+            mkdir -p app
+            cat > app/keystore.properties <<'EOF'
+          storeFile=$ANDROID_SDK_ROOT/.android/debug.keystore
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+          else
+            echo "检测到签名 Secrets，解码 keystore..."
+            echo "$SIGNING_KEY_BASE64" | base64 -d > app/release.keystore
+            cat > app/keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=$SIGNING_STORE_PASSWORD
+          keyAlias=$SIGNING_KEY_ALIAS
+          keyPassword=$SIGNING_KEY_PASSWORD
+          EOF
+          fi
+          echo "keystore.properties 已生成"
+
+      # ---------- 8. 构建 Debug APK ----------
+      - name: Build Debug APK
+        if: steps.meta.outputs.build_type == 'debug' || steps.meta.outputs.build_type == 'both'
+        run: ./gradlew assembleDebug --stacktrace
+
+      # ---------- 9. 构建 Release APK ----------
+      - name: Build Release APK
+        if: steps.meta.outputs.build_type == 'release' || steps.meta.outputs.build_type == 'both'
+        run: ./gradlew assembleRelease --stacktrace
+
+      # ---------- 10. 重命名 APK（带版本号与日期） ----------
+      - name: Rename APKs
+        id: apk
+        run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
+          BUILD_TYPE=$(grep -oP 'versionCode = \K\d+' app/build.gradle.kts | head -1)
+          DATE=$(date +'%Y%m%d')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          SUFFIX="${VERSION}-${SHORT_SHA}-${DATE}"
+          mkdir -p artifacts
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk artifacts/Game4399-${SUFFIX}-debug.apk
+            echo "debug_apk=artifacts/Game4399-${SUFFIX}-debug.apk" >> $GITHUB_OUTPUT
+          fi
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk artifacts/Game4399-${SUFFIX}-release.apk
+            echo "release_apk=artifacts/Game4399-${SUFFIX}-release.apk" >> $GITHUB_OUTPUT
+          elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk artifacts/Game4399-${SUFFIX}-release-unsigned.apk
+            echo "release_apk=artifacts/Game4399-${SUFFIX}-release-unsigned.apk" >> $GITHUB_OUTPUT
+          fi
+          ls -lh artifacts/
+
+      # ---------- 11. 上传 Artifact ----------
+      - name: Upload Debug APK Artifact
+        if: steps.meta.outputs.build_type == 'debug' || steps.meta.outputs.build_type == 'both'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Game4399-debug-${{ github.run_number }}
+          path: artifacts/*-debug*.apk
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload Release APK Artifact
+        if: steps.meta.outputs.build_type == 'release' || steps.meta.outputs.build_type == 'both'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Game4399-release-${{ github.run_number }}
+          path: artifacts/*-release*.apk
+          retention-days: 90
+          if-no-files-found: error
+
+      # ---------- 12. 创建 GitHub Release（推 tag 时） ----------
+      - name: Create GitHub Release
+        if: steps.meta.outputs.upload_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          name: Game4399 ${{ steps.meta.outputs.tag_name }}
+          body: |
+            ## Game4399 ${{ steps.meta.outputs.tag_name }}
+
+            ### 安装
+            下载下方 `Game4399-*-release.apk` 后在手机上安装。
+
+            ### 系统要求
+            - Android 6.0 (API 23) 及以上
+            - 建议横屏使用以获得最佳游戏体验
+
+            ### 完整变更日志
+            见 [README.md](https://github.com/${{ github.repository }}/blob/main/README.md)
+          files: |
+            artifacts/*-release*.apk
+            artifacts/*-debug*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---------- 13. 构建摘要 ----------
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "## 构建结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 构建类型: \`${{ steps.meta.outputs.build_type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 触发方式: \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 分支/标签: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 提交: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ -d artifacts ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 产物" >> $GITHUB_STEP_SUMMARY
+            ls -lh artifacts/ | awk 'NR>1 {print "- `" $NF "` (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
+          fi
