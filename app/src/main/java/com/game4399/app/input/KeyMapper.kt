@@ -26,12 +26,25 @@ object KeyMapper {
         "D"          -> KeyEvent.KEYCODE_D
         "E"          -> KeyEvent.KEYCODE_E
         "F"          -> KeyEvent.KEYCODE_F
+        "G"          -> KeyEvent.KEYCODE_G
+        "H"          -> KeyEvent.KEYCODE_H
+        "I"          -> KeyEvent.KEYCODE_I
+        "J"          -> KeyEvent.KEYCODE_J
+        "K"          -> KeyEvent.KEYCODE_K
+        "L"          -> KeyEvent.KEYCODE_L
+        "M"          -> KeyEvent.KEYCODE_M
+        "N"          -> KeyEvent.KEYCODE_N
+        "O"          -> KeyEvent.KEYCODE_O
+        "P"          -> KeyEvent.KEYCODE_P
         "Q"          -> KeyEvent.KEYCODE_Q
         "R"          -> KeyEvent.KEYCODE_R
         "S"          -> KeyEvent.KEYCODE_S
+        "T"          -> KeyEvent.KEYCODE_T
+        "U"          -> KeyEvent.KEYCODE_U
         "V"          -> KeyEvent.KEYCODE_V
         "W"          -> KeyEvent.KEYCODE_W
         "X"          -> KeyEvent.KEYCODE_X
+        "Y"          -> KeyEvent.KEYCODE_Y
         "Z"          -> KeyEvent.KEYCODE_Z
         "0"          -> KeyEvent.KEYCODE_0
         "1"          -> KeyEvent.KEYCODE_1
@@ -43,6 +56,10 @@ object KeyMapper {
         "7"          -> KeyEvent.KEYCODE_7
         "8"          -> KeyEvent.KEYCODE_8
         "9"          -> KeyEvent.KEYCODE_9
+        "UP"         -> KeyEvent.KEYCODE_DPAD_UP
+        "DOWN"       -> KeyEvent.KEYCODE_DPAD_DOWN
+        "LEFT"       -> KeyEvent.KEYCODE_DPAD_LEFT
+        "RIGHT"      -> KeyEvent.KEYCODE_DPAD_RIGHT
         else         -> KeyEvent.KEYCODE_SPACE
     }
 

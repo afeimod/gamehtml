@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import com.game4399.app.data.PrefsManager
 import com.game4399.app.webview.GameWebView
 import kotlin.math.abs
 import kotlin.math.max
@@ -166,11 +167,26 @@ class DPadView @JvmOverloads constructor(
     }
 
     private fun injectDown(keyCode: Int) {
-        targetWebView?.injectKeyDown(keyCode)
+        // 根据 dpadMode 设置映射方向键到 DPAD_* 或 WASD
+        val mappedKey = mapDirectionKey(keyCode)
+        targetWebView?.injectKeyDown(mappedKey)
         performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
     }
 
     private fun injectUp(keyCode: Int) {
-        targetWebView?.injectKeyUp(keyCode)
+        val mappedKey = mapDirectionKey(keyCode)
+        targetWebView?.injectKeyUp(mappedKey)
+    }
+
+    /** 根据 dpadMode 将方向键映射为 DPAD_* 或 WASD */
+    private fun mapDirectionKey(keyCode: Int): Int {
+        if (PrefsManager.dpadMode != "wasd") return keyCode
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> KeyEvent.KEYCODE_W
+            KeyEvent.KEYCODE_DPAD_DOWN -> KeyEvent.KEYCODE_S
+            KeyEvent.KEYCODE_DPAD_LEFT -> KeyEvent.KEYCODE_A
+            KeyEvent.KEYCODE_DPAD_RIGHT -> KeyEvent.KEYCODE_D
+            else -> keyCode
+        }
     }
 }

@@ -12,14 +12,17 @@ import com.game4399.app.webview.GameWebView
 import kotlin.math.min
 
 /**
- * 动作按钮组（A / B 双按钮）。
+ * 动作按钮组：支持 2/4/6 个可配置按键。
  *
- * - A 按钮映射到设置中的 [PrefsManager.gamepadAKey]（默认空格）
- * - B 按钮映射到 [PrefsManager.gamepadBKey]（默认回车）
- * - 支持多指同时按 A、B
- * - 按下注入 keydown，松开注入 keyup（与游戏键盘监听一致）
+ * - 按键映射来自 [PrefsManager.gamepadKeys]（默认 J/K/L/U/I/O）
+ * - 按键大小来自 [PrefsManager.gamepadScale]
+ * - 支持多指同时按下不同按钮
+ * - 按下注入 keydown，松开注入 keyup
  *
- * 布局：A 在左上偏内，B 在右下偏外（经典手柄排布）。
+ * 布局：
+ *  - 2 按键：左下 A、右上 B
+ *  - 4 按键：菱形排列
+ *  - 6 按键：两列三行
  */
 class ActionButtonView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyle: Int = 0
@@ -31,112 +34,154 @@ class ActionButtonView @JvmOverloads constructor(
         set(value) { field = value.coerceIn(40, 255); invalidate() }
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private var _pressedA = false
-    private var _pressedB = false
+    private val buttonColors = intArrayOf(
+        Color.argb(255, 0xE5, 0x39, 0x35),  // 红
+        Color.argb(255, 0x1E, 0x88, 0xE5),  // 蓝
+        Color.argb(255, 0x43, 0xA0, 0x47),  // 绿
+        Color.argb(255, 0xFF, 0xC1, 0x07),  // 黄
+        Color.argb(255, 0x8E, 0x24, 0xAA),  // 紫
+        Color.argb(255, 0xFF, 0x57, 0x22)   // 橙
+    )
+    private val pressedColor = Color.argb(255, 0xFF, 0xFF, 0xFF)
 
-    /** 当前 A/B 按下的指针 ID（-1 表示未按下） */
-    private var pointerA = -1
-    private var pointerB = -1
+    /** 每个按钮的按下状态：index → 是否按下 */
+    private val pressedState = BooleanArray(6) { false }
+    /** 每个指针 ID → 按下的按钮 index（-1 表示未按下） */
+    private val pointerButton = HashMap<Int, Int>()
 
-    private fun aKeyCode() = KeyMapper.toKeyCode(PrefsManager.gamepadAKey)
-    private fun bKeyCode() = KeyMapper.toKeyCode(PrefsManager.gamepadBKey)
+    /** 按钮标签（A/B/C/D/E/F 或实际映射的按键名） */
+    private val buttonLabels = arrayOf("A", "B", "C", "D", "E", "F")
+
+    private fun keyCodes(): List<Int> {
+        return PrefsManager.gamepadKeys.map { KeyMapper.toKeyCode(it) }
+    }
+
+    private fun buttonCount(): Int = PrefsManager.actionButtonCount
+
+    /** 计算每个按钮的圆心和半径 */
+    private fun getButtonPositions(): List<Triple<Float, Float, Float>> {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val scale = PrefsManager.gamepadScale
+        val baseR = min(w, h) * 0.18f * scale
+        val count = buttonCount()
+        val positions = mutableListOf<Triple<Float, Float, Float>>()
+
+        when (count) {
+            2 -> {
+                positions.add(Triple(w * 0.30f, h * 0.65f, baseR * 1.2f))
+                positions.add(Triple(w * 0.70f, h * 0.35f, baseR * 1.2f))
+            }
+            4 -> {
+                positions.add(Triple(w * 0.50f, h * 0.25f, baseR))
+                positions.add(Triple(w * 0.25f, h * 0.55f, baseR))
+                positions.add(Triple(w * 0.75f, h * 0.55f, baseR))
+                positions.add(Triple(w * 0.50f, h * 0.80f, baseR))
+            }
+            else -> { // 6
+                positions.add(Triple(w * 0.25f, h * 0.25f, baseR))
+                positions.add(Triple(w * 0.75f, h * 0.25f, baseR))
+                positions.add(Triple(w * 0.25f, h * 0.55f, baseR))
+                positions.add(Triple(w * 0.75f, h * 0.55f, baseR))
+                positions.add(Triple(w * 0.25f, h * 0.85f, baseR))
+                positions.add(Triple(w * 0.75f, h * 0.85f, baseR))
+            }
+        }
+        return positions
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val rA = min(w, h) * 0.32f
-        val rB = min(w, h) * 0.32f
-        // A 圆心（左下）
-        val ax = w * 0.32f
-        val ay = h * 0.68f
-        // B 圆心（右上）
-        val bx = w * 0.72f
-        val by = h * 0.32f
+        val positions = getButtonPositions()
+        val keys = keyCodes()
+        val count = minOf(positions.size, keys.size, buttonCount())
 
-        // A
-        paint.style = Paint.Style.FILL
-        paint.color = if (_pressedA) Color.argb(overlayAlpha, 0xFF, 0xC1, 0x07)
-                      else Color.argb(overlayAlpha, 0xE5, 0x39, 0x35)
-        canvas.drawCircle(ax, ay, rA, paint)
-        paint.color = Color.WHITE
-        paint.textSize = rA * 0.9f
-        paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("A", ax, ay + rA * 0.33f, paint)
+        for (i in 0 until count) {
+            val (cx, cy, r) = positions[i]
+            val baseColor = buttonColors[i % buttonColors.size]
+            paint.style = Paint.Style.FILL
+            paint.color = if (pressedState[i]) {
+                Color.argb(overlayAlpha, Color.red(pressedColor), Color.green(pressedColor), Color.blue(pressedColor))
+            } else {
+                Color.argb(overlayAlpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
+            }
+            canvas.drawCircle(cx, cy, r, paint)
 
-        // B
-        paint.color = if (_pressedB) Color.argb(overlayAlpha, 0xFF, 0xC1, 0x07)
-                      else Color.argb(overlayAlpha, 0x1E, 0x88, 0xE5)
-        canvas.drawCircle(bx, by, rB, paint)
-        paint.color = Color.WHITE
-        canvas.drawText("B", bx, by + rB * 0.33f, paint)
+            // 按钮标签
+            paint.color = Color.WHITE
+            paint.textSize = r * 0.8f
+            paint.textAlign = Paint.Align.CENTER
+            canvas.drawText(buttonLabels[i], cx, cy + r * 0.28f, paint)
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        val positions = getButtonPositions()
+        val keys = keyCodes()
+        val count = minOf(positions.size, keys.size, buttonCount())
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val idx = event.actionIndex
                 val x = event.getX(idx)
                 val y = event.getY(idx)
                 val pid = event.getPointerId(idx)
-                when (hitButton(x, y)) {
-                    Button.A -> { _pressedA = true; pointerA = pid; inject(aKeyCode(), down = true) }
-                    Button.B -> { _pressedB = true; pointerB = pid; inject(bKeyCode(), down = true) }
-                    Button.NONE -> {}
+                val btn = hitButton(x, y, positions, count)
+                if (btn >= 0 && btn < count) {
+                    pressedState[btn] = true
+                    pointerButton[pid] = btn
+                    targetWebView?.injectKeyDown(keys[btn])
+                    performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                 }
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
-                // 处理手指滑出按钮区域 → 释放
                 for (i in 0 until event.pointerCount) {
                     val pid = event.getPointerId(i)
                     val x = event.getX(i)
                     val y = event.getY(i)
-                    if (pid == pointerA && hitButton(x, y) != Button.A) {
-                        _pressedA = false; pointerA = -1; inject(aKeyCode(), down = false)
-                    }
-                    if (pid == pointerB && hitButton(x, y) != Button.B) {
-                        _pressedB = false; pointerB = -1; inject(bKeyCode(), down = false)
+                    val btn = pointerButton[pid]
+                    if (btn != null && btn >= 0) {
+                        val currentBtn = hitButton(x, y, positions, count)
+                        if (currentBtn != btn) {
+                            pressedState[btn] = false
+                            pointerButton.remove(pid)
+                            targetWebView?.injectKeyUp(keys[btn])
+                        }
                     }
                 }
                 invalidate()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (_pressedA) inject(aKeyCode(), down = false)
-                if (_pressedB) inject(bKeyCode(), down = false)
-                _pressedA = false; _pressedB = false
-                pointerA = -1; pointerB = -1
+                pointerButton.values.forEach { btn ->
+                    if (btn >= 0 && btn < count) {
+                        pressedState[btn] = false
+                        targetWebView?.injectKeyUp(keys[btn])
+                    }
+                }
+                pointerButton.clear()
+                pressedState.fill(false)
                 invalidate()
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 val pid = event.getPointerId(event.actionIndex)
-                if (pid == pointerA) { _pressedA = false; pointerA = -1; inject(aKeyCode(), down = false) }
-                if (pid == pointerB) { _pressedB = false; pointerB = -1; inject(bKeyCode(), down = false) }
+                val btn = pointerButton.remove(pid)
+                if (btn != null && btn >= 0 && btn < count) {
+                    pressedState[btn] = false
+                    targetWebView?.injectKeyUp(keys[btn])
+                }
                 invalidate()
             }
         }
         return true
     }
 
-    private enum class Button { A, B, NONE }
-
-    private fun hitButton(x: Float, y: Float): Button {
-        val w = width.toFloat(); val h = height.toFloat()
-        val r = min(w, h) * 0.32f
-        val ax = w * 0.32f; val ay = h * 0.68f
-        val bx = w * 0.72f; val by = h * 0.32f
-        val dA = Math.hypot((x - ax).toDouble(), (y - ay).toDouble())
-        val dB = Math.hypot((x - bx).toDouble(), (y - by).toDouble())
-        return when {
-            dA < r && dA <= dB -> Button.A
-            dB < r -> Button.B
-            else -> Button.NONE
+    private fun hitButton(x: Float, y: Float, positions: List<Triple<Float, Float, Float>>, count: Int): Int {
+        for (i in 0 until count) {
+            val (cx, cy, r) = positions[i]
+            val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble())
+            if (dist < r) return i
         }
-    }
-
-    private fun inject(keyCode: Int, down: Boolean) {
-        if (down) targetWebView?.injectKeyDown(keyCode)
-        else targetWebView?.injectKeyUp(keyCode)
-        performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+        return -1
     }
 }
