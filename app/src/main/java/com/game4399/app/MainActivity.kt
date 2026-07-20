@@ -42,13 +42,13 @@ class MainActivity : AppCompatActivity() {
     private var currentTabId = R.id.nav_home
     private var isFullscreen = false
 
+    /** 供 Fragment 检查当前是否处于全屏模式 */
+    fun isFullscreenFullscreen(): Boolean = isFullscreen
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 让内容延伸到状态栏区域（消除顶部空白），状态栏图标用浅色
+        // 内容延伸到状态栏区域，AppBarLayout 用 fitsSystemWindows 添加状态栏 padding
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-        }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -164,17 +164,19 @@ class MainActivity : AppCompatActivity() {
         else -> super.onOptionsItemSelected(item)
     }
 
-    /** 全屏切换：隐藏/显示系统栏 + 工具栏 + 底部导航 + 悬浮菜单 */
+    /** 全屏切换：隐藏系统栏 + 顶部按钮 + 底部导航，WebView 占满整个屏幕（包括刘海屏） */
     private fun toggleFullscreen(item: MenuItem) {
         isFullscreen = !isFullscreen
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         if (isFullscreen) {
+            // 全屏：隐藏状态栏和导航栏，内容延伸到刘海屏区域
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             binding.appBar.visibility = View.GONE
             binding.bottomNav.visibility = View.GONE
             binding.floatingMenu.visibility = View.VISIBLE
         } else {
+            // 退出全屏：恢复状态栏和导航栏
             controller.show(WindowInsetsCompat.Type.systemBars())
             binding.appBar.visibility = View.VISIBLE
             binding.bottomNav.visibility = View.VISIBLE
