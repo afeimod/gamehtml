@@ -3,14 +3,12 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fitsSystemWindows="false">
+    android:layout_height="match_parent">
 
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fitsSystemWindows="true"
         android:background="@color/brand_primary">
 
         <com.google.android.material.appbar.MaterialToolbar
@@ -22,19 +20,17 @@
             app:menu="@menu/main_menu" />
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- 内容容器：全屏时 AppBarLayout 隐藏后自动占满整个屏幕 -->
     <FrameLayout
         android:id="@+id/nav_host_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior" />
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_nav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:fitsSystemWindows="true"
         android:background="@color/bg_surface"
         app:itemIconTint="@color/brand_primary"
         app:itemTextColor="@color/text_primary"
