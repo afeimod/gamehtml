@@ -26,7 +26,7 @@ open class GameWebChromeClient(
         fun onTitle(title: String?)
         fun onConsole(level: String, msg: String, sourceId: String?, line: Int)
         /** 全屏（Flash 全屏播放） */
-        fun onShowFullscreen(view: View, callback: CustomViewCallback)
+        fun onShowFullscreen(view: View, callback: WebChromeClient.CustomViewCallback)
         fun onHideFullscreen()
         /** 文件上传选择回调 */
         fun onFileChooser(callback: ValueCallback<Array<Uri>>, accept: String?): Boolean

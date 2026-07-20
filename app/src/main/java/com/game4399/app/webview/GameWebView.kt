@@ -89,7 +89,7 @@ open class GameWebView @JvmOverloads constructor(
         }
         override fun onLongPress(e: MotionEvent) { /* 屏蔽系统长按菜单 */ }
         override fun onFling(
-            e1: MotionEvent, e2: MotionEvent, vx: Float, vy: Float
+            e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float
         ): Boolean {
             // 滑动手势映射为方向键（部分页游用方向键滚屏）
             if (abs(vx) > abs(vy)) {
