@@ -112,14 +112,14 @@
             app:tint="@android:color/white" />
     </LinearLayout>
 
-    <!-- 可拖动悬浮菜单（横竖屏通用） -->
+    <!-- 可拖动悬浮菜单（横竖屏通用，默认右上角） -->
     <com.game4399.app.widget.FloatingMenuView
         android:id="@+id/floatingMenu"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_marginTop="48dp"
-        android:layout_marginEnd="12dp" />
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp" />
 
     <!-- 虚拟手柄：左下方向键 -->
     <com.game4399.app.input.DPadView
