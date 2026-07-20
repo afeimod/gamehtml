@@ -8,12 +8,12 @@
     android:id="@+id/swipeRefresh"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_surface">
+    android:background="@android:color/white">
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/bg_surface">
+        android:background="@android:color/white">
 
         <ProgressBar
             android:id="@+id/progressBar"
@@ -29,7 +29,7 @@
             android:id="@+id/webView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@color/bg_surface" />
+            android:background="@android:color/white" />
 
         <LinearLayout
             android:id="@+id/errorView"
