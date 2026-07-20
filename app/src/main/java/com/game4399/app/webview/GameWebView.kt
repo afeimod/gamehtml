@@ -61,9 +61,10 @@ open class GameWebView @JvmOverloads constructor(
         useWideViewPort = true
         cacheMode = WebSettings.LOAD_DEFAULT
         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        setSupportZoom(false)
-        builtInZoomControls = false
-        displayZoomControls = false
+        // 双指缩放：PC 网页内容通常较宽，需要缩放查看
+        setSupportZoom(true)
+        builtInZoomControls = true
+        displayZoomControls = false                  // 不显示+/-按钮，仅手势缩放
         // 保存默认移动版 UA，追加客户端标识
         mobileUa = userAgentString
         userAgentString = "$mobileUa 4399App/1.0 (Android)"
