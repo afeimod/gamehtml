@@ -60,10 +60,11 @@ class GameActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 沉浸式全屏
+        // 沉浸式全屏：只隐藏状态栏，保留导航栏以确保软键盘（IME）可正常弹出
+        // 注：hide(systemBars()) 会连导航栏一起隐藏，在部分设备上导致 IME 无法显示
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
+            hide(WindowInsetsCompat.Type.statusBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         binding = ActivityGameBinding.inflate(layoutInflater)
@@ -90,6 +91,13 @@ class GameActivity : AppCompatActivity() {
             addJavascriptInterface(WebAppInterface(this@GameActivity), "Android")
             webChromeClient = object : GameWebChromeClient(chromeCallback) {}
             webViewClient = object : GameWebViewClient(viewClientCallback) {}
+
+            // PC Flash 页面（www.4399.com/flash/）使用桌面 UA，确保 4399 返回电脑版网页
+            // H5 游戏（h.4399.com）和手机版页面保持移动 UA
+            val isPcPage = currentUrl.contains("www.4399.com") ||
+                currentType == GameType.FLASH ||
+                currentUrl.contains("/flash/")
+            useDesktopMode(isPcPage)
         }
     }
 
