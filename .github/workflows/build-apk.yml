@@ -1,19 +1,13 @@
 # 4399 游戏盒 - APK 构建 Workflow
 #
-# 触发方式：
-#   1. 手动触发（GitHub 仓库 → Actions → Build APK → Run workflow）
-#   2. 推送 tag（v* 开头，如 v1.0.0）自动构建 Release APK
+# 触发方式：手动触发（GitHub 仓库 → Actions → Build APK → Run workflow）
 #
-# 功能：
-#   - 构建 Debug / Release APK
-#   - Release 构建自动签名（无 keystore 时回退到 debug 签名）
-#   - 上传 APK 为 Artifact（90 天保存期）
-#   - 推 tag 时自动创建 GitHub Release 并附加 APK
+# 本 workflow 只在手动触发时运行，不会消耗额外的 Actions 额度。
+# 如果你的仓库是私有的且额度已耗尽，请将仓库设为 Public（公开仓库 Actions 完全免费）。
 
 name: Build APK
 
 on:
-  # 手动触发：在 Actions 页面选择 workflow 并点击 Run workflow
   workflow_dispatch:
     inputs:
       build_type:
@@ -26,13 +20,7 @@ on:
           - release
           - both
 
-  # 推送 tag 时自动触发构建 Release
-  push:
-    tags:
-      - 'v*'
-      - 'V*'
-
-# 同一分支新推送时取消旧构建，节省 CI 资源
+# 同一分支新推送时取消旧构建
 concurrency:
   group: build-apk-${{ github.ref }}
   cancel-in-progress: true
@@ -41,44 +29,12 @@ jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
-      # ---------- 0. 调试信息（帮助排查问题） ----------
-      - name: Debug Info
-        run: |
-          echo "=== GitHub 上下文 ==="
-          echo "event_name: ${{ github.event_name }}"
-          echo "ref: ${{ github.ref }}"
-          echo "ref_name: ${{ github.ref_name }}"
-          echo "sha: ${{ github.sha }}"
-          echo "repository: ${{ github.repository }}"
-          echo ""
-          echo "=== 触发参数 ==="
-          echo "inputs.build_type: ${{ inputs.build_type }}"
-          echo ""
-          echo "=== 计算构建类型 ==="
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "BUILD_TYPE=both" >> $GITHUB_ENV
-            echo "UPLOAD_RELEASE=true" >> $GITHUB_ENV
-            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-            echo "→ push tag 触发，构建 both"
-          else
-            echo "BUILD_TYPE=${{ inputs.build_type }}" >> $GITHUB_ENV
-            echo "UPLOAD_RELEASE=false" >> $GITHUB_ENV
-            echo "TAG_NAME=" >> $GITHUB_ENV
-            echo "→ 手动触发，构建 ${{ inputs.build_type }}"
-          fi
-          echo ""
-          echo "BUILD_TYPE=$BUILD_TYPE"
-          echo "UPLOAD_RELEASE=$UPLOAD_RELEASE"
-          echo "TAG_NAME=$TAG_NAME"
-
       # ---------- 1. 检出代码 ----------
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       # ---------- 2. 配置 JDK 17 ----------
       - name: Set up JDK 17
@@ -86,7 +42,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
       # ---------- 3. 配置 Android SDK ----------
       - name: Set up Android SDK
@@ -97,7 +52,6 @@ jobs:
             build-tools;35.0.0
 
       # ---------- 4. 生成 Gradle Wrapper（如果缺失） ----------
-      # 仓库未提交 gradle-wrapper.jar / gradlew 时，CI 自动生成
       - name: Generate Gradle Wrapper
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ] || [ ! -f gradlew ]; then
@@ -110,7 +64,6 @@ jobs:
           ./gradlew --version
 
       # ---------- 5. 准备 Release 签名 ----------
-      # 若仓库 Secrets 配置了签名信息则使用，否则回退到 debug 签名
       - name: Prepare signing key
         env:
           SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
@@ -119,7 +72,7 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         run: |
           if [ -z "$SIGNING_KEY_BASE64" ]; then
-            echo "未配置签名 Secrets，Release 将使用 debug 签名"
+            echo "未配置签名 Secrets，使用 debug 签名"
             mkdir -p app
             cat > app/keystore.properties <<'EOF'
           storeFile=$ANDROID_SDK_ROOT/.android/debug.keystore
@@ -137,111 +90,67 @@ jobs:
           keyPassword=$SIGNING_KEY_PASSWORD
           EOF
           fi
-          echo "keystore.properties 内容："
-          cat app/keystore.properties
+          echo "✓ keystore.properties 已生成"
 
       # ---------- 6. 构建 Debug APK ----------
       - name: Build Debug APK
-        if: env.BUILD_TYPE == 'debug' || env.BUILD_TYPE == 'both'
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
         run: ./gradlew assembleDebug --stacktrace
 
       # ---------- 7. 构建 Release APK ----------
       - name: Build Release APK
-        if: env.BUILD_TYPE == 'release' || env.BUILD_TYPE == 'both'
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
         run: ./gradlew assembleRelease --stacktrace
 
-      # ---------- 8. 重命名并收集 APK ----------
+      # ---------- 8. 收集 APK ----------
       - name: Collect APKs
         run: |
-          echo "=== 查找构建产物 ==="
+          echo "=== 构建产物 ==="
           find app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "未找到 APK"
-          echo ""
 
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
-          DATE=$(date +'%Y%m%d')
           SHORT_SHA=$(git rev-parse --short HEAD)
+          DATE=$(date +'%Y%m%d')
           SUFFIX="${VERSION}-${SHORT_SHA}-${DATE}"
-          echo "APK 后缀: $SUFFIX"
 
           mkdir -p artifacts
-          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+          [ -f app/build/outputs/apk/debug/app-debug.apk ] && \
             cp app/build/outputs/apk/debug/app-debug.apk artifacts/Game4399-${SUFFIX}-debug.apk
-            echo "✓ 收集 Debug APK"
-          fi
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+          [ -f app/build/outputs/apk/release/app-release.apk ] && \
             cp app/build/outputs/apk/release/app-release.apk artifacts/Game4399-${SUFFIX}-release.apk
-            echo "✓ 收集 Release APK"
-          elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+          [ -f app/build/outputs/apk/release/app-release-unsigned.apk ] && \
             cp app/build/outputs/apk/release/app-release-unsigned.apk artifacts/Game4399-${SUFFIX}-release-unsigned.apk
-            echo "✓ 收集 Release APK (unsigned)"
-          fi
 
-          echo ""
           echo "=== artifacts 目录 ==="
-          ls -lh artifacts/ || echo "artifacts 目录为空"
+          ls -lh artifacts/ 2>/dev/null || echo "artifacts 为空"
 
       # ---------- 9. 上传 Artifact ----------
       - name: Upload Debug APK
-        if: env.BUILD_TYPE == 'debug' || env.BUILD_TYPE == 'both'
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Game4399-debug-${{ github.run_number }}
+          name: Game4399-debug
           path: artifacts/*-debug*.apk
           retention-days: 90
           if-no-files-found: warn
 
       - name: Upload Release APK
-        if: env.BUILD_TYPE == 'release' || env.BUILD_TYPE == 'both'
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Game4399-release-${{ github.run_number }}
+          name: Game4399-release
           path: artifacts/*-release*.apk
           retention-days: 90
           if-no-files-found: warn
 
-      # ---------- 10. 创建 GitHub Release（推 tag 时） ----------
-      - name: Create GitHub Release
-        if: env.UPLOAD_RELEASE == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: Game4399 ${{ env.TAG_NAME }}
-          body: |
-            ## Game4399 ${{ env.TAG_NAME }}
-
-            ### 安装
-            下载下方 `Game4399-*-release.apk` 后在手机上安装。
-
-            ### 系统要求
-            - Android 6.0 (API 23) 及以上
-            - 建议横屏使用以获得最佳游戏体验
-
-            ### 完整变更日志
-            见 [README.md](https://github.com/${{ github.repository }}/blob/main/README.md)
-          files: |
-            artifacts/*-release*.apk
-            artifacts/*-debug*.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ---------- 11. 构建摘要 ----------
-      - name: Build Summary
+      # ---------- 10. 构建摘要 ----------
+      - name: Summary
         if: always()
         run: |
           echo "## 构建结果" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- 构建类型: \`${BUILD_TYPE}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 触发方式: \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 分支/标签: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 构建类型: \`${{ inputs.build_type }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- 提交: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           if [ -d artifacts ] && [ "$(ls -A artifacts 2>/dev/null)" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
             echo "### 产物" >> $GITHUB_STEP_SUMMARY
             ls -lh artifacts/ | awk 'NR>1 {print "- `" $NF "` (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### ⚠️ 无产物" >> $GITHUB_STEP_SUMMARY
-            echo "构建类型为 \`${BUILD_TYPE}\`，但未找到 APK 文件" >> $GITHUB_STEP_SUMMARY
           fi
