@@ -29,11 +29,6 @@ jobs:
     name: Build APK
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # 使用干净的 GRADLE_USER_HOME，绕过 ubuntu-latest 预装的 AGP 8.1.0
-      # 预装的 init 脚本位于 ~/.gradle/init.d/，会把 AGP 8.1.0 注入 classpath
-      # 指向新路径后 Gradle 不会加载那些 init 脚本，项目声明的 8.5.0 可正常解析
-      GRADLE_USER_HOME: /tmp/gradle-home-clean
 
     steps:
       # ---------- 1. 检出代码 ----------
@@ -75,26 +70,21 @@ jobs:
           ls "$ANDROID_HOME/platforms/" 2>/dev/null
           ls "$ANDROID_HOME/build-tools/" 2>/dev/null
 
-      # ---------- 4. 清理预装的 AGP 冲突 + 生成 Gradle Wrapper ----------
-      # ubuntu-latest 镜像在 ~/.gradle/ 预装了 AGP 8.1.0，会与项目声明的 8.5.0 冲突
-      # 解决方案：使用干净的 GRADLE_USER_HOME，并清理 init 脚本
-      - name: Clean Gradle env and Generate Wrapper
+      # ---------- 4. 生成 Gradle Wrapper ----------
+      # 说明：ubuntu-latest 镜像通过系统级 init 脚本把 AGP 8.1.0 注入 buildscript classpath，
+      # 改 GRADLE_USER_HOME 无法绕过。因此项目已锁定 AGP 8.1.0（见 libs.versions.toml），
+      # 声明相同版本即不冲突。
+      - name: Generate Gradle Wrapper
         run: |
-          # 诊断：查看预装镜像的 init 脚本（它会注入 AGP 8.1.0 到 classpath）
-          echo "=== ~/.gradle/init.d/ 内容（预装的 AGP 注入脚本）==="
-          ls -la ~/.gradle/init.d/ 2>/dev/null || echo "（不存在）"
+          echo "=== 诊断：预装的 Gradle init 脚本 ==="
+          ls -la ~/.gradle/init.d/ 2>/dev/null || echo "~/.gradle/init.d/ 不存在"
           for f in ~/.gradle/init.d/*.gradle; do
-            [ -f "$f" ] && echo "--- $f ---" && head -20 "$f"
+            [ -f "$f" ] && echo "--- $f ---" && head -15 "$f"
           done 2>/dev/null || true
-
-          # 创建干净的 GRADLE_USER_HOME（job 级 env 已指向 /tmp/gradle-home-clean）
-          mkdir -p /tmp/gradle-home-clean
-          # 额外清理：删除预装镜像里的 init 脚本（双保险）
-          rm -rf ~/.gradle/init.d/ 2>/dev/null || true
-
           echo ""
-          echo "=== 当前 GRADLE_USER_HOME=$GRADLE_USER_HOME ==="
-          echo "（指向新路径，Gradle 不会加载 ~/.gradle/init.d/ 里的脚本）"
+          echo "=== 系统 Gradle 版本 ==="
+          gradle --version 2>/dev/null | head -5 || true
+          echo ""
 
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ] || [ ! -f gradlew ]; then
             echo "Gradle wrapper 缺失，正在生成..."
