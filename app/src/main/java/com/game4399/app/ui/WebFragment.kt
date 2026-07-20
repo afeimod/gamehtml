@@ -4,9 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.Fragment
 import com.game4399.app.GameActivity
 import com.game4399.app.R
@@ -122,15 +119,6 @@ class WebFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
-        // 仅在非全屏时恢复状态栏和 AppBarLayout
-        val activity = requireActivity()
-        val mainActivity = activity as? com.game4399.app.MainActivity
-        if (mainActivity?.isFullscreenFullscreen() != true) {
-            WindowInsetsControllerCompat(activity.window, activity.window.decorView)
-                .show(WindowInsetsCompat.Type.statusBars())
-            val appBar = activity.findViewById<View>(com.game4399.app.R.id.appBar)
-            appBar?.visibility = View.VISIBLE
-        }
     }
 
     override fun onPause() {
