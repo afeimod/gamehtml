@@ -35,7 +35,7 @@ class FloatingMenuView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : FrameLayout(context, context.theme, defStyleAttr) {
+) : FrameLayout(context, attrs, defStyleAttr) {
 
     /** 菜单项回调 */
     interface Callbacks {
@@ -127,7 +127,7 @@ class FloatingMenuView @JvmOverloads constructor(
                                 .coerceIn(0, parent.width - width)
                             val newTop = (startTop + dy).toInt()
                                 .coerceIn(0, parent.height - height)
-                            (layoutParams as? MarginLayoutParams)?.let { lp ->
+                            (layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
                                 lp.leftMargin = newLeft
                                 lp.topMargin = newTop
                                 lp.gravity = Gravity.NO_GRAVITY
