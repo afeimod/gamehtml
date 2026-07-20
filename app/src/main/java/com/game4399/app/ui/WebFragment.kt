@@ -122,29 +122,20 @@ class WebFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
-        // 全屏：隐藏状态栏，WebView 占满整个屏幕（包括刘海屏区域）
+        // 仅在非全屏时恢复状态栏和 AppBarLayout
         val activity = requireActivity()
-        WindowCompat.setDecorFitsSystemWindows(activity.window, false)
-        WindowInsetsControllerCompat(activity.window, activity.window.decorView).apply {
-            hide(WindowInsetsCompat.Type.statusBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-        // 隐藏 AppBarLayout，让 WebView 占满全屏
-        binding.root.post {
+        val mainActivity = activity as? com.game4399.app.MainActivity
+        if (mainActivity?.isFullscreenFullscreen() != true) {
+            WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+                .show(WindowInsetsCompat.Type.statusBars())
             val appBar = activity.findViewById<View>(com.game4399.app.R.id.appBar)
-            appBar?.visibility = View.GONE
+            appBar?.visibility = View.VISIBLE
         }
     }
 
     override fun onPause() {
         super.onPause()
         webView.onPause()
-        // 恢复状态栏和 AppBarLayout
-        val activity = requireActivity()
-        WindowInsetsControllerCompat(activity.window, activity.window.decorView)
-            .show(WindowInsetsCompat.Type.statusBars())
-        val appBar = activity.findViewById<View>(com.game4399.app.R.id.appBar)
-        appBar?.visibility = View.VISIBLE
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
