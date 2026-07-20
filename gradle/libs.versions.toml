@@ -1,5 +1,8 @@
 [versions]
-agp = "8.5.0"
+# AGP 锁定 8.1.0：ubuntu-latest 镜像通过系统级 init 脚本把 AGP 8.1.0 注入 buildscript
+# classpath，改 GRADLE_USER_HOME 也无法绕过。声明相同版本即不冲突。
+# AGP 8.1.0 最高支持 compileSdk 34。
+agp = "8.1.0"
 kotlin = "1.9.24"
 coreKtx = "1.13.1"
 appcompat = "1.7.0"
