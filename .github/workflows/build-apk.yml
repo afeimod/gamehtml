@@ -3,7 +3,7 @@
 # 触发方式：手动触发（GitHub 仓库 → Actions → Build APK → Run workflow）
 #
 # 本 workflow 只在手动触发时运行，不会消耗额外的 Actions 额度。
-# 如果你的仓库是私有的且额度已耗尽，请将仓库设为 Public（公开仓库 Actions 完全免费）。
+# 公开仓库 Actions 完全免费；私有仓库每月 2000 分钟免费额度。
 
 name: Build APK
 
@@ -20,7 +20,6 @@ on:
           - release
           - both
 
-# 同一分支新推送时取消旧构建
 concurrency:
   group: build-apk-${{ github.ref }}
   cancel-in-progress: true
@@ -43,13 +42,33 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # ---------- 3. 配置 Android SDK ----------
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platforms;android-35
-            build-tools;35.0.0
+      # ---------- 3. 验证 Android SDK（ubuntu-latest 已预装） ----------
+      # ubuntu-latest 镜像已预装 Android SDK 35 和 build-tools 35.0.0
+      # 无需再用 android-actions/setup-android（该 action 在 v3 版本对多包名解析有 bug）
+      - name: Verify Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo ""
+          echo "=== 已安装的 platforms ==="
+          ls -la "$ANDROID_HOME/platforms/" 2>/dev/null || echo "platforms 目录不存在"
+          echo ""
+          echo "=== 已安装的 build-tools ==="
+          ls -la "$ANDROID_HOME/build-tools/" 2>/dev/null || echo "build-tools 目录不存在"
+          echo ""
+          # 如果缺少 android-35，则用 sdkmanager 单独安装（单包名调用，避免多包名解析 bug）
+          if [ ! -d "$ANDROID_HOME/platforms/android-35" ]; then
+            echo "android-35 缺失，正在安装..."
+            yes | sdkmanager "platforms;android-35" > /dev/null 2>&1 || true
+          fi
+          if [ ! -d "$ANDROID_HOME/build-tools/35.0.0" ]; then
+            echo "build-tools;35.0.0 缺失，正在安装..."
+            yes | sdkmanager "build-tools;35.0.0" > /dev/null 2>&1 || true
+          fi
+          echo ""
+          echo "=== 最终验证 ==="
+          ls "$ANDROID_HOME/platforms/" 2>/dev/null
+          ls "$ANDROID_HOME/build-tools/" 2>/dev/null
 
       # ---------- 4. 生成 Gradle Wrapper（如果缺失） ----------
       - name: Generate Gradle Wrapper
@@ -153,4 +172,6 @@ jobs:
           if [ -d artifacts ] && [ "$(ls -A artifacts 2>/dev/null)" ]; then
             echo "### 产物" >> $GITHUB_STEP_SUMMARY
             ls -lh artifacts/ | awk 'NR>1 {print "- `" $NF "` (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ 无产物" >> $GITHUB_STEP_SUMMARY
           fi
