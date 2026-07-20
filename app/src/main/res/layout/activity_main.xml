@@ -7,6 +7,7 @@
     android:fitsSystemWindows="true">
 
     <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/brand_primary">
@@ -36,5 +37,25 @@
         app:itemTextColor="@color/text_primary"
         app:labelVisibilityMode="labeled"
         app:menu="@menu/bottom_nav_menu" />
+
+    <!-- 全屏模式下的悬浮退出按钮（半透明，可拖动） -->
+    <FrameLayout
+        android:id="@+id/fullscreenExitOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/btnFullscreenExit"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:alpha="0.6"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/fullscreen_exit"
+            android:src="@drawable/ic_fullscreen_exit"
+            app:tint="@android:color/white" />
+    </FrameLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

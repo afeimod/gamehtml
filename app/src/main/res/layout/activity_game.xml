@@ -74,6 +74,17 @@
             android:src="@drawable/ic_refresh"
             app:tint="@android:color/white" />
 
+        <ImageButton
+            android:id="@+id/btnSystemBars"
+            style="@style/Widget.GamepadButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/bg_top_button"
+            android:contentDescription="@string/fullscreen"
+            android:src="@drawable/ic_fullscreen"
+            app:tint="@android:color/white" />
+
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
