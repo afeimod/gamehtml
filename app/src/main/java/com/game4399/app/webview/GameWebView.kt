@@ -30,6 +30,9 @@ open class GameWebView @JvmOverloads constructor(
     /** 是否拦截并屏蔽长按系统菜单（选中文字/复制） */
     var blockLongPressMenu: Boolean = true
 
+    /** 保存原始移动版 UA，供切换时恢复 */
+    private var mobileUa: String = ""
+
     private val gestureDetector = GestureDetector(context, GestureListener())
 
     init {
@@ -60,14 +63,24 @@ open class GameWebView @JvmOverloads constructor(
         setSupportZoom(false)
         builtInZoomControls = false
         displayZoomControls = false
-        // 标识自身为 4399 安卓客户端，便于服务端下发移动版
-        userAgentString = "$userAgentString 4399App/1.0 (Android)"
+        // 保存默认移动版 UA，追加客户端标识
+        mobileUa = userAgentString
+        userAgentString = "$mobileUa 4399App/1.0 (Android)"
         // 硬件加速渲染（已在 Manifest 开启，这里再确保 LayerType）
         setLayerType(View.LAYER_TYPE_HARDWARE, null)
         // 启用 Safe Browsing（AndroidX WebKit，minSdk 23+）
         if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
             WebSettingsCompat.setSafeBrowsingEnabled(this, true)
         }
+    }
+
+    /**
+     * 切换桌面/移动 UA。
+     * - 桌面模式：使用 Windows Chrome UA，不含 "Mobile"/"Android"，4399 服务器据此返回 PC 版页面
+     * - 移动模式：恢复默认移动版 UA + 客户端标识
+     */
+    fun useDesktopMode(enabled: Boolean) {
+        settings.userAgentString = if (enabled) DESKTOP_UA else "$mobileUa 4399App/1.0 (Android)"
     }
 
     // ---------------- 触屏 ----------------
@@ -140,6 +153,9 @@ open class GameWebView @JvmOverloads constructor(
     }
 
     companion object {
+        /** 桌面版 Chrome UA（Windows），不含 Mobile/Android，4399 据此返回 PC 版页面 */
+        const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
         /** 游戏常用按键白名单 */
         val GAME_KEYS = intArrayOf(
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
