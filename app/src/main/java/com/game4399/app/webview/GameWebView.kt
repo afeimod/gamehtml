@@ -40,8 +40,9 @@ open class GameWebView @JvmOverloads constructor(
         // 横竖滚动条隐藏，让游戏画面铺满
         isHorizontalScrollBarEnabled = false
         isVerticalScrollBarEnabled = false
-        // 触摸时获取焦点，便于键盘事件直达
-        requestFocusFromTouch()
+        // 确保 WebView 可获取焦点（网页 input 点击时触发软键盘必需）
+        isFocusable = true
+        isFocusableInTouchMode = true
         // 屏蔽长按系统菜单
         setOnLongClickListener { blockLongPressMenu }
     }
