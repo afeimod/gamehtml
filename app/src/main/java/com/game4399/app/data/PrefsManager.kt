@@ -35,6 +35,24 @@ object PrefsManager {
     /** 0~100 → 0~255 alpha */
     val gamepadAlpha: Int
         get() = ((sp.getInt("gamepad_opacity", 60) / 100f) * 255).toInt().coerceIn(40, 255)
+    /** 按键大小倍率 0.5~2.0，默认 1.0 */
+    val gamepadScale: Float
+        get() = (sp.getInt("gamepad_scale", 100) / 100f).coerceIn(0.5f, 2.0f)
+    /** 方向键映射模式：dpad / wasd */
+    val dpadMode: String get() = sp.getString("dpad_mode", "dpad") ?: "dpad"
+    /** 6 个动作按键映射，默认 J/K/L/U/I/O */
+    val gamepadKeys: List<String>
+        get() = listOf(
+            sp.getString("gamepad_key_1", "J") ?: "J",
+            sp.getString("gamepad_key_2", "K") ?: "K",
+            sp.getString("gamepad_key_3", "L") ?: "L",
+            sp.getString("gamepad_key_4", "U") ?: "U",
+            sp.getString("gamepad_key_5", "I") ?: "I",
+            sp.getString("gamepad_key_6", "O") ?: "O"
+        )
+    /** 显示几个动作按键（2/4/6） */
+    val actionButtonCount: Int get() = sp.getString("action_button_count", "6")?.toIntOrNull()?.coerceIn(2, 6) ?: 6
+    /** 兼容旧设置 */
     val gamepadAKey: String get() = sp.getString("gamepad_a_key", "SPACE") ?: "SPACE"
     val gamepadBKey: String get() = sp.getString("gamepad_b_key", "ENTER") ?: "ENTER"
 
