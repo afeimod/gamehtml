@@ -9,11 +9,8 @@
         <item name="colorSecondary">@color/brand_accent</item>
         <item name="colorOnSecondary">@android:color/white</item>
         <item name="android:windowBackground">@color/bg_surface</item>
-        <!-- 状态栏透明，让 AppBarLayout 背景延伸到状态栏区域 -->
-        <item name="android:statusBarColor" tools:targetApi="21">@android:color/transparent</item>
+        <item name="android:statusBarColor" tools:targetApi="21">@color/brand_primary_dark</item>
         <item name="android:navigationBarColor">@color/bg_surface</item>
-        <!-- 刘海屏适配 -->
-        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="30">shortEdges</item>
     </style>
 
     <!-- 游戏界面主题：沉浸式（用 WindowInsetsControllerCompat 隐藏状态栏，不用 windowFullscreen） -->
