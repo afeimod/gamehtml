@@ -230,7 +230,6 @@ class GameActivity : AppCompatActivity() {
         binding.btnRefresh.setOnClickListener { webView.reload() }
         binding.btnGamepad.setOnClickListener { toggleGamepad() }
         binding.btnFavorite.setOnClickListener { toggleFavorite() }
-        binding.btnShare.setOnClickListener { shareCurrent() }
         binding.btnRetry.setOnClickListener { webView.reload() }
     }
 
@@ -299,23 +298,80 @@ class GameActivity : AppCompatActivity() {
         }
     }
 
-    /** 按键映射设置对话框 */
+    /** 按键映射设置对话框：6 个动作按键 + 方向键模式 + 按键大小 */
     private fun openKeyMappingDialog() {
-        val options = arrayOf("A 键 → 空格", "A 键 → 回车", "B 键 → 回车", "B 键 → Z", "恢复默认")
+        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val labels = arrayOf("按键 A 映射", "按键 B 映射", "按键 C 映射", "按键 D 映射", "按键 E 映射", "按键 F 映射",
+            "方向键模式 (DPAD/WASD)", "按键大小", "恢复默认")
+        val currentKeys = PrefsManager.gamepadKeys
+        val currentDpad = PrefsManager.dpadMode
+        val currentScale = (PrefsManager.gamepadScale * 100).toInt()
+        val summary = arrayOf(
+            "当前: ${currentKeys[0]}", "当前: ${currentKeys[1]}", "当前: ${currentKeys[2]}",
+            "当前: ${currentKeys[3]}", "当前: ${currentKeys[4]}", "当前: ${currentKeys[5]}",
+            "当前: ${if (currentDpad == "wasd") "WASD" else "DPAD"}",
+            "当前: ${currentScale}%",
+            "恢复全部默认值"
+        )
+        val displayItems = Array(labels.size) { i -> "${labels[i]}\n${summary[i]}" }
+
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(R.string.key_mapping)
-            .setItems(options) { _, which ->
-                val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+            .setItems(displayItems) { _, which ->
                 when (which) {
-                    0 -> sp.edit().putString("gamepad_a_key", "SPACE").apply()
-                    1 -> sp.edit().putString("gamepad_a_key", "ENTER").apply()
-                    2 -> sp.edit().putString("gamepad_b_key", "ENTER").apply()
-                    3 -> sp.edit().putString("gamepad_b_key", "Z").apply()
-                    4 -> {
-                        sp.edit().putString("gamepad_a_key", "SPACE").putString("gamepad_b_key", "ENTER").apply()
+                    in 0..5 -> showKeyPicker(which, sp)
+                    6 -> {
+                        val newMode = if (currentDpad == "wasd") "dpad" else "wasd"
+                        sp.edit().putString("dpad_mode", newMode).apply()
+                        Toast.makeText(this, "方向键已切换为 ${if (newMode == "wasd") "WASD" else "DPAD"}", Toast.LENGTH_SHORT).show()
+                    }
+                    7 -> showScalePicker(sp)
+                    8 -> {
+                        sp.edit()
+                            .putString("gamepad_key_1", "J")
+                            .putString("gamepad_key_2", "K")
+                            .putString("gamepad_key_3", "L")
+                            .putString("gamepad_key_4", "U")
+                            .putString("gamepad_key_5", "I")
+                            .putString("gamepad_key_6", "O")
+                            .putString("dpad_mode", "dpad")
+                            .putInt("gamepad_scale", 100)
+                            .apply()
+                        Toast.makeText(this, "已恢复默认设置", Toast.LENGTH_SHORT).show()
                     }
                 }
-                Toast.makeText(this, "按键映射已更新", Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
+    /** 选择单个按键映射 */
+    private fun showKeyPicker(buttonIndex: Int, sp: android.content.SharedPreferences) {
+        val keyOptions = arrayOf("J", "K", "L", "U", "I", "O", "A", "B", "C", "D", "SPACE", "ENTER", "Z", "X", "Q", "E", "R", "F", "1", "2", "3", "4")
+        val prefKey = "gamepad_key_${buttonIndex + 1}"
+        val current = sp.getString(prefKey, "J")
+        val checked = keyOptions.indexOf(current).coerceAtLeast(0)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("按键 ${('A' + buttonIndex)} 映射")
+            .setSingleChoiceItems(keyOptions, checked) { dialog, which ->
+                sp.edit().putString(prefKey, keyOptions[which]).apply()
+                Toast.makeText(this, "按键 ${('A' + buttonIndex)} → ${keyOptions[which]}", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    /** 按键大小调节 */
+    private fun showScalePicker(sp: android.content.SharedPreferences) {
+        val scales = arrayOf("50%", "75%", "100%", "125%", "150%", "200%")
+        val values = intArrayOf(50, 75, 100, 125, 150, 200)
+        val current = (PrefsManager.gamepadScale * 100).toInt()
+        val checked = values.indexOf(current).coerceAtLeast(2)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("按键大小")
+            .setSingleChoiceItems(scales, checked) { dialog, which ->
+                sp.edit().putInt("gamepad_scale", values[which]).apply()
+                Toast.makeText(this, "按键大小: ${scales[which]}", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
             }
             .show()
     }
