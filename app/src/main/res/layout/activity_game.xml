@@ -99,17 +99,6 @@
             android:contentDescription="@string/favorite"
             android:src="@drawable/ic_star_outline"
             app:tint="@android:color/white" />
-
-        <ImageButton
-            android:id="@+id/btnShare"
-            style="@style/Widget.GamepadButton"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="@dimen/spacing_xs"
-            android:background="@drawable/bg_top_button"
-            android:contentDescription="@string/share"
-            android:src="@drawable/ic_share"
-            app:tint="@android:color/white" />
     </LinearLayout>
 
     <!-- 可拖动悬浮菜单（横竖屏通用，默认右上角） -->
