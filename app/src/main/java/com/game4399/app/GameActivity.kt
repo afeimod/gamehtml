@@ -1,6 +1,7 @@
 package com.game4399.app
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
@@ -23,6 +24,7 @@ import com.game4399.app.webview.GameWebView
 import com.game4399.app.webview.GameWebViewClient
 import com.game4399.app.webview.NavHelper
 import com.game4399.app.webview.WebAppInterface
+import com.game4399.app.widget.FloatingMenuView
 
 /**
  * 游戏播放 Activity：全屏承载游戏页面，支持触屏 + 物理键盘 + 虚拟手柄。
@@ -48,6 +50,9 @@ class GameActivity : AppCompatActivity() {
     private var currentTitle: String = ""
     private var currentType: GameType = GameType.URL
     private var gamepadVisible = false
+    private var isFullscreen = false
+    private var isMouseEnabled = false
+    private lateinit var floatingMenu: FloatingMenuView
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val fileChooserLauncher = registerForActivityResult(
@@ -60,9 +65,7 @@ class GameActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 沉浸式全屏：隐藏状态栏和导航栏
-        // 注：之前阻止软键盘的是主题 windowFullscreen=true（已删除），
-        // 用 WindowInsetsControllerCompat 隐藏 systemBars 不影响 IME
+        // 沉浸式全屏
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -77,9 +80,14 @@ class GameActivity : AppCompatActivity() {
             .getOrDefault(GameType.URL)
 
         webView = binding.gameWebView
+        // 根据设置应用屏幕方向
+        applyOrientation()
+        // 初始化鼠标光标
+        isMouseEnabled = PrefsManager.isMouseEnabled
         setupWebView()
         setupGamepad()
         setupToolbar()
+        setupFloatingMenu()
         setupBackHandler()
 
         // 开始加载
@@ -139,6 +147,10 @@ class GameActivity : AppCompatActivity() {
             binding.loadingOverlay.visibility = View.GONE
             url?.let { FavoriteStore.addHistory(it, currentTitle, currentType) }
             updateFavoriteIcon()
+            // 如果鼠标光标已开启，重新注入（页面导航后会丢失）
+            if (isMouseEnabled) {
+                webView.evaluateJavascript(MOUSE_CURSOR_SCRIPT, null)
+            }
         }
         override fun onProgress(progress: Int) = chromeCallback.onProgress(progress)
         override fun onError(url: String?, errorCode: Int, description: String?) {
@@ -211,27 +223,96 @@ class GameActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { if (webView.canGoBack()) webView.goBack() else finish() }
         binding.btnForward.setOnClickListener { if (webView.canGoForward()) webView.goForward() }
         binding.btnRefresh.setOnClickListener { webView.reload() }
-        binding.btnSystemBars.setOnClickListener { toggleSystemBars() }
         binding.btnGamepad.setOnClickListener { toggleGamepad() }
         binding.btnFavorite.setOnClickListener { toggleFavorite() }
         binding.btnShare.setOnClickListener { shareCurrent() }
         binding.btnRetry.setOnClickListener { webView.reload() }
     }
 
-    /** 显隐系统栏（状态栏 + 导航栏）切换：横屏全屏 ↔ 显示系统栏 */
-    private fun toggleSystemBars() {
+    // ---------------- 悬浮菜单 ----------------
+    private fun setupFloatingMenu() {
+        floatingMenu = binding.floatingMenu
+        floatingMenu.setCallbacks(object : FloatingMenuView.Callbacks {
+            override fun onToggleFullscreen() { toggleFullscreen() }
+            override fun onToggleOrientation() { toggleOrientation() }
+            override fun onToggleGamepad() { toggleGamepad() }
+            override fun onToggleMouse() { toggleMouse() }
+            override fun onOpenKeyMapping() { openKeyMappingDialog() }
+            override fun onRefresh() { webView.reload() }
+            override fun onBack() { if (webView.canGoBack()) webView.goBack() else finish() }
+            override fun onClose() { finish() }
+        })
+    }
+
+    /** 全屏切换：隐藏/显示系统栏 + 顶部工具栏 */
+    private fun toggleFullscreen() {
+        isFullscreen = !isFullscreen
         val controller = WindowInsetsControllerCompat(window, window.decorView)
-        val isCurrentlyHidden = window.decorView.rootWindowInsets?.isVisible(WindowInsetsCompat.Type.systemBars()) == false
-        if (isCurrentlyHidden) {
-            // 显示系统栏
-            controller.show(WindowInsetsCompat.Type.systemBars())
-            binding.btnSystemBars.setImageResource(R.drawable.ic_fullscreen)
-        } else {
-            // 隐藏系统栏（沉浸式全屏），从屏幕边缘滑动可临时显示
+        if (isFullscreen) {
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            binding.btnSystemBars.setImageResource(R.drawable.ic_fullscreen_exit)
+            binding.topBar.visibility = View.GONE
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            binding.topBar.visibility = View.VISIBLE
         }
+        floatingMenu.isFullscreen = isFullscreen
+    }
+
+    /** 横竖屏切换 */
+    private fun toggleOrientation() {
+        val isCurrentlyLandscape = requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        if (isCurrentlyLandscape) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            Toast.makeText(this, R.string.portrait_mode, Toast.LENGTH_SHORT).show()
+        } else {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            Toast.makeText(this, R.string.landscape_mode, Toast.LENGTH_SHORT).show()
+        }
+        floatingMenu.isLandscape = !isCurrentlyLandscape
+    }
+
+    /** 应用设置中的屏幕方向 */
+    private fun applyOrientation() {
+        requestedOrientation = when (PrefsManager.orientation) {
+            "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            "auto" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+            else -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+    }
+
+    /** 鼠标光标开关：注入/移除 JS 鼠标光标模拟脚本 */
+    private fun toggleMouse() {
+        isMouseEnabled = !isMouseEnabled
+        if (isMouseEnabled) {
+            webView.evaluateJavascript(MOUSE_CURSOR_SCRIPT, null)
+            Toast.makeText(this, R.string.mouse_enabled, Toast.LENGTH_SHORT).show()
+        } else {
+            webView.evaluateJavascript(
+                "(function(){var c=document.getElementById('__mouseCursor');if(c)c.remove();window.__mouseEnabled=false;})();", null)
+            Toast.makeText(this, R.string.mouse_disabled, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 按键映射设置对话框 */
+    private fun openKeyMappingDialog() {
+        val options = arrayOf("A 键 → 空格", "A 键 → 回车", "B 键 → 回车", "B 键 → Z", "恢复默认")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.key_mapping)
+            .setItems(options) { _, which ->
+                val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+                when (which) {
+                    0 -> sp.edit().putString("gamepad_a_key", "SPACE").apply()
+                    1 -> sp.edit().putString("gamepad_a_key", "ENTER").apply()
+                    2 -> sp.edit().putString("gamepad_b_key", "ENTER").apply()
+                    3 -> sp.edit().putString("gamepad_b_key", "Z").apply()
+                    4 -> {
+                        sp.edit().putString("gamepad_a_key", "SPACE").putString("gamepad_b_key", "ENTER").apply()
+                    }
+                }
+                Toast.makeText(this, "按键映射已更新", Toast.LENGTH_SHORT).show()
+            }
+            .show()
     }
 
     private fun toggleFavorite() {
@@ -315,6 +396,41 @@ class GameActivity : AppCompatActivity() {
         const val EXTRA_URL = "extra_url"
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_TYPE = "extra_type"
+
+        /**
+         * 鼠标光标模拟脚本：在 PC 网页上显示一个跟随触摸的鼠标光标，
+         * 触摸 = 鼠标移动，点击 = 鼠标左键点击。
+         * 用于兼容需要鼠标 hover 的 PC 网页。
+         */
+        private const val MOUSE_CURSOR_SCRIPT = """
+            (function(){
+              if (window.__mouseEnabled) return; window.__mouseEnabled = true;
+              var cursor = document.createElement('div');
+              cursor.id = '__mouseCursor';
+              cursor.style.cssText = 'position:fixed;width:20px;height:20px;pointer-events:none;z-index:999999;left:0;top:0;transform:translate(-4px,-4px);';
+              cursor.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5.5,3.5L18,12L11.5,12.5L15,19L12.5,20L9,13.5L5.5,17L5.5,3.5Z" fill="white" stroke="black" stroke-width="1.5"/></svg>';
+              document.body.appendChild(cursor);
+              var lastX = 0, lastY = 0;
+              document.addEventListener('touchstart', function(e){
+                var t = e.touches[0];
+                lastX = t.clientX; lastY = t.clientY;
+                cursor.style.left = lastX + 'px';
+                cursor.style.top = lastY + 'px';
+              }, {passive: true});
+              document.addEventListener('touchmove', function(e){
+                var t = e.touches[0];
+                lastX = t.clientX; lastY = t.clientY;
+                cursor.style.left = lastX + 'px';
+                cursor.style.top = lastY + 'px';
+                // 模拟 mousemove（触发 hover 效果）
+                var el = document.elementFromPoint(lastX, lastY);
+                if (el) {
+                  var evt = new MouseEvent('mousemove', {bubbles:true, clientX:lastX, clientY:lastY});
+                  el.dispatchEvent(evt);
+                }
+              }, {passive: true});
+            })();
+        """
 
         /** 启动游戏播放器的便捷方法 */
         fun launch(context: android.content.Context, url: String, title: String, type: GameType) {

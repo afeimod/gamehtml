@@ -45,6 +45,19 @@
     <string name="fullscreen">全屏</string>
     <string name="fullscreen_exit">退出全屏</string>
 
+    <!-- 悬浮菜单 -->
+    <string name="menu">菜单</string>
+    <string name="orientation">横竖屏</string>
+    <string name="mouse_cursor">鼠标光标</string>
+    <string name="key_mapping">按键设置</string>
+    <string name="close">关闭</string>
+    <string name="mouse_enabled">鼠标已开启</string>
+    <string name="mouse_disabled">鼠标已关闭</string>
+    <string name="landscape_mode">已切换横屏</string>
+    <string name="portrait_mode">已切换竖屏</string>
+    <string name="gamepad_shown">手柄已显示</string>
+    <string name="gamepad_hidden">手柄已隐藏</string>
+
     <!-- 虚拟手柄 -->
     <string name="gamepad_show">显示手柄</string>
     <string name="gamepad_hide">隐藏手柄</string>
@@ -90,6 +103,10 @@
 
     <string name="pref_landscape">横屏游戏</string>
     <string name="pref_landscape_summary">游戏界面强制横屏</string>
+    <string name="pref_orientation">屏幕方向</string>
+    <string name="pref_orientation_summary">设置游戏界面的默认屏幕方向</string>
+    <string name="pref_mouse">鼠标光标</string>
+    <string name="pref_mouse_summary">在 PC 网页上显示鼠标光标（模拟鼠标 hover）</string>
     <string name="pref_block_ads">屏蔽广告</string>
     <string name="pref_block_ads_summary">拦截常见广告域名</string>
     <string name="pref_clear_cache">清除缓存</string>

@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 屏幕方向 -->
+    <string-array name="orientation_entries">
+        <item>横屏 (默认)</item>
+        <item>竖屏</item>
+        <item>自动旋转</item>
+    </string-array>
+    <string-array name="orientation_values">
+        <item>landscape</item>
+        <item>portrait</item>
+        <item>auto</item>
+    </string-array>
+
     <!-- Ruffle CDN 选项 -->
     <string-array name="flash_cdn_entries">
         <item>jsDelivr (国内推荐)</item>

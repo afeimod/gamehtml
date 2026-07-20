@@ -5,11 +5,20 @@
     <!-- 通用 -->
     <PreferenceCategory android:title="@string/settings_general" app:iconSpaceReserved="false">
 
+        <ListPreference
+            android:key="orientation"
+            android:title="@string/pref_orientation"
+            android:summary="@string/pref_orientation_summary"
+            android:entries="@array/orientation_entries"
+            android:entryValues="@array/orientation_values"
+            android:defaultValue="landscape"
+            app:iconSpaceReserved="false" />
+
         <SwitchPreferenceCompat
-            android:key="landscape_game"
-            android:title="@string/pref_landscape"
-            android:summary="@string/pref_landscape_summary"
-            android:defaultValue="true"
+            android:key="mouse_enabled"
+            android:title="@string/pref_mouse"
+            android:summary="@string/pref_mouse_summary"
+            android:defaultValue="false"
             app:iconSpaceReserved="false" />
 
         <SwitchPreferenceCompat

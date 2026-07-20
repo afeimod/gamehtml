@@ -16,8 +16,13 @@ object PrefsManager {
     }
 
     // ---- 通用 ----
-    val isLandscapeGame: Boolean get() = sp.getBoolean("landscape_game", true)
+    /** 游戏界面方向：auto / landscape / portrait */
+    val orientation: String get() = sp.getString("orientation", "landscape") ?: "landscape"
     val isBlockAds: Boolean get() = sp.getBoolean("block_ads", false)
+    /** 鼠标光标（PC 网页模拟鼠标） */
+    val isMouseEnabled: Boolean get() = sp.getBoolean("mouse_enabled", false)
+    /** 兼容旧设置：landscape_game */
+    val isLandscapeGame: Boolean get() = sp.getBoolean("landscape_game", true)
 
     // ---- Flash ----
     val isFlashEnabled: Boolean get() = sp.getBoolean("flash_enabled", true)

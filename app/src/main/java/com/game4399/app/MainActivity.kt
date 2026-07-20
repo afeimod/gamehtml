@@ -18,6 +18,7 @@ import com.game4399.app.ui.HomeFragment
 import com.game4399.app.ui.MeFragment
 import com.game4399.app.ui.WebFragment
 import com.game4399.app.webview.NavHelper
+import com.game4399.app.widget.FloatingMenuView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.textfield.TextInputEditText
 
@@ -48,21 +49,35 @@ class MainActivity : AppCompatActivity() {
 
         setSupportActionBar(binding.toolbar)
 
-        // 悬浮退出全屏按钮
-        binding.btnFullscreenExit.setOnClickListener {
-            val menuItem = binding.toolbar.menu.findItem(R.id.action_fullscreen)
-            if (menuItem != null) {
-                toggleFullscreen(menuItem)
-            } else {
-                // 菜单未创建时的兜底
+        // 悬浮菜单（仅全屏模式显示）
+        binding.floatingMenu.setCallbacks(object : FloatingMenuView.Callbacks {
+            override fun onToggleFullscreen() {
+                val menuItem = binding.toolbar.menu.findItem(R.id.action_fullscreen)
+                if (menuItem != null) toggleFullscreen(menuItem)
+            }
+            override fun onToggleOrientation() {
+                val isLandscape = requestedOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                requestedOrientation = if (isLandscape)
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                else
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            override fun onToggleGamepad() {}
+            override fun onToggleMouse() {}
+            override fun onOpenKeyMapping() {
+                startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+            }
+            override fun onRefresh() {}
+            override fun onBack() {
                 isFullscreen = false
                 val controller = WindowInsetsControllerCompat(window, window.decorView)
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 binding.appBar.visibility = View.VISIBLE
                 binding.bottomNav.visibility = View.VISIBLE
-                binding.fullscreenExitOverlay.visibility = View.GONE
+                binding.floatingMenu.visibility = View.GONE
             }
-        }
+            override fun onClose() { finish() }
+        })
 
         binding.bottomNav.setOnItemSelectedListener(BottomNavigationView.OnNavigationItemSelectedListener {
             switchTab(it.itemId)
@@ -144,25 +159,21 @@ class MainActivity : AppCompatActivity() {
         else -> super.onOptionsItemSelected(item)
     }
 
-    /** 全屏切换：隐藏/显示系统栏 + 工具栏 + 底部导航 + 悬浮退出按钮 */
+    /** 全屏切换：隐藏/显示系统栏 + 工具栏 + 底部导航 + 悬浮菜单 */
     private fun toggleFullscreen(item: MenuItem) {
         isFullscreen = !isFullscreen
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         if (isFullscreen) {
-            // 进入全屏：隐藏系统栏，让内容延伸到刘海屏区域
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            // 隐藏工具栏和底部导航，让 WebView 占满全屏
             binding.appBar.visibility = View.GONE
             binding.bottomNav.visibility = View.GONE
-            // 显示悬浮退出按钮
-            binding.fullscreenExitOverlay.visibility = View.VISIBLE
+            binding.floatingMenu.visibility = View.VISIBLE
         } else {
-            // 退出全屏：恢复显示
             controller.show(WindowInsetsCompat.Type.systemBars())
             binding.appBar.visibility = View.VISIBLE
             binding.bottomNav.visibility = View.VISIBLE
-            binding.fullscreenExitOverlay.visibility = View.GONE
+            binding.floatingMenu.visibility = View.GONE
         }
         updateFullscreenIcon(item)
     }

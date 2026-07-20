@@ -11,6 +11,8 @@
         <item name="android:windowBackground">@color/bg_surface</item>
         <item name="android:statusBarColor" tools:targetApi="21">@color/brand_primary_dark</item>
         <item name="android:navigationBarColor">@color/bg_surface</item>
+        <!-- 刘海屏适配 -->
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="30">shortEdges</item>
     </style>
 
     <!-- 游戏界面主题：沉浸式（用 WindowInsetsControllerCompat 隐藏状态栏，不用 windowFullscreen） -->
@@ -20,6 +22,8 @@
         <item name="android:statusBarColor">@android:color/black</item>
         <item name="android:navigationBarColor">@android:color/black</item>
         <item name="android:windowBackground">@android:color/black</item>
+        <!-- 刘海屏适配：内容延伸到刘海区域 -->
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="30">shortEdges</item>
     </style>
 
     <!-- 文字样式 -->

@@ -74,17 +74,6 @@
             android:src="@drawable/ic_refresh"
             app:tint="@android:color/white" />
 
-        <ImageButton
-            android:id="@+id/btnSystemBars"
-            style="@style/Widget.GamepadButton"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="@dimen/spacing_xs"
-            android:background="@drawable/bg_top_button"
-            android:contentDescription="@string/fullscreen"
-            android:src="@drawable/ic_fullscreen"
-            app:tint="@android:color/white" />
-
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
@@ -122,6 +111,15 @@
             android:src="@drawable/ic_share"
             app:tint="@android:color/white" />
     </LinearLayout>
+
+    <!-- 可拖动悬浮菜单（横竖屏通用） -->
+    <com.game4399.app.widget.FloatingMenuView
+        android:id="@+id/floatingMenu"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="12dp" />
 
     <!-- 虚拟手柄：左下方向键 -->
     <com.game4399.app.input.DPadView
