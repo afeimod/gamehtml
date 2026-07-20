@@ -45,7 +45,24 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
         setSupportActionBar(binding.toolbar)
+
+        // 悬浮退出全屏按钮
+        binding.btnFullscreenExit.setOnClickListener {
+            val menuItem = binding.toolbar.menu.findItem(R.id.action_fullscreen)
+            if (menuItem != null) {
+                toggleFullscreen(menuItem)
+            } else {
+                // 菜单未创建时的兜底
+                isFullscreen = false
+                val controller = WindowInsetsControllerCompat(window, window.decorView)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+                binding.appBar.visibility = View.VISIBLE
+                binding.bottomNav.visibility = View.VISIBLE
+                binding.fullscreenExitOverlay.visibility = View.GONE
+            }
+        }
 
         binding.bottomNav.setOnItemSelectedListener(BottomNavigationView.OnNavigationItemSelectedListener {
             switchTab(it.itemId)
@@ -127,21 +144,25 @@ class MainActivity : AppCompatActivity() {
         else -> super.onOptionsItemSelected(item)
     }
 
-    /** 全屏切换：隐藏/显示系统栏 + 工具栏 + 底部导航 */
+    /** 全屏切换：隐藏/显示系统栏 + 工具栏 + 底部导航 + 悬浮退出按钮 */
     private fun toggleFullscreen(item: MenuItem) {
         isFullscreen = !isFullscreen
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         if (isFullscreen) {
-            // 进入全屏：隐藏状态栏和导航栏，隐藏工具栏和底部导航
+            // 进入全屏：隐藏系统栏，让内容延伸到刘海屏区域
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            binding.toolbar.visibility = View.GONE
+            // 隐藏工具栏和底部导航，让 WebView 占满全屏
+            binding.appBar.visibility = View.GONE
             binding.bottomNav.visibility = View.GONE
+            // 显示悬浮退出按钮
+            binding.fullscreenExitOverlay.visibility = View.VISIBLE
         } else {
             // 退出全屏：恢复显示
             controller.show(WindowInsetsCompat.Type.systemBars())
-            binding.toolbar.visibility = View.VISIBLE
+            binding.appBar.visibility = View.VISIBLE
             binding.bottomNav.visibility = View.VISIBLE
+            binding.fullscreenExitOverlay.visibility = View.GONE
         }
         updateFullscreenIcon(item)
     }

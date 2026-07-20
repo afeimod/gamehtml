@@ -211,10 +211,27 @@ class GameActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { if (webView.canGoBack()) webView.goBack() else finish() }
         binding.btnForward.setOnClickListener { if (webView.canGoForward()) webView.goForward() }
         binding.btnRefresh.setOnClickListener { webView.reload() }
+        binding.btnSystemBars.setOnClickListener { toggleSystemBars() }
         binding.btnGamepad.setOnClickListener { toggleGamepad() }
         binding.btnFavorite.setOnClickListener { toggleFavorite() }
         binding.btnShare.setOnClickListener { shareCurrent() }
         binding.btnRetry.setOnClickListener { webView.reload() }
+    }
+
+    /** 显隐系统栏（状态栏 + 导航栏）切换：横屏全屏 ↔ 显示系统栏 */
+    private fun toggleSystemBars() {
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        val isCurrentlyHidden = window.decorView.rootWindowInsets?.isVisible(WindowInsetsCompat.Type.systemBars()) == false
+        if (isCurrentlyHidden) {
+            // 显示系统栏
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            binding.btnSystemBars.setImageResource(R.drawable.ic_fullscreen)
+        } else {
+            // 隐藏系统栏（沉浸式全屏），从屏幕边缘滑动可临时显示
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            binding.btnSystemBars.setImageResource(R.drawable.ic_fullscreen_exit)
+        }
     }
 
     private fun toggleFavorite() {
