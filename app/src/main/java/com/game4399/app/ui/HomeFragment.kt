@@ -4,8 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.game4399.app.GameActivity
@@ -39,16 +37,6 @@ class HomeFragment : Fragment() {
         setupClassicList()
         setupCustomInput()
         binding.swipeRefresh.isEnabled = false
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // 恢复状态栏和 AppBarLayout（从 WebFragment 返回时）
-        val activity = requireActivity()
-        WindowInsetsControllerCompat(activity.window, activity.window.decorView)
-            .show(WindowInsetsCompat.Type.statusBars())
-        val appBar = activity.findViewById<View>(com.game4399.app.R.id.appBar)
-        appBar?.visibility = View.VISIBLE
     }
 
     private fun setupQuickEntries() {
