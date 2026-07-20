@@ -3,7 +3,9 @@
 # classpath，改 GRADLE_USER_HOME 也无法绕过。声明相同版本即不冲突。
 # AGP 8.1.0 最高支持 compileSdk 34。
 agp = "8.1.0"
-kotlin = "1.9.24"
+# Kotlin 锁定 1.9.0：同样被镜像注入到 classpath（1.9.0），声明相同版本即不冲突。
+# Kotlin 1.9.0 与 AGP 8.1.0 兼容。
+kotlin = "1.9.0"
 coreKtx = "1.13.1"
 appcompat = "1.7.0"
 material = "1.12.0"
