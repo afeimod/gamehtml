@@ -1,10 +1,9 @@
 # 4399 游戏盒 (Game4399)
 
 [![Build APK](https://github.com/<你的用户名>/Game4399/actions/workflows/build-apk.yml/badge.svg)](https://github.com/<你的用户名>/Game4399/actions/workflows/build-apk.yml)
-[![CI Check](https://github.com/<你的用户名>/Game4399/actions/workflows/ci-check.yml/badge.svg)](https://github.com/<你的用户名>/Game4399/actions/workflows/ci-check.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-6.0%2B-green.svg)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.24-blue.svg)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-blue.svg)](https://kotlinlang.org)
 
 一个支持 **Flash 插件**、同时支持 **触屏 + 物理键盘 + 虚拟手柄** 的 4399 网页安卓 App。
 基于 Android WebView + [Ruffle](https://github.com/ruffle-rs/ruffle) WebAssembly Flash 模拟器实现，无需安装任何 Flash 插件即可在手机上怀旧游玩 4399 小游戏。
@@ -27,9 +26,9 @@
 
 ## 🛠 技术栈
 
-- **语言**：Kotlin 1.9.24
-- **构建**：Gradle 8.7 + AGP 8.5.0，Version Catalog (`libs.versions.toml`)
-- **最低 SDK**：23 (Android 6.0) / **目标 SDK**：35
+- **语言**：Kotlin 1.9.0
+- **构建**：Gradle 8.7 + AGP 8.1.0，Version Catalog (`libs.versions.toml`)
+- **最低 SDK**：23 (Android 6.0) / **目标 SDK**：34
 - **UI**：Material 3 + ViewBinding + AndroidX
 - **WebView**：AndroidX WebKit 1.12.1（Safe Browsing、MIME 处理）
 - **Flash**：Ruffle 0.3.0（jsDelivr / unpkg CDN 或本地 assets）
