@@ -101,8 +101,8 @@ class FloatingMenuView @JvmOverloads constructor(
         triggerBtn.setOnTouchListener(object : OnTouchListener {
             private var startX = 0f
             private var startY = 0f
-            private var startLeft = 0
-            private var startTop = 0
+            private var startTransX = 0f
+            private var startTransY = 0f
             private var moved = false
             private var downTime = 0L
 
@@ -112,27 +112,25 @@ class FloatingMenuView @JvmOverloads constructor(
                     MotionEvent.ACTION_DOWN -> {
                         startX = e.rawX
                         startY = e.rawY
-                        startLeft = (this@FloatingMenuView as View).left
-                        startTop = (this@FloatingMenuView as View).top
+                        startTransX = translationX
+                        startTransY = translationY
                         moved = false
                         downTime = System.currentTimeMillis()
                     }
                     MotionEvent.ACTION_MOVE -> {
                         val dx = e.rawX - startX
                         val dy = e.rawY - startY
-                        if (kotlin.math.abs(dx) > 8 || kotlin.math.abs(dy) > 8) {
+                        if (kotlin.math.abs(dx) > 10 || kotlin.math.abs(dy) > 10) {
                             moved = true
-                            val parent = (this@FloatingMenuView.parent as? ViewGroup) ?: return true
-                            val newLeft = (startLeft + dx).toInt()
-                                .coerceIn(0, parent.width - width)
-                            val newTop = (startTop + dy).toInt()
-                                .coerceIn(0, parent.height - height)
-                            (layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
-                                lp.leftMargin = newLeft
-                                lp.topMargin = newTop
-                                lp.gravity = Gravity.NO_GRAVITY
-                                layoutParams = lp
-                            }
+                            val parent = (this@FloatingMenuView.parent as? ViewGroup)
+                            val maxX = (parent?.width ?: 0).toFloat() - width
+                            val maxY = (parent?.height ?: 0).toFloat() - height
+                            // 使用 translationX/Y 移动，兼容所有父容器
+                            val newX = (startTransX + dx).coerceIn(-maxX + width, 0f)
+                            val newY = (startTransY + dy).coerceIn(0f, maxY.coerceAtLeast(0f))
+                            // 简单限制：确保不拖出屏幕
+                            translationX = (startTransX + dx)
+                            translationY = (startTransY + dy)
                         }
                     }
                     MotionEvent.ACTION_UP -> {
