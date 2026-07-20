@@ -60,11 +60,12 @@ class GameActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 沉浸式全屏：只隐藏状态栏，保留导航栏以确保软键盘（IME）可正常弹出
-        // 注：hide(systemBars()) 会连导航栏一起隐藏，在部分设备上导致 IME 无法显示
+        // 沉浸式全屏：隐藏状态栏和导航栏
+        // 注：之前阻止软键盘的是主题 windowFullscreen=true（已删除），
+        // 用 WindowInsetsControllerCompat 隐藏 systemBars 不影响 IME
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.statusBars())
+            hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         binding = ActivityGameBinding.inflate(layoutInflater)

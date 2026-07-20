@@ -66,15 +66,31 @@ open class GameWebViewClient(
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         callback.onPageStarted(url)
+        // 尽早注入：屏蔽"没有 Flash 插件"提示 + 预置 Ruffle 配置
+        // 4399 PC Flash 页在 DOM 构建阶段就会检测 Flash 插件并显示提示，
+        // 等 onPageFinished 再注入 Ruffle 就太晚了
+        if (PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)) {
+            view?.evaluateJavascript(RuffleInjector.configScript(), null)
+            view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
+        }
+    }
+
+    override fun onPageCommitVisible(view: WebView?, url: String?) {
+        super.onPageCommitVisible(view, url)
+        // DOM 已构建但页面还在加载中：此时注入 Ruffle 可抢在"无Flash"提示渲染前替换 <object>/<embed>
+        if (PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)) {
+            view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
+            view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
+        }
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
-        // 注入 Ruffle（仅当启用 Flash 且当前页适合注入）
+        // 页面加载完成：再次确保 Ruffle 已注入（兜底 + 触发 polyfill）
         if (PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)) {
             view?.evaluateJavascript(RuffleInjector.fullInjection(), null)
         }
-        // 注入一点 CSS：屏蔽 4399 PC 版的部分广告与边栏，让游戏区更突出
+        // 注入 CSS：屏蔽 4399 PC 版广告与边栏，让游戏区更突出
         view?.evaluateJavascript(CSS_INJECTION, null)
         callback.onPageFinished(url)
     }
@@ -118,6 +134,49 @@ open class GameWebViewClient(
                 'object,embed{max-width:100%!important;}'
               ].join('\n');
               document.head.appendChild(s);
+            })();
+        """
+
+        /**
+         * 屏蔽 4399 PC Flash 页的"没有 Flash 插件"提示。
+         * 4399 页面会检测 navigator.plugins 或 ActiveX，发现没有 Flash 就显示提示框。
+         * 本脚本：1) 伪装 Flash 插件存在 2) 隐藏已出现的提示框 3) 持续监控并移除
+         */
+        private const val FLASH_HIDE_SCRIPT = """
+            (function(){
+              if (window.__flashHideInjected) return; window.__flashHideInjected = true;
+              // 1. 伪装 Flash 插件存在（部分页面通过 navigator.plugins 检测）
+              try {
+                Object.defineProperty(navigator, 'plugins', {
+                  get: function() {
+                    var arr = [];
+                    arr.namedItem = function(name) { return name === 'Shockwave Flash' ? { name: name } : null; };
+                    arr.refresh = function() {};
+                    arr.item = function(i) { return arr[i] || null; };
+                    return arr;
+                  }
+                });
+              } catch(e) {}
+              // 2. 隐藏"没有 Flash"提示框（4399 常见 class/id）
+              function hideFlashTips() {
+                var selectors = [
+                  '[class*="noflash"]','[id*="noflash"]',
+                  '[class*="no-flash"]','[id*="no-flash"]',
+                  '.flash_tip','.flash-tip',
+                  '#flash_tip','#flash-tip',
+                  '.prompt-flash','.prompt_flash'
+                ];
+                var sel = selectors.join(',');
+                document.querySelectorAll(sel).forEach(function(el){
+                  el.style.display = 'none';
+                });
+              }
+              hideFlashTips();
+              // 3. DOM 变化时再次清理（页面异步插入的提示）
+              if (window.MutationObserver) {
+                var mo = new MutationObserver(function(){ hideFlashTips(); });
+                try { mo.observe(document.documentElement, {childList:true, subtree:true}); } catch(e) {}
+              }
             })();
         """
     }

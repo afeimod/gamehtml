@@ -42,6 +42,8 @@
     <string name="unfavorite">取消收藏</string>
     <string name="added_to_favorites">已加入收藏</string>
     <string name="removed_from_favorites">已移出收藏</string>
+    <string name="fullscreen">全屏</string>
+    <string name="fullscreen_exit">退出全屏</string>
 
     <!-- 虚拟手柄 -->
     <string name="gamepad_show">显示手柄</string>

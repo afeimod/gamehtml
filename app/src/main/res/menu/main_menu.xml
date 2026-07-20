@@ -2,6 +2,11 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
+        android:id="@+id/action_fullscreen"
+        android:icon="@drawable/ic_fullscreen"
+        android:title="@string/fullscreen"
+        app:showAsAction="ifRoom" />
+    <item
         android:id="@+id/action_open_url"
         android:icon="@drawable/ic_link"
         android:title="@string/enter_game_url"

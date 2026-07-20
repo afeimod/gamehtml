@@ -4,9 +4,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.Fragment
 import com.game4399.app.data.GameType
 import com.game4399.app.databinding.ActivityMainBinding
@@ -35,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private val meFragment by lazy { MeFragment() }
 
     private var currentTabId = R.id.nav_home
+    private var isFullscreen = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,10 +111,12 @@ class MainActivity : AppCompatActivity() {
     // ---------------- 工具栏菜单 ----------------
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
+        updateFullscreenIcon(menu.findItem(R.id.action_fullscreen))
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+        R.id.action_fullscreen -> { toggleFullscreen(item); true }
         R.id.action_open_url -> { showOpenUrlDialog(); true }
         R.id.action_favorites -> {
             startActivity(Intent(this, FavoritesActivity::class.java)); true
@@ -118,6 +125,37 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java)); true
         }
         else -> super.onOptionsItemSelected(item)
+    }
+
+    /** 全屏切换：隐藏/显示系统栏 + 工具栏 + 底部导航 */
+    private fun toggleFullscreen(item: MenuItem) {
+        isFullscreen = !isFullscreen
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        if (isFullscreen) {
+            // 进入全屏：隐藏状态栏和导航栏，隐藏工具栏和底部导航
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            binding.toolbar.visibility = View.GONE
+            binding.bottomNav.visibility = View.GONE
+        } else {
+            // 退出全屏：恢复显示
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            binding.toolbar.visibility = View.VISIBLE
+            binding.bottomNav.visibility = View.VISIBLE
+        }
+        updateFullscreenIcon(item)
+    }
+
+    private fun updateFullscreenIcon(item: MenuItem?) {
+        item?.apply {
+            if (isFullscreen) {
+                setIcon(R.drawable.ic_fullscreen_exit)
+                setTitle(R.string.fullscreen_exit)
+            } else {
+                setIcon(R.drawable.ic_fullscreen)
+                setTitle(R.string.fullscreen)
+            }
+        }
     }
 
     /** 输入网址 / 游戏 ID 打开 */
