@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.Fragment
 import com.game4399.app.GameActivity
 import com.game4399.app.R
@@ -119,15 +122,29 @@ class WebFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
-        webView.setOnTouchListener { _, _ ->
-            // 点击后由 WebViewClient 处理跳转
-            false
+        // 全屏：隐藏状态栏，WebView 占满整个屏幕（包括刘海屏区域）
+        val activity = requireActivity()
+        WindowCompat.setDecorFitsSystemWindows(activity.window, false)
+        WindowInsetsControllerCompat(activity.window, activity.window.decorView).apply {
+            hide(WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        // 隐藏 AppBarLayout，让 WebView 占满全屏
+        binding.root.post {
+            val appBar = activity.findViewById<View>(com.game4399.app.R.id.appBar)
+            appBar?.visibility = View.GONE
         }
     }
 
     override fun onPause() {
         super.onPause()
         webView.onPause()
+        // 恢复状态栏和 AppBarLayout
+        val activity = requireActivity()
+        WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+            .show(WindowInsetsCompat.Type.statusBars())
+        val appBar = activity.findViewById<View>(com.game4399.app.R.id.appBar)
+        appBar?.visibility = View.VISIBLE
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
