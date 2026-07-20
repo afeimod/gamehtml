@@ -8,6 +8,8 @@ import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -19,6 +21,7 @@ import com.game4399.app.ui.MeFragment
 import com.game4399.app.ui.WebFragment
 import com.game4399.app.webview.NavHelper
 import com.game4399.app.widget.FloatingMenuView
+import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.textfield.TextInputEditText
 
@@ -47,10 +50,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 让内容延伸到状态栏区域（消除顶部黑块），底部导航用 inset 监听处理
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         setSupportActionBar(binding.toolbar)
+
+        // 监听系统 inset：给 AppBarLayout 顶部 padding 避免标题被状态栏遮挡，
+        // 给 BottomNavigationView 底部 padding 避免被导航键遮挡
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.appBar.setPadding(0, systemBars.top, 0, 0)
+            binding.bottomNav.setPadding(0, 0, 0, systemBars.bottom)
+            insets
+        }
 
         // 悬浮菜单（仅全屏模式显示）
         binding.floatingMenu.setCallbacks(object : FloatingMenuView.Callbacks {
@@ -166,18 +180,29 @@ class MainActivity : AppCompatActivity() {
     private fun toggleFullscreen(item: MenuItem) {
         isFullscreen = !isFullscreen
         val controller = WindowInsetsControllerCompat(window, window.decorView)
+        val lp = binding.navHostContainer.layoutParams as CoordinatorLayout.LayoutParams
         if (isFullscreen) {
-            // 全屏：隐藏状态栏和导航栏，内容延伸到刘海屏区域
+            // 全屏：隐藏状态栏和导航栏，移除 padding 让 WebView 占满全屏
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             binding.appBar.visibility = View.GONE
             binding.bottomNav.visibility = View.GONE
+            binding.appBar.setPadding(0, 0, 0, 0)
+            binding.bottomNav.setPadding(0, 0, 0, 0)
+            // 关键：移除 appbar_scrolling_view_behavior，否则内容仍固定在 AppBarLayout 下方
+            lp.behavior = null
+            binding.navHostContainer.layoutParams = lp
             binding.floatingMenu.visibility = View.VISIBLE
         } else {
-            // 退出全屏：恢复状态栏和导航栏
+            // 退出全屏：恢复状态栏和导航栏，恢复 padding
             controller.show(WindowInsetsCompat.Type.systemBars())
             binding.appBar.visibility = View.VISIBLE
             binding.bottomNav.visibility = View.VISIBLE
+            // 关键：恢复 appbar_scrolling_view_behavior，让内容在 AppBarLayout 下方
+            lp.behavior = AppBarLayout.ScrollingViewBehavior()
+            binding.navHostContainer.layoutParams = lp
+            // 重新应用 inset padding
+            ViewCompat.requestApplyInsets(binding.root)
             binding.floatingMenu.visibility = View.GONE
         }
         updateFullscreenIcon(item)
