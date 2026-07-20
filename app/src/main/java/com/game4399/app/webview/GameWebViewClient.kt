@@ -73,6 +73,8 @@ open class GameWebViewClient(
             view?.evaluateJavascript(RuffleInjector.configScript(), null)
             view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
         }
+        // 注入 viewport 缩放：让宽 PC 页面适配屏幕，支持双指缩放
+        view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
     }
 
     override fun onPageCommitVisible(view: WebView?, url: String?) {
@@ -82,6 +84,8 @@ open class GameWebViewClient(
             view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
             view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
         }
+        // 确保 viewport 缩放生效
+        view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
@@ -123,6 +127,22 @@ open class GameWebViewClient(
     }
 
     companion object {
+        /**
+         * 强制设置 viewport：让 PC 网页适配屏幕宽度，支持缩放。
+         * 解决 PC 页面 UI 超出手机屏幕、无法缩放的问题。
+         */
+        private const val VIEWPORT_SCRIPT = """
+            (function(){
+              var meta = document.querySelector('meta[name="viewport"]');
+              if (!meta) {
+                meta = document.createElement('meta');
+                meta.name = 'viewport';
+                document.head.appendChild(meta);
+              }
+              meta.content = 'width=device-width, initial-scale=0.4, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes';
+            })();
+        """
+
         /** 适度的页面美化（屏蔽部分广告位 / 居中游戏区） */
         private const val CSS_INJECTION = """
             (function(){
