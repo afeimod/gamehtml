@@ -49,6 +49,7 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode"
             android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Game4399.Game" />
 
         <!-- 设置界面 -->
