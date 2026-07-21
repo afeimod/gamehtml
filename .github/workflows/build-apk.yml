@@ -96,6 +96,8 @@ jobs:
           ./gradlew --version
 
       # ---------- 5. 准备 Release 签名 ----------
+      # 没有配置签名 Secrets 时不生成 keystore.properties，
+      # build.gradle.kts 会自动用内置的 debug.keystore 签名（可用 MT 管理器重新签名）
       - name: Prepare signing key
         env:
           SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
@@ -104,14 +106,8 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         run: |
           if [ -z "$SIGNING_KEY_BASE64" ]; then
-            echo "未配置签名 Secrets，使用 debug 签名"
-            mkdir -p app
-            cat > app/keystore.properties <<'EOF'
-          storeFile=$ANDROID_SDK_ROOT/.android/debug.keystore
-          storePassword=android
-          keyAlias=androiddebugkey
-          keyPassword=android
-          EOF
+            echo "未配置签名 Secrets，使用内置 debug.keystore 签名（可用 MT 管理器重新签名）"
+            # 不生成 keystore.properties，让 build.gradle.kts 回退到内置 debug.keystore
           else
             echo "检测到签名 Secrets，解码 keystore..."
             echo "$SIGNING_KEY_BASE64" | base64 -d > app/release.keystore
@@ -121,8 +117,8 @@ jobs:
           keyAlias=$SIGNING_KEY_ALIAS
           keyPassword=$SIGNING_KEY_PASSWORD
           EOF
+            echo "✓ keystore.properties 已生成"
           fi
-          echo "✓ keystore.properties 已生成"
 
       # ---------- 6. 构建 Debug APK ----------
       - name: Build Debug APK
