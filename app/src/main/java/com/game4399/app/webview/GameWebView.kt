@@ -156,6 +156,93 @@ open class GameWebView @JvmOverloads constructor(
         dispatchKeyEvent(up)
     }
 
+    // ---------------- 鼠标事件注入 ----------------
+
+    /** 在 WebView 中心坐标注入鼠标移动事件（用于旋转视角） */
+    fun injectMouseMove(dx: Float, dy: Float) {
+        // 通过 JS 注入 mousemove 事件，模拟鼠标在页面中心移动
+        val cx = width / 2f
+        val cy = height / 2f
+        val newX = cx + dx
+        val newY = cy + dy
+        evaluateJavascript(
+            """
+            (function(){
+              var el = document.elementFromPoint($cx, $cy);
+              if (!el) return;
+              var evt = new MouseEvent('mousemove', {
+                bubbles: true, cancelable: true, view: window,
+                clientX: $newX, clientY: $newY,
+                movementX: $dx, movementY: $dy
+              });
+              el.dispatchEvent(evt);
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    /** 注入鼠标左键点击（mousedown + mouseup + click） */
+    fun injectMouseLeftClick(x: Float = width / 2f, y: Float = height / 2f) {
+        evaluateJavascript(
+            """
+            (function(){
+              var el = document.elementFromPoint($x, $y);
+              if (!el) return;
+              var opt = {bubbles: true, cancelable: true, view: window, clientX: $x, clientY: $y, button: 0};
+              el.dispatchEvent(new MouseEvent('mousedown', opt));
+              el.dispatchEvent(new MouseEvent('mouseup', opt));
+              el.dispatchEvent(new MouseEvent('click', opt));
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    /** 注入鼠标右键点击（contextmenu） */
+    fun injectMouseRightClick(x: Float = width / 2f, y: Float = height / 2f) {
+        evaluateJavascript(
+            """
+            (function(){
+              var el = document.elementFromPoint($x, $y);
+              if (!el) return;
+              var opt = {bubbles: true, cancelable: true, view: window, clientX: $x, clientY: $y, button: 2};
+              el.dispatchEvent(new MouseEvent('mousedown', opt));
+              el.dispatchEvent(new MouseEvent('mouseup', opt));
+              el.dispatchEvent(new MouseEvent('contextmenu', opt));
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    /** 注入鼠标左键按下（持续按住状态） */
+    fun injectMouseLeftDown(x: Float = width / 2f, y: Float = height / 2f) {
+        evaluateJavascript(
+            """
+            (function(){
+              var el = document.elementFromPoint($x, $y);
+              if (!el) return;
+              el.dispatchEvent(new MouseEvent('mousedown', {
+                bubbles: true, cancelable: true, view: window, clientX: $x, clientY: $y, button: 0
+              }));
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    /** 注入鼠标左键松开 */
+    fun injectMouseLeftUp(x: Float = width / 2f, y: Float = height / 2f) {
+        evaluateJavascript(
+            """
+            (function(){
+              var el = document.elementFromPoint($x, $y);
+              if (!el) return;
+              el.dispatchEvent(new MouseEvent('mouseup', {
+                bubbles: true, cancelable: true, view: window, clientX: $x, clientY: $y, button: 0
+              }));
+            })();
+            """.trimIndent(), null
+        )
+    }
+
     companion object {
         /** 桌面版 Chrome UA（Windows），不含 Mobile/Android，4399 据此返回 PC 版页面 */
         const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
