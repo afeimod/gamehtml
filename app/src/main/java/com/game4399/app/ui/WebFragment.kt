@@ -54,7 +54,8 @@ class WebFragment : Fragment() {
             webViewClient = object : GameWebViewClient(viewCb) {}
         }
 
-        binding.swipeRefresh.setOnRefreshListener { webView.reload() }
+        // 取消下拉刷新，避免游戏操作误触发
+        binding.swipeRefresh.isEnabled = false
         binding.btnRetry.setOnClickListener { webView.reload() }
 
         if (savedInstanceState != null) {
