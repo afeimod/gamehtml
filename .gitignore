@@ -12,9 +12,9 @@ build/
 # 本地配置
 local.properties
 keystore.properties
-*.keystore
 *.jks
 release.keystore
+# debug.keystore 需要提交到仓库，确保 CI 环境能签名
 
 # IntelliJ / Android Studio
 .idea/
