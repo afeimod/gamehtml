@@ -161,15 +161,15 @@ class FloatingMenuView @JvmOverloads constructor(
         }
 
         val items = listOf(
-            MenuItem(getString(R.string.fullscreen), R.drawable.ic_fullscreen) { callbacks?.onToggleFullscreen() },
-            MenuItem(getString(R.string.orientation), R.drawable.ic_rotate) { callbacks?.onToggleOrientation() },
-            MenuItem(getString(R.string.gamepad_show), R.drawable.ic_keyboard) { callbacks?.onToggleGamepad() },
-            MenuItem(getString(R.string.mouse_cursor), R.drawable.ic_mouse) { callbacks?.onToggleMouse() },
-            MenuItem(getString(R.string.key_mapping), R.drawable.ic_key) { callbacks?.onOpenKeyMapping() },
+            MenuItem(context.getString(R.string.fullscreen), R.drawable.ic_fullscreen) { callbacks?.onToggleFullscreen() },
+            MenuItem(context.getString(R.string.orientation), R.drawable.ic_rotate) { callbacks?.onToggleOrientation() },
+            MenuItem(context.getString(R.string.gamepad_show), R.drawable.ic_keyboard) { callbacks?.onToggleGamepad() },
+            MenuItem(context.getString(R.string.mouse_cursor), R.drawable.ic_mouse) { callbacks?.onToggleMouse() },
+            MenuItem(context.getString(R.string.key_mapping), R.drawable.ic_key) { callbacks?.onOpenKeyMapping() },
             MenuItem("Flash 引擎", R.drawable.ic_key) { callbacks?.onOpenFlashSettings() },
-            MenuItem(getString(R.string.refresh), R.drawable.ic_refresh) { callbacks?.onRefresh() },
-            MenuItem(getString(R.string.back), R.drawable.ic_back) { callbacks?.onBack() },
-            MenuItem(getString(R.string.close), R.drawable.ic_close) { callbacks?.onClose() }
+            MenuItem(context.getString(R.string.refresh), R.drawable.ic_refresh) { callbacks?.onRefresh() },
+            MenuItem(context.getString(R.string.back), R.drawable.ic_back) { callbacks?.onBack() },
+            MenuItem(context.getString(R.string.close), R.drawable.ic_close) { callbacks?.onClose() }
         )
 
         items.forEach { item ->
