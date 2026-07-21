@@ -54,7 +54,7 @@
     if (ENGINE === 'swf2js') {
       // ===== swf2js 引擎 =====
       loadText.textContent = '正在加载 swf2js 引擎…';
-      var swf2jsUrl = CDN_URL || 'file:///android_asset/swf2js/swf2js.js';
+      var swf2jsUrl = CDN_URL || 'https://flash.local/swf2js/swf2js.js';
       var s2 = document.createElement('script');
       s2.src = swf2jsUrl;
       s2.async = true;
@@ -66,9 +66,6 @@
           stage.appendChild(container);
           swf2js.load(SWF_URL, { tag: container });
           document.getElementById('loading').style.display = 'none';
-          if (window.Android && window.Android.log) {
-            window.Android.log('swf2js', '播放: ' + SWF_URL);
-          }
         } catch (e) {
           loadText.textContent = '加载失败: ' + e.message;
           console.error(e);
@@ -83,9 +80,8 @@
       // ===== Ruffle 引擎 =====
       loadText.textContent = '正在加载 Ruffle 引擎…';
 
-      // 如果没有指定 CDN，默认用本地
-      var ruffleUrl = CDN_URL || 'file:///android_asset/ruffle/ruffle.js';
-      var rufflePath = CDN_PATH || 'file:///android_asset/ruffle/';
+      var ruffleUrl = CDN_URL || 'https://flash.local/ruffle/ruffle.js';
+      var rufflePath = CDN_PATH || 'https://flash.local/ruffle/';
 
       // 1) 预置 Ruffle 配置（必须早于 ruffle.js）
       window.RufflePlayer = window.RufflePlayer || {};
@@ -123,9 +119,6 @@
           if (BASE_URL) opt.base = BASE_URL;
           player.ruffle().load(opt);
           document.getElementById('loading').style.display = 'none';
-          if (window.Android && window.Android.log) {
-            window.Android.log('Ruffle', '播放: ' + SWF_URL);
-          }
         } catch (e) {
           loadText.textContent = '加载失败: ' + e.message;
           console.error(e);

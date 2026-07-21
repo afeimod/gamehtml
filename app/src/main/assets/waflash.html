@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>WAFlash 播放器</title>
+<link rel="stylesheet" href="https://flash.local/waflash/waflash-style.css" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  #waflashContainer { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #canvas { max-width: 100%; max-height: 100%; outline: none; }
+  #waflashStatus { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #beb5f9; font-family: -apple-system, "Microsoft YaHei", sans-serif; font-size: 16px; text-align: center; z-index: 10; }
+  #hint { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; color: rgba(255,255,255,.4); font-size: 11px; z-index: 10; }
+</style>
+</head>
+<body>
+  <div id="waflashContainer">
+    <canvas class="waflashCanvas" id="canvas" tabindex="1"></canvas>
+    <div id="waflashStatus" style="display: none;">Loading...</div>
+  </div>
+  <div id="hint">WAFlash 引擎 · AS2/AS3 完整支持</div>
+
+  <script>
+    function param(name, def) {
+      return new URLSearchParams(location.search).get(name) || def || '';
+    }
+    var SWF_URL = param('swf');
+    var TITLE = param('title') || 'Flash 游戏';
+    document.title = TITLE;
+  </script>
+
+  <script type="module">
+    // WAFlash 使用 Emscripten ES module，从 flash.local 虚拟域名加载
+    // shouldInterceptRequest 会拦截 flash.local 并从 assets 返回文件
+    const WAFLASH_BASE = 'https://flash.local/waflash/';
+
+    // 动态 import waflash.min.js（Emscripten 模块工厂）
+    import(WAFLASH_BASE + 'waflash.min.js').then(module => {
+      const createWaflashModule = module.default;
+
+      const swfUrl = new URLSearchParams(location.search).get('swf') || '';
+      const statusEl = document.getElementById('waflashStatus');
+      const canvas = document.getElementById('canvas');
+
+      statusEl.style.display = 'block';
+      statusEl.textContent = '正在加载 WAFlash 引擎...';
+
+      canvas.addEventListener('webglcontextlost', function(e) {
+        e.preventDefault();
+      }, false);
+
+      // 点击 canvas 获取焦点（键盘输入需要）
+      canvas.addEventListener('click', function() {
+        canvas.focus();
+      });
+
+      const config = {
+        arguments: [swfUrl, '0', 'webgl', '1'],
+        preRun: [],
+        postRun: [],
+        locateFile: function(path, prefix) {
+          return WAFLASH_BASE + path;
+        },
+        print: function(text) { console.log(text); },
+        printErr: function(text) { console.error(text); },
+        canvas: canvas,
+        statusElement: statusEl,
+        setStatus: function(text) {
+          if (!text) return;
+          text = text.replace(/Downloading data\.\.\. \((\d+)\/(\d+)\)/, function(m, cur, total) {
+            return 'Loading... ' + Math.floor(parseInt(cur) / parseInt(total) * 100) + '%';
+          });
+          console.log('WAFLASH> ' + text);
+          statusEl.textContent = text;
+          statusEl.style.display = 'block';
+        },
+        showStatus: function() { statusEl.style.display = 'block'; },
+        hideStatus: function() { statusEl.style.display = 'none'; },
+        unload: function() {},
+        WAFLASH: {
+          hal: {
+            url_transformRequestUrl: function(url) {
+              return url;
+            }
+          }
+        }
+      };
+
+      statusEl.textContent = '正在加载游戏: ' + document.title;
+
+      createWaflashModule(config).then(function(instance) {
+        console.log('WAFLASH> Waflash module created!');
+        statusEl.style.display = 'none';
+      }).catch(function(err) {
+        console.error('WAFLASH> Failed:', err);
+        statusEl.textContent = '加载失败: ' + (err.message || err);
+      });
+    }).catch(function(err) {
+      console.error('WAFlash module load failed:', err);
+      document.getElementById('waflashStatus').textContent = 'WAFlash 引擎加载失败';
+      document.getElementById('waflashStatus').style.display = 'block';
+    });
+
+    // 禁用长按选择 / 上下文菜单
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    document.addEventListener('selectstart', function(e) { e.preventDefault(); });
+  </script>
+</body>
+</html>
