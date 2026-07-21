@@ -12,12 +12,13 @@ import com.game4399.app.webview.GameWebView
 import kotlin.math.abs
 
 /**
- * 鼠标控制覆盖层：
- * - 左半屏：触摸区，拖动模拟鼠标移动（旋转视角），点击模拟左键单击
- * - 右下角：左键按钮（持续按住/松开）
- * - 右下角上方：右键按钮
+ * 鼠标按钮 View：作为可添加的虚拟按钮，和方向键/动作按钮并列。
  *
- * 默认隐藏，通过悬浮菜单的"鼠标模式"开关显示。
+ * - 左键按钮：短按=鼠标左键单击，长按=持续按住并进入旋转视角模式（拖动移动鼠标）
+ * - 右键按钮：短按=鼠标右键单击，长按=持续按住并进入旋转视角模式
+ *
+ * 布局：两个圆形按钮左右排列，大小跟随 [PrefsManager.gamepadScale]。
+ * 位置跟随 [PrefsManager] 的 mouseOffsetX/Y。
  */
 class MouseControlView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyle: Int = 0
@@ -27,173 +28,171 @@ class MouseControlView @JvmOverloads constructor(
     var overlayAlpha: Int = 100
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val leftBtnColor = Color.argb(overlayAlpha, 0x1E, 0x88, 0xE5)
-    private val rightBtnColor = Color.argb(overlayAlpha, 0xE5, 0x39, 0x35)
 
     /** 左键按下状态 */
-    private var leftBtnPressed = false
+    private var leftPressed = false
     /** 右键按下状态 */
-    private var rightBtnPressed = false
-    /** 触摸区按下时的起始坐标 */
-    private var touchStartX = 0f
-    private var touchStartY = 0f
-    private var touchLastX = 0f
-    private var touchLastY = 0f
-    /** 是否在拖动（旋转视角） */
+    private var rightPressed = false
+    /** 长按阈值（ms） */
+    private val longPressThreshold = 300L
+    /** 长按移动阈值（像素），超过则进入旋转视角 */
+    private val dragThreshold = 10f
+    /** 按下时的坐标和时间 */
+    private var downX = 0f
+    private var downY = 0f
+    private var downTime = 0L
+    /** 当前是否在拖动旋转视角 */
     private var isDragging = false
-    /** 按下的指针 ID → 区域（0=触摸区, 1=左键, 2=右键） */
-    private val pointerZone = HashMap<Int, Int>()
+    /** 上次移动坐标 */
+    private var lastMoveX = 0f
+    private var lastMoveY = 0f
+    /** 当前按下的按钮：0=无, 1=左键, 2=右键 */
+    private var activeButton = 0
+    /** 是否已触发长按 */
+    private var longPressTriggered = false
 
     /** 按钮半径 */
     private val btnRadius: Float
-        get() = (minOf(width, height) * 0.08f * PrefsManager.gamepadScale).coerceAtLeast(40f)
+        get() = (minOf(width, height) * 0.15f * PrefsManager.gamepadScale).coerceAtLeast(50f)
 
-    /** 左键按钮中心 */
-    private val leftBtnCx: Float get() = width - btnRadius * 2.5f
-    private val leftBtnCy: Float get() = height - btnRadius * 1.5f
+    /** 左键中心 */
+    private val leftCx: Float get() = width * 0.33f
+    private val leftCy: Float get() = height * 0.5f
 
-    /** 右键按钮中心 */
-    private val rightBtnCx: Float get() = width - btnRadius * 2.5f
-    private val rightBtnCy: Float get() = height - btnRadius * 3.5f
+    /** 右键中心 */
+    private val rightCx: Float get() = width * 0.66f
+    private val rightCy: Float get() = height * 0.5f
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        // 左半屏触摸区半透明背景
-        paint.color = Color.argb((overlayAlpha * 0.2f).toInt(), 0, 0, 0)
-        paint.style = Paint.Style.FILL
-        canvas.drawRect(0f, 0f, width / 2f, height.toFloat(), paint)
+        // 应用位置偏移
+        canvas.save()
+        canvas.translate(PrefsManager.mouseOffsetX.toFloat(), PrefsManager.mouseOffsetY.toFloat())
 
-        // 触摸区提示文字
-        paint.color = Color.argb(120, 255, 255, 255)
-        paint.textSize = 36f
-        paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("触摸旋转视角", width / 4f, height / 2f, paint)
-        canvas.drawText("点击=左键单击", width / 4f, height / 2f + 50f, paint)
+        val r = btnRadius
 
         // 左键按钮
+        val leftColor = if (leftPressed) Color.argb(overlayAlpha, 0x64, 0xB5, 0xF6) else Color.argb(overlayAlpha, 0x1E, 0x88, 0xE5)
         paint.style = Paint.Style.FILL
-        paint.color = if (leftBtnPressed) Color.argb(overlayAlpha, 0x64, 0xB5, 0xF6) else leftBtnColor
-        canvas.drawCircle(leftBtnCx, leftBtnCy, btnRadius, paint)
+        paint.color = leftColor
+        canvas.drawCircle(leftCx, leftCy, r, paint)
         paint.color = Color.WHITE
-        paint.textSize = btnRadius * 0.5f
-        canvas.drawText("左键", leftBtnCx, leftBtnCy + btnRadius * 0.17f, paint)
+        paint.textSize = r * 0.45f
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText("左键", leftCx, leftCy + r * 0.15f, paint)
 
         // 右键按钮
-        paint.color = if (rightBtnPressed) Color.argb(overlayAlpha, 0xEF, 0x9A, 0x9A) else rightBtnColor
-        canvas.drawCircle(rightBtnCx, rightBtnCy, btnRadius, paint)
+        val rightColor = if (rightPressed) Color.argb(overlayAlpha, 0xEF, 0x9A, 0x9A) else Color.argb(overlayAlpha, 0xE5, 0x39, 0x35)
+        paint.style = Paint.Style.FILL
+        paint.color = rightColor
+        canvas.drawCircle(rightCx, rightCy, r, paint)
         paint.color = Color.WHITE
-        canvas.drawText("右键", rightBtnCx, rightBtnCy + btnRadius * 0.17f, paint)
+        canvas.drawText("右键", rightCx, rightCy + r * 0.15f, paint)
+
+        // 拖动旋转视角提示
+        if (isDragging) {
+            paint.color = Color.argb(180, 255, 255, 0)
+            paint.textSize = 40f
+            canvas.drawText("拖动旋转视角", width / 2f, 60f, paint)
+        }
+
+        canvas.restore()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        val offsetX = PrefsManager.mouseOffsetX.toFloat()
+        val offsetY = PrefsManager.mouseOffsetY.toFloat()
+
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                val idx = event.actionIndex
-                val x = event.getX(idx)
-                val y = event.getY(idx)
-                val pid = event.getPointerId(idx)
-                val zone = hitZone(x, y)
-                pointerZone[pid] = zone
-                when (zone) {
-                    0 -> {
-                        // 触摸区：记录起始坐标
-                        touchStartX = x
-                        touchStartY = y
-                        touchLastX = x
-                        touchLastY = y
-                        isDragging = false
-                    }
-                    1 -> {
-                        // 左键按下
-                        leftBtnPressed = true
-                        targetWebView?.injectMouseLeftDown(x, y)
-                        performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-                    }
-                    2 -> {
-                        // 右键单击
-                        rightBtnPressed = true
-                        targetWebView?.injectMouseRightClick(x, y)
-                        performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-                    }
+            MotionEvent.ACTION_DOWN -> {
+                val x = event.x - offsetX
+                val y = event.y - offsetY
+                downX = event.x
+                downY = event.y
+                downTime = System.currentTimeMillis()
+                longPressTriggered = false
+                isDragging = false
+                activeButton = hitButton(x, y)
+                when (activeButton) {
+                    1 -> { leftPressed = true; invalidate() }
+                    2 -> { rightPressed = true; invalidate() }
                 }
-                invalidate()
-            }
-            MotionEvent.ACTION_MOVE -> {
-                for (i in 0 until event.pointerCount) {
-                    val pid = event.getPointerId(i)
-                    val x = event.getX(i)
-                    val y = event.getY(i)
-                    val zone = pointerZone[pid]
-                    if (zone == 0) {
-                        // 触摸区拖动：计算移动量，注入鼠标移动（旋转视角）
-                        val dx = x - touchLastX
-                        val dy = y - touchLastY
-                        if (!isDragging && (abs(dx) > 8 || abs(dy) > 8)) {
-                            isDragging = true
-                        }
-                        if (isDragging) {
-                            targetWebView?.injectMouseMove(dx, dy)
-                            touchLastX = x
-                            touchLastY = y
-                        }
-                    }
-                }
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                for ((pid, zone) in pointerZone) {
-                    when (zone) {
-                        0 -> {
-                            // 触摸区：如果未拖动，视为左键单击
-                            if (!isDragging) {
-                                targetWebView?.injectMouseLeftClick(touchStartX, touchStartY)
+                // 启动长按检测
+                if (activeButton > 0) {
+                    postDelayed({
+                        if (activeButton > 0 && !longPressTriggered) {
+                            val elapsed = System.currentTimeMillis() - downTime
+                            if (elapsed >= longPressThreshold) {
+                                longPressTriggered = true
+                                // 长按：注入鼠标按下，进入旋转模式
+                                when (activeButton) {
+                                    1 -> targetWebView?.injectMouseLeftDown(downX, downY)
+                                    2 -> targetWebView?.injectMouseRightClick(downX, downY)
+                                }
+                                lastMoveX = downX
+                                lastMoveY = downY
+                                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                             }
                         }
-                        1 -> {
-                            // 左键松开
-                            leftBtnPressed = false
-                            targetWebView?.injectMouseLeftUp()
-                        }
-                        2 -> {
-                            rightBtnPressed = false
-                        }
-                    }
+                    }, longPressThreshold)
                 }
-                pointerZone.clear()
-                isDragging = false
-                invalidate()
+                return true
             }
-            MotionEvent.ACTION_POINTER_UP -> {
-                val pid = event.getPointerId(event.actionIndex)
-                val zone = pointerZone.remove(pid)
-                when (zone) {
-                    0 -> {
-                        if (!isDragging) {
-                            targetWebView?.injectMouseLeftClick(touchStartX, touchStartY)
-                        }
+            MotionEvent.ACTION_MOVE -> {
+                if (activeButton > 0 && longPressTriggered) {
+                    // 长按后拖动：旋转视角
+                    val dx = event.x - lastMoveX
+                    val dy = event.y - lastMoveY
+                    if (!isDragging && (abs(dx) > dragThreshold || abs(dy) > dragThreshold)) {
+                        isDragging = true
+                        invalidate()
                     }
-                    1 -> {
-                        leftBtnPressed = false
-                        targetWebView?.injectMouseLeftUp()
-                    }
-                    2 -> {
-                        rightBtnPressed = false
+                    if (isDragging) {
+                        targetWebView?.injectMouseMove(dx, dy)
+                        lastMoveX = event.x
+                        lastMoveY = event.y
                     }
                 }
-                invalidate()
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (activeButton > 0) {
+                    if (longPressTriggered) {
+                        // 长按松开：注入鼠标松开
+                        when (activeButton) {
+                            1 -> targetWebView?.injectMouseLeftUp(event.x, event.y)
+                        }
+                        if (isDragging) {
+                            // 拖动结束，不需要额外点击
+                        } else {
+                            // 长按但未拖动，视为按住状态松开
+                        }
+                    } else {
+                        // 短按：单击
+                        when (activeButton) {
+                            1 -> targetWebView?.injectMouseLeftClick(event.x, event.y)
+                            2 -> targetWebView?.injectMouseRightClick(event.x, event.y)
+                        }
+                    }
+                    leftPressed = false
+                    rightPressed = false
+                    activeButton = 0
+                    isDragging = false
+                    longPressTriggered = false
+                    invalidate()
+                }
+                return true
             }
         }
-        return true
+        return false
     }
 
-    /** 判断坐标在哪个区域：0=触摸区, 1=左键, 2=右键 */
-    private fun hitZone(x: Float, y: Float): Int {
-        // 右键按钮
-        val rightDist = Math.hypot((x - rightBtnCx).toDouble(), (y - rightBtnCy).toDouble())
-        if (rightDist < btnRadius) return 2
-        // 左键按钮
-        val leftDist = Math.hypot((x - leftBtnCx).toDouble(), (y - leftBtnCy).toDouble())
+    /** 判断坐标命中哪个按钮：0=无, 1=左键, 2=右键 */
+    private fun hitButton(x: Float, y: Float): Int {
+        val leftDist = Math.hypot((x - leftCx).toDouble(), (y - leftCy).toDouble())
         if (leftDist < btnRadius) return 1
-        // 左半屏触摸区
-        return if (x < width / 2f) 0 else 0
+        val rightDist = Math.hypot((x - rightCx).toDouble(), (y - rightCy).toDouble())
+        if (rightDist < btnRadius) return 2
+        return 0
     }
 }
