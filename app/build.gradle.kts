@@ -11,6 +11,7 @@ val keystoreProperties = Properties().apply {
     val f = file("keystore.properties")
     if (f.exists()) load(FileInputStream(f))
 }
+val hasReleaseKeystore = keystoreProperties.containsKey("storeFile")
 
 android {
     namespace = "com.game4399.app"
@@ -27,12 +28,15 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // 只有配置了 keystore.properties 才创建 release 签名，否则跳过签名（用 MT 签名）
     signingConfigs {
-        create("release") {
-            keystoreProperties["storeFile"]?.let { storeFile = file(it) }
-            storePassword = keystoreProperties["storePassword"] as String?
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String?
+                keyAlias = keystoreProperties["keyAlias"] as String?
+                keyPassword = keystoreProperties["keyPassword"] as String?
+            }
         }
     }
 
@@ -44,9 +48,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 不签名，产出未签名 APK，用 MT 管理器等工具自行签名
-            // 配置了 keystore.properties 则用 release 签名，否则跳过签名
-            signingConfig = if (keystoreProperties.containsKey("storeFile"))
+            // 配置了 keystore 则签名，否则产出未签名 APK（用 MT 管理器等工具自行签名）
+            signingConfig = if (hasReleaseKeystore)
                 signingConfigs.getByName("release") else null
         }
         debug {
