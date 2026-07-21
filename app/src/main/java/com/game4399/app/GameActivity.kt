@@ -314,6 +314,7 @@ class GameActivity : AppCompatActivity() {
             "显示/隐藏按键",
             "添加/隐藏鼠标按钮",
             "位置编辑模式 (拖动调整)",
+            "Flash 引擎 (Ruffle/swf2js)",
             "恢复默认"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -328,8 +329,36 @@ class GameActivity : AppCompatActivity() {
                     5 -> showKeyVisibilityPicker()
                     6 -> toggleMouseMode()
                     7 -> togglePositionEditMode()
-                    8 -> resetAllKeySettings()
+                    8 -> showFlashEnginePicker()
+                    9 -> resetAllKeySettings()
                 }
+            }
+            .show()
+    }
+
+    /** Flash 引擎切换：Ruffle / swf2js */
+    private fun showFlashEnginePicker() {
+        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val engines = arrayOf("Ruffle (推荐, AS1/2 支持率95%)", "swf2js (AS1/2 完整支持)", "关闭 Flash")
+        val values = arrayOf("ruffle", "swf2js", "off")
+        val current = if (PrefsManager.isFlashEnabled) PrefsManager.flashEngine else "off"
+        val checked = values.indexOf(current).coerceAtLeast(0)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Flash 引擎")
+            .setSingleChoiceItems(engines, checked) { dialog, which ->
+                if (which == 2) {
+                    sp.edit().putBoolean("flash_enabled", false).apply()
+                    Toast.makeText(this, "Flash 已关闭", Toast.LENGTH_SHORT).show()
+                } else {
+                    sp.edit()
+                        .putBoolean("flash_enabled", true)
+                        .putString("flash_engine", values[which])
+                        .apply()
+                    Toast.makeText(this, "Flash 引擎: ${engines[which]}", Toast.LENGTH_SHORT).show()
+                    // 切换引擎后重新加载页面
+                    webView.reload()
+                }
+                dialog.dismiss()
             }
             .show()
     }
@@ -526,6 +555,7 @@ class GameActivity : AppCompatActivity() {
             .putBoolean("gamepad_key_5_visible", true).putBoolean("gamepad_key_6_visible", true)
             .putBoolean("dpad_visible", true).putBoolean("system_buttons_visible", true)
             .putBoolean("mouse_buttons_visible", false)
+            .putBoolean("flash_enabled", true).putString("flash_engine", "ruffle")
             .apply()
         binding.mouseControl.visibility = View.GONE
         Toast.makeText(this, "已恢复全部默认设置", Toast.LENGTH_SHORT).show()

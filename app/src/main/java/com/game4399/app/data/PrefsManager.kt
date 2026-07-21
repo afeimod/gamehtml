@@ -97,6 +97,10 @@ object PrefsManager {
     /** 鼠标按钮绝对坐标 X（拖动模式保存的位置） */
     val mousePosX: Float get() = sp.getFloat("mouse_pos_x", -1f)
     val mousePosY: Float get() = sp.getFloat("mouse_pos_y", -1f)
+
+    // ---- Flash 引擎 ----
+    /** Flash 引擎：ruffle / swf2js */
+    val flashEngine: String get() = sp.getString("flash_engine", "ruffle") ?: "ruffle"
     /** 兼容旧设置 */
     val gamepadAKey: String get() = sp.getString("gamepad_a_key", "SPACE") ?: "SPACE"
     val gamepadBKey: String get() = sp.getString("gamepad_b_key", "ENTER") ?: "ENTER"

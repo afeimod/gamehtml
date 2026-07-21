@@ -53,11 +53,19 @@ open class GameWebViewClient(
             return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
         }
         // 本地 wasm：确保返回 application/wasm MIME（Ruffle 必需）
-        if (PrefsManager.flashCdn == "local" && url.endsWith(".wasm", ignoreCase = true)) {
+        if (PrefsManager.flashEngine != "swf2js" && PrefsManager.flashCdn == "local" && url.endsWith(".wasm", ignoreCase = true)) {
             try {
                 val name = request.url?.lastPathSegment ?: return null
                 val input = view.context.assets.open("ruffle/$name")
                 return WebResourceResponse("application/wasm", null, input)
+            } catch (e: Exception) { /* fallthrough */ }
+        }
+        // 本地 ruffle core.js（Ruffle 会动态加载 core.ruffle.*.js）
+        if (PrefsManager.flashEngine != "swf2js" && PrefsManager.flashCdn == "local" && url.contains("core.ruffle")) {
+            try {
+                val name = request.url?.lastPathSegment ?: return null
+                val input = view.context.assets.open("ruffle/$name")
+                return WebResourceResponse("application/javascript", "UTF-8", input)
             } catch (e: Exception) { /* fallthrough */ }
         }
         return super.shouldInterceptRequest(view, request)
