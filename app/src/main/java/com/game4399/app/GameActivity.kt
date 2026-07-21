@@ -213,6 +213,8 @@ class GameActivity : AppCompatActivity() {
         if (PrefsManager.isMouseButtonsVisible) {
             binding.mouseControl.visibility = View.VISIBLE
         }
+        // 恢复保存的位置
+        restoreSavedPositions()
     }
 
     /** 切换鼠标按钮显示/隐藏 */
@@ -309,11 +311,9 @@ class GameActivity : AppCompatActivity() {
             "方向键模式 (DPAD/WASD)",
             "方向键大小",
             "动作按键大小",
-            "方向键位置",
-            "动作按键位置",
             "显示/隐藏按键",
             "添加/隐藏鼠标按钮",
-            "鼠标按钮位置",
+            "位置编辑模式 (拖动调整)",
             "恢复默认"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -325,15 +325,55 @@ class GameActivity : AppCompatActivity() {
                     2 -> toggleDpadMode()
                     3 -> showDpadScalePicker()
                     4 -> showActionScalePicker()
-                    5 -> showDpadPositionPicker()
-                    6 -> showActionPositionPicker()
-                    7 -> showKeyVisibilityPicker()
-                    8 -> toggleMouseMode()
-                    9 -> showMousePositionPicker()
-                    10 -> resetAllKeySettings()
+                    5 -> showKeyVisibilityPicker()
+                    6 -> toggleMouseMode()
+                    7 -> togglePositionEditMode()
+                    8 -> resetAllKeySettings()
                 }
             }
             .show()
+    }
+
+    /** 位置编辑模式开关：开启后所有虚拟按键可手动拖动到任意位置 */
+    private var isPositionEditMode = false
+    private fun togglePositionEditMode() {
+        isPositionEditMode = !isPositionEditMode
+        binding.dpad.isDragMode = isPositionEditMode
+        binding.actionButtons.isDragMode = isPositionEditMode
+        binding.mouseControl.isDragMode = isPositionEditMode
+        // 编辑模式时显示所有按键（方便调整位置）
+        if (isPositionEditMode) {
+            binding.dpad.visibility = View.VISIBLE
+            binding.actionButtons.visibility = View.VISIBLE
+            if (PrefsManager.isMouseButtonsVisible) {
+                binding.mouseControl.visibility = View.VISIBLE
+            }
+            // 恢复保存的位置
+            restoreSavedPositions()
+            Toast.makeText(this, "位置编辑模式已开启，拖动按键到目标位置", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "位置已保存", Toast.LENGTH_SHORT).show()
+            // 恢复正常显示
+            showGamepad(gamepadVisible)
+        }
+    }
+
+    /** 恢复保存的位置坐标 */
+    private fun restoreSavedPositions() {
+        binding.dpad.post {
+            if (PrefsManager.dpadPosX >= 0) {
+                binding.dpad.x = PrefsManager.dpadPosX
+                binding.dpad.y = PrefsManager.dpadPosY
+            }
+            if (PrefsManager.actionPosX >= 0) {
+                binding.actionButtons.x = PrefsManager.actionPosX
+                binding.actionButtons.y = PrefsManager.actionPosY
+            }
+            if (PrefsManager.mousePosX >= 0 && PrefsManager.isMouseButtonsVisible) {
+                binding.mouseControl.x = PrefsManager.mousePosX
+                binding.mouseControl.y = PrefsManager.mousePosY
+            }
+        }
     }
 
     /** 完整键盘列表 */
@@ -445,48 +485,6 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
-    /** 方向键位置调节 */
-    private fun showDpadPositionPicker() {
-        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val items = arrayOf("向左移动", "向右移动", "向上移动", "向下移动", "重置位置")
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("方向键位置 (当前: ${PrefsManager.dpadOffsetX}, ${PrefsManager.dpadOffsetY})")
-            .setItems(items) { _, which ->
-                val dx = PrefsManager.dpadOffsetX
-                val dy = PrefsManager.dpadOffsetY
-                when (which) {
-                    0 -> sp.edit().putInt("dpad_offset_x", dx - 20).apply()
-                    1 -> sp.edit().putInt("dpad_offset_x", dx + 20).apply()
-                    2 -> sp.edit().putInt("dpad_offset_y", dy - 20).apply()
-                    3 -> sp.edit().putInt("dpad_offset_y", dy + 20).apply()
-                    4 -> sp.edit().putInt("dpad_offset_x", 0).putInt("dpad_offset_y", 0).apply()
-                }
-                Toast.makeText(this, "方向键位置已更新", Toast.LENGTH_SHORT).show()
-            }
-            .show()
-    }
-
-    /** 动作按键位置调节 */
-    private fun showActionPositionPicker() {
-        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val items = arrayOf("向左移动", "向右移动", "向上移动", "向下移动", "重置位置")
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("动作按键位置 (当前: ${PrefsManager.actionOffsetX}, ${PrefsManager.actionOffsetY})")
-            .setItems(items) { _, which ->
-                val dx = PrefsManager.actionOffsetX
-                val dy = PrefsManager.actionOffsetY
-                when (which) {
-                    0 -> sp.edit().putInt("action_offset_x", dx - 20).apply()
-                    1 -> sp.edit().putInt("action_offset_x", dx + 20).apply()
-                    2 -> sp.edit().putInt("action_offset_y", dy - 20).apply()
-                    3 -> sp.edit().putInt("action_offset_y", dy + 20).apply()
-                    4 -> sp.edit().putInt("action_offset_x", 0).putInt("action_offset_y", 0).apply()
-                }
-                Toast.makeText(this, "动作按键位置已更新", Toast.LENGTH_SHORT).show()
-            }
-            .show()
-    }
-
     /** 显示/隐藏按键 */
     private fun showKeyVisibilityPicker() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
@@ -510,27 +508,6 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
-    /** 鼠标按钮位置调节 */
-    private fun showMousePositionPicker() {
-        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val items = arrayOf("向左移动", "向右移动", "向上移动", "向下移动", "重置位置")
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("鼠标按钮位置 (当前: ${PrefsManager.mouseOffsetX}, ${PrefsManager.mouseOffsetY})")
-            .setItems(items) { _, which ->
-                val dx = PrefsManager.mouseOffsetX
-                val dy = PrefsManager.mouseOffsetY
-                when (which) {
-                    0 -> sp.edit().putInt("mouse_offset_x", dx - 20).apply()
-                    1 -> sp.edit().putInt("mouse_offset_x", dx + 20).apply()
-                    2 -> sp.edit().putInt("mouse_offset_y", dy - 20).apply()
-                    3 -> sp.edit().putInt("mouse_offset_y", dy + 20).apply()
-                    4 -> sp.edit().putInt("mouse_offset_x", 0).putInt("mouse_offset_y", 0).apply()
-                }
-                Toast.makeText(this, "鼠标按钮位置已更新", Toast.LENGTH_SHORT).show()
-            }
-            .show()
-    }
-
     /** 恢复默认 */
     private fun resetAllKeySettings() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
@@ -540,14 +517,15 @@ class GameActivity : AppCompatActivity() {
             .putString("select_key", "TAB").putString("start_key", "ENTER")
             .putString("dpad_mode", "dpad")
             .putInt("dpad_scale", 100).putInt("gamepad_scale", 100)
-            .putInt("dpad_offset_x", 0).putInt("dpad_offset_y", 0)
-            .putInt("action_offset_x", 0).putInt("action_offset_y", 0)
+            // 清除保存的绝对位置坐标，恢复默认布局
+            .putFloat("dpad_pos_x", -1f).putFloat("dpad_pos_y", -1f)
+            .putFloat("action_pos_x", -1f).putFloat("action_pos_y", -1f)
+            .putFloat("mouse_pos_x", -1f).putFloat("mouse_pos_y", -1f)
             .putBoolean("gamepad_key_1_visible", true).putBoolean("gamepad_key_2_visible", true)
             .putBoolean("gamepad_key_3_visible", true).putBoolean("gamepad_key_4_visible", true)
             .putBoolean("gamepad_key_5_visible", true).putBoolean("gamepad_key_6_visible", true)
             .putBoolean("dpad_visible", true).putBoolean("system_buttons_visible", true)
             .putBoolean("mouse_buttons_visible", false)
-            .putInt("mouse_offset_x", 0).putInt("mouse_offset_y", 0)
             .apply()
         binding.mouseControl.visibility = View.GONE
         Toast.makeText(this, "已恢复全部默认设置", Toast.LENGTH_SHORT).show()
