@@ -56,8 +56,6 @@ class ActionButtonView @JvmOverloads constructor(
         return PrefsManager.gamepadKeys.map { KeyMapper.toKeyCode(it) }
     }
 
-    private fun buttonCount(): Int = PrefsManager.actionButtonCount
-
     /** 计算每个按钮的圆心和半径 */
     private fun getButtonPositions(): List<Triple<Float, Float, Float>> {
         val w = width.toFloat()
@@ -92,11 +90,16 @@ class ActionButtonView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        // 应用位置偏移
+        canvas.save()
+        canvas.translate(PrefsManager.actionOffsetX.toFloat(), PrefsManager.actionOffsetY.toFloat())
+
         val positions = getButtonPositions()
         val keys = keyCodes()
-        val count = minOf(positions.size, keys.size, buttonCount())
+        val visible = PrefsManager.gamepadKeyVisible
 
-        for (i in 0 until count) {
+        for (i in 0 until 6) {
+            if (i >= positions.size || i >= keys.size || !visible.getOrElse(i) { true }) continue
             val (cx, cy, r) = positions[i]
             val baseColor = buttonColors[i % buttonColors.size]
             paint.style = Paint.Style.FILL
@@ -113,21 +116,26 @@ class ActionButtonView @JvmOverloads constructor(
             paint.textAlign = Paint.Align.CENTER
             canvas.drawText(buttonLabels[i], cx, cy + r * 0.28f, paint)
         }
+
+        canvas.restore()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // 应用位置偏移到触点
+        val offsetX = PrefsManager.actionOffsetX.toFloat()
+        val offsetY = PrefsManager.actionOffsetY.toFloat()
         val positions = getButtonPositions()
         val keys = keyCodes()
-        val count = minOf(positions.size, keys.size, buttonCount())
+        val visible = PrefsManager.gamepadKeyVisible
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val idx = event.actionIndex
-                val x = event.getX(idx)
-                val y = event.getY(idx)
+                val x = event.getX(idx) - offsetX
+                val y = event.getY(idx) - offsetY
                 val pid = event.getPointerId(idx)
-                val btn = hitButton(x, y, positions, count)
-                if (btn >= 0 && btn < count) {
+                val btn = hitButton(x, y, positions, visible)
+                if (btn >= 0 && btn < keys.size && visible.getOrElse(btn) { true }) {
                     pressedState[btn] = true
                     pointerButton[pid] = btn
                     targetWebView?.injectKeyDown(keys[btn])
@@ -138,11 +146,11 @@ class ActionButtonView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 for (i in 0 until event.pointerCount) {
                     val pid = event.getPointerId(i)
-                    val x = event.getX(i)
-                    val y = event.getY(i)
+                    val x = event.getX(i) - offsetX
+                    val y = event.getY(i) - offsetY
                     val btn = pointerButton[pid]
                     if (btn != null && btn >= 0) {
-                        val currentBtn = hitButton(x, y, positions, count)
+                        val currentBtn = hitButton(x, y, positions, visible)
                         if (currentBtn != btn) {
                             pressedState[btn] = false
                             pointerButton.remove(pid)
@@ -154,7 +162,7 @@ class ActionButtonView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 pointerButton.values.forEach { btn ->
-                    if (btn >= 0 && btn < count) {
+                    if (btn >= 0 && btn < keys.size) {
                         pressedState[btn] = false
                         targetWebView?.injectKeyUp(keys[btn])
                     }
@@ -166,7 +174,7 @@ class ActionButtonView @JvmOverloads constructor(
             MotionEvent.ACTION_POINTER_UP -> {
                 val pid = event.getPointerId(event.actionIndex)
                 val btn = pointerButton.remove(pid)
-                if (btn != null && btn >= 0 && btn < count) {
+                if (btn != null && btn >= 0 && btn < keys.size) {
                     pressedState[btn] = false
                     targetWebView?.injectKeyUp(keys[btn])
                 }
@@ -176,8 +184,9 @@ class ActionButtonView @JvmOverloads constructor(
         return true
     }
 
-    private fun hitButton(x: Float, y: Float, positions: List<Triple<Float, Float, Float>>, count: Int): Int {
-        for (i in 0 until count) {
+    private fun hitButton(x: Float, y: Float, positions: List<Triple<Float, Float, Float>>, visible: List<Boolean>): Int {
+        for (i in 0 until minOf(positions.size, 6)) {
+            if (!visible.getOrElse(i) { true }) continue
             val (cx, cy, r) = positions[i]
             val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble())
             if (dist < r) return i

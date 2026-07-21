@@ -52,6 +52,13 @@ class DPadView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        // 应用位置偏移
+        canvas.save()
+        canvas.translate(PrefsManager.dpadOffsetX.toFloat(), PrefsManager.dpadOffsetY.toFloat())
+        // 应用大小缩放
+        val scale = PrefsManager.dpadScale
+        canvas.scale(scale, scale, width / 2f, height / 2f)
+
         val cx = width / 2f
         val cy = height / 2f
         val r = min(width, height) / 2f - 8f
@@ -78,6 +85,8 @@ class DPadView @JvmOverloads constructor(
         // 中心圆
         paint.color = Color.argb(overlayAlpha, 200, 200, 200)
         canvas.drawCircle(cx, cy, armW * 0.6f, paint)
+
+        canvas.restore()
     }
 
     private fun drawArm(
