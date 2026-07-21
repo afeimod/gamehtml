@@ -30,8 +30,8 @@ android {
 
     // 签名配置：有 keystore.properties 用正式签名，否则用内置 debug.keystore（可用 MT 管理器重新签名）
     signingConfigs {
-        // 内置 debug keystore，确保 CI 和本地都能签名
-        getByName("debug") {
+        // 内置 CI 签名，确保 CI 和本地都能签名（独立配置，不覆盖默认 debug）
+        create("ci") {
             storeFile = file("debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
@@ -55,15 +55,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 配置了 keystore 用正式签名，否则用 debug 签名（产出可安装 APK，可用 MT 管理器重新签名）
+            // 配置了 keystore 用正式签名，否则用 CI 签名（产出可安装 APK，可用 MT 管理器重新签名）
             signingConfig = if (hasReleaseKeystore)
-                signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+                signingConfigs.getByName("release") else signingConfigs.getByName("ci")
         }
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
