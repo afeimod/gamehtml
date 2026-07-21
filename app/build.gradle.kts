@@ -78,6 +78,13 @@ android {
     }
 }
 
+// 禁用 release 签名验证任务（不签名时跳过，用 MT 管理器等工具自行签名）
+tasks.whenTaskAdded {
+    if (name == "validateSigningRelease" && !hasReleaseKeystore) {
+        enabled = false
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
