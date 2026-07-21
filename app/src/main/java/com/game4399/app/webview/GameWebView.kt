@@ -15,7 +15,7 @@ import kotlin.math.abs
 /**
  * 游戏专用 WebView：
  * 1. 预置适配 Flash/H5 游戏的 WebSettings（DOM 存储、自动播放、跨域、硬件加速）
- * 2. 触屏手势：双击 → 派发 dblclick；长按 → 屏蔽系统选择菜单
+ * 2. 触屏手势：长按 → 屏蔽系统选择菜单；滑动 → 方向键
  * 3. 物理键盘：dispatchKeyEvent 透传方向键 / WASD / 空格 / 回车给网页
  *
  * 注：当前 WebView 默认仅消费 BACK 键，其余按键必须重写 dispatchKeyEvent
@@ -97,13 +97,7 @@ open class GameWebView @JvmOverloads constructor(
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = false
 
     private inner class GestureListener : GestureDetector.SimpleOnGestureListener() {
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            // 双击 → 派发 dblclick 给网页
-            evaluateJavascript(
-                "window.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));", null
-            )
-            return true
-        }
+        // 双击放大已移除，只保留双指缩放
         override fun onLongPress(e: MotionEvent) { /* 屏蔽系统长按菜单 */ }
         override fun onFling(
             e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float
