@@ -62,7 +62,9 @@ class ActionButtonView @JvmOverloads constructor(
         val h = height.toFloat()
         val scale = PrefsManager.gamepadScale
         val baseR = min(w, h) * 0.18f * scale
-        val count = buttonCount()
+        // 统计可见按键数量
+        val visible = PrefsManager.gamepadKeyVisible
+        val count = visible.count { it }.coerceIn(2, 6)
         val positions = mutableListOf<Triple<Float, Float, Float>>()
 
         when (count) {
