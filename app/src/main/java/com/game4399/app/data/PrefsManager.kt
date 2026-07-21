@@ -79,6 +79,8 @@ object PrefsManager {
     val isSystemButtonsVisible: Boolean get() = sp.getBoolean("system_buttons_visible", true)
     /** 方向键是否显示 */
     val isDpadVisible: Boolean get() = sp.getBoolean("dpad_visible", true)
+    /** 鼠标模式是否启用 */
+    val isMouseModeEnabled: Boolean get() = sp.getBoolean("mouse_mode_enabled", false)
     /** 兼容旧设置 */
     val gamepadAKey: String get() = sp.getString("gamepad_a_key", "SPACE") ?: "SPACE"
     val gamepadBKey: String get() = sp.getString("gamepad_b_key", "ENTER") ?: "ENTER"
