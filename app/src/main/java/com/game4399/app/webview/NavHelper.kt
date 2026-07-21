@@ -29,8 +29,18 @@ object NavHelper {
     fun isSwf(url: String): Boolean =
         url.endsWith(".swf", ignoreCase = true) || url.contains(".swf?", ignoreCase = true)
 
-    /** 构造内置 Flash 播放器地址（带引擎与播放参数） */
+    /** 构造内置 Flash 播放器地址（根据引擎选择不同播放器页面） */
     fun playerUrl(swfUrl: String, base: String? = null, title: String? = null): String {
+        // WAFlash 引擎使用独立的 waflash.html 页面（canvas 渲染 + ES module）
+        if (PrefsManager.flashEngine == "waflash") {
+            val u = Uri.parse("file:///android_asset/waflash.html")
+                .buildUpon()
+                .appendQueryParameter("swf", swfUrl)
+            base?.let { u.appendQueryParameter("base", it) }
+            title?.let { u.appendQueryParameter("title", it) }
+            return u.build().toString()
+        }
+        // Ruffle / swf2js 使用 player.html
         val u = Uri.parse("file:///android_asset/player.html")
             .buildUpon()
             .appendQueryParameter("swf", swfUrl)

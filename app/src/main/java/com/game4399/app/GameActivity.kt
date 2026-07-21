@@ -168,10 +168,13 @@ class GameActivity : AppCompatActivity() {
             webView.loadUrl(playerUrl)
         }
         override fun shouldInjectRuffle(url: String?): Boolean {
-            // PC Flash 页注入；内置 player.html 已自带 Ruffle，不重复注入
+            // PC Flash 页注入；内置播放器页面已自带引擎，不重复注入
             if (url == null) return false
             if (url.startsWith("file:///android_asset/player.html")) return false
-            // www.4399.com/flash/ 页面注入
+            if (url.startsWith("file:///android_asset/waflash.html")) return false
+            // WAFlash 引擎不注入到 4399 页面（使用独立播放器页面，通过 SWF 拦截跳转）
+            if (PrefsManager.flashEngine == "waflash") return false
+            // www.4399.com/flash/ 页面注入 Ruffle / swf2js
             return url.contains("4399.com") && url.contains("/flash/")
         }
     }
@@ -340,8 +343,13 @@ class GameActivity : AppCompatActivity() {
     /** Flash 引擎切换：Ruffle / swf2js */
     private fun showFlashEnginePicker() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val engines = arrayOf("Ruffle (推荐, AS1/2 支持率95%)", "swf2js (AS1/2 完整支持)", "关闭 Flash")
-        val values = arrayOf("ruffle", "swf2js", "off")
+        val engines = arrayOf(
+            "Ruffle 最新版 (推荐, AS1/2/3 全面支持)",
+            "WAFlash (AS2/AS3 完整支持, Canvas渲染)",
+            "swf2js (仅 AS1/2, 作为备选)",
+            "关闭 Flash"
+        )
+        val values = arrayOf("ruffle", "waflash", "swf2js", "off")
         val current = if (PrefsManager.isFlashEnabled) PrefsManager.flashEngine else "off"
         val checked = values.indexOf(current).coerceAtLeast(0)
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -355,10 +363,30 @@ class GameActivity : AppCompatActivity() {
                         .putBoolean("flash_enabled", true)
                         .putString("flash_engine", values[which])
                         .apply()
-                    Toast.makeText(this, "Flash 引擎: ${engines[which]}", Toast.LENGTH_SHORT).show()
-                    // 切换引擎后重新加载页面
+                    Toast.makeText(this, "Flash 引擎: ${engines[which].substringBefore(" (")}", Toast.LENGTH_SHORT).show()
                     webView.reload()
                 }
+                dialog.dismiss()
+            }
+            .setNeutralButton("Ruffle CDN 切换") { _, _ ->
+                showRuffleCdnPicker()
+            }
+            .show()
+    }
+
+    /** Ruffle CDN 来源切换：本地 / jsdelivr / unpkg */
+    private fun showRuffleCdnPicker() {
+        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val cdns = arrayOf("本地内置 (离线可用, 推荐)", "jsdelivr CDN (需联网)", "unpkg CDN (需联网)")
+        val values = arrayOf("local", "jsdelivr", "unpkg")
+        val current = PrefsManager.flashCdn
+        val checked = values.indexOf(current).coerceAtLeast(0)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Ruffle 资源来源")
+            .setSingleChoiceItems(cdns, checked) { dialog, which ->
+                sp.edit().putString("flash_cdn", values[which]).apply()
+                Toast.makeText(this, "已切换: ${cdns[which].substringBefore(" (")}", Toast.LENGTH_SHORT).show()
+                webView.reload()
                 dialog.dismiss()
             }
             .show()

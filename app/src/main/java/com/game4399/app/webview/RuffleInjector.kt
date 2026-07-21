@@ -5,34 +5,36 @@ import com.game4399.app.data.PrefsManager
 /**
  * Flash 引擎注入器（双引擎：Ruffle + swf2js）。
  *
- * 工作原理：4399 的 PC Flash 页面（www.4399.com/flash/{id}.htm）内含
- * <object>/<embed> 标签嵌入 SWF。引擎的 polyfill 模式会自动替换这些标签
- * 为播放器，从而免装 Flash 插件即可运行 SWF。
+ * 核心原理：
+ * 本地引擎文件（ruffle.js / swf2js.js / .wasm）放在 assets 目录中。
+ * 从 https 页面直接用 <script src="file:///android_asset/..."> 加载会被跨域策略阻止。
+ * 解决方案：使用虚拟 URL https://flash.local/ 作为脚本地址，
+ * GameWebViewClient.shouldInterceptRequest 会拦截 flash.local 的请求并从 assets 返回内容。
  *
- * 根据 [PrefsManager.flashEngine] 选择引擎：
+ * 引擎选择：
  * - "ruffle"：Ruffle (Rust + WebAssembly)，AS1/2 支持率 95%，AS3 约 60%
  * - "swf2js"：swf2js (纯 JavaScript)，AS1/2 完整支持
- *
- * 本类负责生成两段 JS：
- *   1) [configScript] —— 预置引擎配置（必须在引擎 JS 之前执行）
- *   2) [loaderScript] —— 动态加载引擎 JS 并触发 polyfill
  */
 object RuffleInjector {
 
-    /** 根据设置和引擎返回脚本地址 */
+    /** 虚拟本地资源前缀，shouldInterceptRequest 会拦截此域名的请求 */
+    private const val LOCAL_BASE = "https://flash.local/"
+
+    /** 根据引擎返回脚本地址（shouldInterceptRequest 会拦截并从 assets 返回） */
     fun scriptUrl(): String = when (PrefsManager.flashEngine) {
-        "swf2js" -> "file:///android_asset/swf2js/swf2js.js"
+        "swf2js" -> "${LOCAL_BASE}swf2js/swf2js.js"
+        "waflash" -> "${LOCAL_BASE}waflash/waflash.min.js"
         else -> when (PrefsManager.flashCdn) {
             "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle"
-            "local"  -> "file:///android_asset/ruffle/ruffle.js"
+            "local"  -> "${LOCAL_BASE}ruffle/ruffle.js"
             else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle@0.3.0/ruffle.min.js"
         }
     }
 
-    /** ruffle.js 的 publicPath（用于加载 .wasm） */
+    /** ruffle.js 的 publicPath（Ruffle 用此路径加载 core.ruffle.*.js 和 .wasm） */
     fun publicPath(): String = when (PrefsManager.flashCdn) {
         "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle/"
-        "local"  -> "file:///android_asset/ruffle/"
+        "local"  -> "${LOCAL_BASE}ruffle/"
         else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle@0.3.0/"
     }
 
@@ -44,14 +46,15 @@ object RuffleInjector {
         else     -> "high"
     }
 
-    /** 引擎配置脚本（在引擎 JS 之前执行） */
+    /** 引擎配置脚本（在引擎 JS 之前执行）。
+     *  WAFlash 不需要 polyfill 配置（使用独立播放器页面）。 */
     fun configScript(): String = when (PrefsManager.flashEngine) {
         "swf2js" -> """
             (function(){
               window.__swf2jsConfig = { autoLoad: true };
-              window.__ruffleConfigReady = true;
             })();
         """.trimIndent()
+        "waflash" -> ""  // WAFlash 使用独立播放器页面，不需要页面注入
         else -> """
             (function(){
               window.RufflePlayer = window.RufflePlayer || {};
@@ -71,15 +74,14 @@ object RuffleInjector {
                 "logLevel": "warn",
                 "maxExecutionDuration": {"secs": 30, "nanos": 0}
               };
-              window.__ruffleConfigReady = true;
             })();
         """.trimIndent()
     }
 
     /**
      * 加载器脚本：动态注入引擎 JS。
-     * 加载完成后会自动执行 polyfill，替换页面上的 <object>/<embed>。
-     * 同时暴露 window.__playSwf(url) 用于直接播放指定 SWF。
+     * 使用 <script> 标签加载引擎，shouldInterceptRequest 会拦截 flash.local 请求。
+     * 加载完成后自动执行 polyfill，替换页面上的 <object>/<embed>。
      */
     fun loaderScript(): String = when (PrefsManager.flashEngine) {
         "swf2js" -> """
@@ -90,13 +92,12 @@ object RuffleInjector {
               s.async = true;
               s.onload = function(){
                 window.__swf2jsLoaded = true;
-                // 自动检测页面上的 Flash 内容并加载
                 setTimeout(function() {
                   var objects = document.querySelectorAll('object[type="application/x-shockwave-flash"], embed[type="application/x-shockwave-flash"], object[data$=".swf"], embed[src$=".swf"]');
                   objects.forEach(function(el) {
                     var src = el.getAttribute('data') || el.getAttribute('src') || el.getAttribute('movie');
                     if (src) {
-                      console.log('[swf2js] 加载: ' + src);
+                      console.log('[swf2js] load: ' + src);
                       try {
                         var container = document.createElement('div');
                         container.style.cssText = 'width:100%;height:100%;position:relative;';
@@ -106,7 +107,6 @@ object RuffleInjector {
                     }
                   });
                 }, 300);
-                // 暴露直接播放 SWF 的接口
                 window.__playSwf = function(url, base){
                   var container = document.createElement('div');
                   container.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;z-index:9999;background:#000;';
@@ -115,10 +115,11 @@ object RuffleInjector {
                 };
                 document.dispatchEvent(new CustomEvent('flashEngineReady'));
               };
-              s.onerror = function(){ console.error('swf2js 加载失败'); };
+              s.onerror = function(e){ console.error('swf2js load failed: ' + "${scriptUrl()}" + ' ' + e); };
               document.head.appendChild(s);
             })();
         """.trimIndent()
+        "waflash" -> ""  // WAFlash 使用独立播放器页面，不注入到 4399 页面
         else -> """
             (function(){
               if (window.__ruffleLoaded) return;
@@ -131,12 +132,10 @@ object RuffleInjector {
               s.async = true;
               s.onload = function(){
                 window.__ruffleLoaded = true;
-                // Ruffle 加载完成后触发 polyfill（自动替换 object/embed）
                 try {
                   var r = window.RufflePlayer.newest();
                   if (r && r.init) r.init();
                 } catch(e){ console.warn('Ruffle init:', e); }
-                // 暴露直接播放 SWF 的接口
                 window.__playSwf = function(url, base){
                   onReady(function(){
                     var ruffle = window.RufflePlayer.newest();
@@ -155,7 +154,7 @@ object RuffleInjector {
                 document.dispatchEvent(new CustomEvent('ruffleReady'));
                 document.dispatchEvent(new CustomEvent('flashEngineReady'));
               };
-              s.onerror = function(){ console.error('Ruffle 加载失败: ' + "${scriptUrl()}"); };
+              s.onerror = function(e){ console.error('Ruffle load failed: ' + "${scriptUrl()}" + ' ' + e); };
               document.head.appendChild(s);
             })();
         """.trimIndent()
@@ -165,8 +164,7 @@ object RuffleInjector {
     fun fullInjection(): String = configScript() + "\n" + loaderScript()
 
     /**
-     * 直接播放 SWF 的脚本（用于拦截 .swf 链接后跳转到内置播放器）。
-     * 在 player.html 中调用 window.__playSwf(url) 即可。
+     * 直接播放 SWF 的脚本。
      */
     fun playSwfScript(swfUrl: String, base: String? = null): String {
         val baseArg = base?.let { ", '$it'" } ?: ""

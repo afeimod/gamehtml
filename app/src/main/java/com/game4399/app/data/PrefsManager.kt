@@ -28,7 +28,7 @@ object PrefsManager {
     // ---- Flash ----
     val isFlashEnabled: Boolean get() = sp.getBoolean("flash_enabled", true)
     val isFlashAutoplay: Boolean get() = sp.getBoolean("flash_autoplay", true)
-    val flashCdn: String get() = sp.getString("flash_cdn", "jsdelivr") ?: "jsdelivr"
+    val flashCdn: String get() = sp.getString("flash_cdn", "local") ?: "local"
     val flashQuality: String get() = sp.getString("flash_quality", "high") ?: "high"
 
     // ---- 手柄 ----

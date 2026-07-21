@@ -101,6 +101,8 @@ class WebFragment : Fragment() {
         override fun shouldInjectRuffle(url: String?): Boolean {
             if (url == null) return false
             if (url.startsWith("file:///android_asset/")) return false
+            // WAFlash 引擎不注入到页面（使用独立播放器页面）
+            if (PrefsManager.flashEngine == "waflash") return false
             return url.contains("4399.com") && (url.contains("/flash/") || url.contains(".swf"))
         }
     }

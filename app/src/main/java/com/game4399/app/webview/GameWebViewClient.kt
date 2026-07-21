@@ -12,10 +12,12 @@ import java.io.ByteArrayInputStream
 
 /**
  * 游戏页面 WebView 客户端：
- * 1. onPageFinished 注入 Ruffle（Flash 支持）
+ * 1. onPageFinished 注入 Flash 引擎（Ruffle / swf2js）
  * 2. 拦截 .swf 链接 → 跳转内置播放器页
- * 3. shouldInterceptRequest：本地 wasm 返回正确 MIME；广告拦截
- * 4. 错误回调
+ * 3. shouldInterceptRequest：
+ *    - 拦截 flash.local 虚拟域名，从 assets 返回引擎 JS/wasm 文件
+ *    - 广告拦截
+ * 4. 错误回调（仅主框架错误才显示错误页）
  */
 open class GameWebViewClient(
     private val callback: Callback
@@ -30,7 +32,7 @@ open class GameWebViewClient(
         fun shouldInjectRuffle(url: String?): Boolean
     }
 
-    /** 常见广告域名（可扩展） */
+    /** 常见广告域名 */
     private val adHosts = setOf(
         "googleads.g.doubleclick.net", "pagead2.googlesyndication.com",
         "ad.4399.com", "stat.4399.com", "analytics.4399.com"
@@ -38,7 +40,6 @@ open class GameWebViewClient(
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val url = request.url?.toString() ?: return false
-        // 拦截 .swf 直链 → 用 Ruffle 内置播放器
         if (url.endsWith(".swf", ignoreCase = true)) {
             callback.onSwfIntercepted(url, view.url ?: url)
             return true
@@ -48,70 +49,83 @@ open class GameWebViewClient(
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
         val url = request.url?.toString() ?: return null
-        // 广告拦截
+
+        // 1. 广告拦截
         if (PrefsManager.isBlockAds && adHosts.any { url.contains(it) }) {
             return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
         }
-        // 本地 wasm：确保返回 application/wasm MIME（Ruffle 必需）
-        if (PrefsManager.flashEngine != "swf2js" && PrefsManager.flashCdn == "local" && url.endsWith(".wasm", ignoreCase = true)) {
+
+        // 2. 拦截 flash.local 虚拟域名：从 assets 返回引擎文件
+        //    路径格式：https://flash.local/ruffle/ruffle.js
+        //             https://flash.local/ruffle/core.ruffle.xxx.js
+        //             https://flash.local/ruffle/xxx.wasm
+        //             https://flash.local/swf2js/swf2js.js
+        if (url.contains("flash.local")) {
             try {
-                val name = request.url?.lastPathSegment ?: return null
-                val input = view.context.assets.open("ruffle/$name")
-                return WebResourceResponse("application/wasm", null, input)
-            } catch (e: Exception) { /* fallthrough */ }
+                val assetPath = url.substringAfter("flash.local/").substringBefore("?")
+                val input = view.context.assets.open(assetPath)
+                val (mime, charset) = when {
+                    assetPath.endsWith(".wasm") -> "application/wasm" to null
+                    assetPath.endsWith(".js") -> "application/javascript" to "UTF-8"
+                    assetPath.endsWith(".html") -> "text/html" to "UTF-8"
+                    assetPath.endsWith(".css") -> "text/css" to "UTF-8"
+                    assetPath.endsWith(".data") -> "application/octet-stream" to null
+                    else -> "application/octet-stream" to null
+                }
+                // 添加 CORS 头：允许任何页面跨域访问 flash.local 资源
+                // Ruffle 内部用 fetch() 加载 core.js 和 .wasm，需要 CORS 头
+                val headers = mapOf(
+                    "Access-Control-Allow-Origin" to "*",
+                    "Cache-Control" to "no-cache"
+                )
+                return WebResourceResponse(mime, charset, 200, "OK", headers, input)
+            } catch (e: Exception) {
+                android.util.Log.w("GameWebViewClient", "flash.local asset not found: $url", e)
+            }
         }
-        // 本地 ruffle core.js（Ruffle 会动态加载 core.ruffle.*.js）
-        if (PrefsManager.flashEngine != "swf2js" && PrefsManager.flashCdn == "local" && url.contains("core.ruffle")) {
-            try {
-                val name = request.url?.lastPathSegment ?: return null
-                val input = view.context.assets.open("ruffle/$name")
-                return WebResourceResponse("application/javascript", "UTF-8", input)
-            } catch (e: Exception) { /* fallthrough */ }
-        }
+
         return super.shouldInterceptRequest(view, request)
     }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         callback.onPageStarted(url)
-        // 尽早注入：屏蔽"没有 Flash 插件"提示 + 预置 Ruffle 配置
-        // 4399 PC Flash 页在 DOM 构建阶段就会检测 Flash 插件并显示提示，
-        // 等 onPageFinished 再注入 Ruffle 就太晚了
+        // 尽早注入：屏蔽"没有 Flash 插件"提示 + 预置引擎配置
         if (PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)) {
             view?.evaluateJavascript(RuffleInjector.configScript(), null)
             view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
         }
-        // 注入 viewport 缩放：让宽 PC 页面适配屏幕，支持双指缩放
         view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
     }
 
     override fun onPageCommitVisible(view: WebView?, url: String?) {
         super.onPageCommitVisible(view, url)
-        // DOM 已构建但页面还在加载中：此时注入 Ruffle 可抢在"无Flash"提示渲染前替换 <object>/<embed>
+        // DOM 已构建：注入引擎加载器
         if (PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)) {
             view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
             view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
         }
-        // 确保 viewport 缩放生效
         view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
-        // 页面加载完成：再次确保 Ruffle 已注入（兜底 + 触发 polyfill）
+        // 兜底注入 + 触发 polyfill
         if (PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)) {
             view?.evaluateJavascript(RuffleInjector.fullInjection(), null)
         }
-        // 注入 CSS：屏蔽 4399 PC 版广告与边栏，让游戏区更突出
         view?.evaluateJavascript(CSS_INJECTION, null)
         callback.onPageFinished(url)
     }
 
     override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
-        // 4399 部分资源证书问题，允许继续（仅游戏场景）
         handler?.proceed()
     }
 
+    /**
+     * 新版错误回调（API 23+）：仅主框架错误才通知 callback。
+     * 子资源（图片/脚本/CSS）加载失败不会显示错误页。
+     */
     override fun onReceivedError(
         view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?
     ) {
@@ -125,20 +139,19 @@ open class GameWebViewClient(
         }
     }
 
-    /** 旧版错误回调兼容 */
+    /**
+     * 废弃版错误回调：minSdk=23 时不会调用，但部分 OEM WebView 可能仍会调用。
+     * 不再触发 callback.onError，避免子资源错误误显示错误页。
+     */
     @Deprecated("Deprecated in Java")
     override fun onReceivedError(
         view: WebView?, errorCode: Int, description: String?, failingUrl: String?
     ) {
         super.onReceivedError(view, errorCode, description, failingUrl)
-        callback.onError(failingUrl, errorCode, description)
+        // 不调用 callback.onError，新版回调已处理主框架错误
     }
 
     companion object {
-        /**
-         * 强制设置 viewport：让 PC 网页适配屏幕宽度，支持缩放。
-         * 解决 PC 页面 UI 超出手机屏幕、无法缩放的问题。
-         */
         private const val VIEWPORT_SCRIPT = """
             (function(){
               var meta = document.querySelector('meta[name="viewport"]');
@@ -151,7 +164,6 @@ open class GameWebViewClient(
             })();
         """
 
-        /** 适度的页面美化（屏蔽部分广告位 / 居中游戏区） */
         private const val CSS_INJECTION = """
             (function(){
               if (window.__cssInjected) return; window.__cssInjected = true;
@@ -165,15 +177,9 @@ open class GameWebViewClient(
             })();
         """
 
-        /**
-         * 屏蔽 4399 PC Flash 页的"没有 Flash 插件"提示。
-         * 4399 页面会检测 navigator.plugins 或 ActiveX，发现没有 Flash 就显示提示框。
-         * 本脚本：1) 伪装 Flash 插件存在 2) 隐藏已出现的提示框 3) 持续监控并移除
-         */
         private const val FLASH_HIDE_SCRIPT = """
             (function(){
               if (window.__flashHideInjected) return; window.__flashHideInjected = true;
-              // 1. 伪装 Flash 插件存在（部分页面通过 navigator.plugins 检测）
               try {
                 Object.defineProperty(navigator, 'plugins', {
                   get: function() {
@@ -185,7 +191,6 @@ open class GameWebViewClient(
                   }
                 });
               } catch(e) {}
-              // 2. 隐藏"没有 Flash"提示框（4399 常见 class/id）
               function hideFlashTips() {
                 var selectors = [
                   '[class*="noflash"]','[id*="noflash"]',
@@ -200,7 +205,6 @@ open class GameWebViewClient(
                 });
               }
               hideFlashTips();
-              // 3. DOM 变化时再次清理（页面异步插入的提示）
               if (window.MutationObserver) {
                 var mo = new MutationObserver(function(){ hideFlashTips(); });
                 try { mo.observe(document.documentElement, {childList:true, subtree:true}); } catch(e) {}
