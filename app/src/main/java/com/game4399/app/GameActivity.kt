@@ -209,19 +209,19 @@ class GameActivity : AppCompatActivity() {
             gamepadVisible = true
             showGamepad(true)
         }
-        // 鼠标模式
-        if (PrefsManager.isMouseModeEnabled) {
+        // 鼠标按钮
+        if (PrefsManager.isMouseButtonsVisible) {
             binding.mouseControl.visibility = View.VISIBLE
         }
     }
 
-    /** 切换鼠标模式 */
+    /** 切换鼠标按钮显示/隐藏 */
     private fun toggleMouseMode() {
-        val enabled = !PrefsManager.isMouseModeEnabled
+        val enabled = !PrefsManager.isMouseButtonsVisible
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-            .edit().putBoolean("mouse_mode_enabled", enabled).apply()
+            .edit().putBoolean("mouse_buttons_visible", enabled).apply()
         binding.mouseControl.visibility = if (enabled) View.VISIBLE else View.GONE
-        Toast.makeText(this, if (enabled) "鼠标模式已开启" else "鼠标模式已关闭", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, if (enabled) "鼠标按钮已添加" else "鼠标按钮已隐藏", Toast.LENGTH_SHORT).show()
     }
 
     private fun showGamepad(show: Boolean) {
@@ -231,6 +231,7 @@ class GameActivity : AppCompatActivity() {
         binding.actionButtons.visibility = v
         // Start/Select 根据可见性设置
         binding.systemButtons.visibility = if (show && PrefsManager.isSystemButtonsVisible) View.VISIBLE else View.GONE
+        // 鼠标按钮独立控制，不受手柄开关影响
     }
 
     private fun toggleGamepad() {
@@ -311,7 +312,8 @@ class GameActivity : AppCompatActivity() {
             "方向键位置",
             "动作按键位置",
             "显示/隐藏按键",
-            "鼠标模式 (左键/右键/旋转)",
+            "添加/隐藏鼠标按钮",
+            "鼠标按钮位置",
             "恢复默认"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -327,7 +329,8 @@ class GameActivity : AppCompatActivity() {
                     6 -> showActionPositionPicker()
                     7 -> showKeyVisibilityPicker()
                     8 -> toggleMouseMode()
-                    9 -> resetAllKeySettings()
+                    9 -> showMousePositionPicker()
+                    10 -> resetAllKeySettings()
                 }
             }
             .show()
@@ -507,6 +510,27 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
+    /** 鼠标按钮位置调节 */
+    private fun showMousePositionPicker() {
+        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val items = arrayOf("向左移动", "向右移动", "向上移动", "向下移动", "重置位置")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("鼠标按钮位置 (当前: ${PrefsManager.mouseOffsetX}, ${PrefsManager.mouseOffsetY})")
+            .setItems(items) { _, which ->
+                val dx = PrefsManager.mouseOffsetX
+                val dy = PrefsManager.mouseOffsetY
+                when (which) {
+                    0 -> sp.edit().putInt("mouse_offset_x", dx - 20).apply()
+                    1 -> sp.edit().putInt("mouse_offset_x", dx + 20).apply()
+                    2 -> sp.edit().putInt("mouse_offset_y", dy - 20).apply()
+                    3 -> sp.edit().putInt("mouse_offset_y", dy + 20).apply()
+                    4 -> sp.edit().putInt("mouse_offset_x", 0).putInt("mouse_offset_y", 0).apply()
+                }
+                Toast.makeText(this, "鼠标按钮位置已更新", Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
     /** 恢复默认 */
     private fun resetAllKeySettings() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
@@ -522,7 +546,10 @@ class GameActivity : AppCompatActivity() {
             .putBoolean("gamepad_key_3_visible", true).putBoolean("gamepad_key_4_visible", true)
             .putBoolean("gamepad_key_5_visible", true).putBoolean("gamepad_key_6_visible", true)
             .putBoolean("dpad_visible", true).putBoolean("system_buttons_visible", true)
+            .putBoolean("mouse_buttons_visible", false)
+            .putInt("mouse_offset_x", 0).putInt("mouse_offset_y", 0)
             .apply()
+        binding.mouseControl.visibility = View.GONE
         Toast.makeText(this, "已恢复全部默认设置", Toast.LENGTH_SHORT).show()
     }
 
