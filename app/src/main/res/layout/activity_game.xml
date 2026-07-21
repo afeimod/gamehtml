@@ -85,6 +85,13 @@
             android:textColor="@android:color/white" />
     </LinearLayout>
 
+    <!-- 鼠标控制：左键 / 右键 / 旋转视角触摸区（默认隐藏） -->
+    <com.game4399.app.input.MouseControlView
+        android:id="@+id/mouseControl"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- 加载遮罩 -->
     <FrameLayout
         android:id="@+id/loadingOverlay"
