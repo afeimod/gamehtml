@@ -44,6 +44,7 @@ class FloatingMenuView @JvmOverloads constructor(
         fun onToggleGamepad()
         fun onToggleMouse()
         fun onOpenKeyMapping()
+        fun onOpenFlashSettings()
         fun onRefresh()
         fun onBack()
         fun onClose()
@@ -160,14 +161,15 @@ class FloatingMenuView @JvmOverloads constructor(
         }
 
         val items = listOf(
-            MenuItem(R.string.fullscreen, R.drawable.ic_fullscreen) { callbacks?.onToggleFullscreen() },
-            MenuItem(R.string.orientation, R.drawable.ic_rotate) { callbacks?.onToggleOrientation() },
-            MenuItem(R.string.gamepad_show, R.drawable.ic_keyboard) { callbacks?.onToggleGamepad() },
-            MenuItem(R.string.mouse_cursor, R.drawable.ic_mouse) { callbacks?.onToggleMouse() },
-            MenuItem(R.string.key_mapping, R.drawable.ic_key) { callbacks?.onOpenKeyMapping() },
-            MenuItem(R.string.refresh, R.drawable.ic_refresh) { callbacks?.onRefresh() },
-            MenuItem(R.string.back, R.drawable.ic_back) { callbacks?.onBack() },
-            MenuItem(R.string.close, R.drawable.ic_close) { callbacks?.onClose() }
+            MenuItem(getString(R.string.fullscreen), R.drawable.ic_fullscreen) { callbacks?.onToggleFullscreen() },
+            MenuItem(getString(R.string.orientation), R.drawable.ic_rotate) { callbacks?.onToggleOrientation() },
+            MenuItem(getString(R.string.gamepad_show), R.drawable.ic_keyboard) { callbacks?.onToggleGamepad() },
+            MenuItem(getString(R.string.mouse_cursor), R.drawable.ic_mouse) { callbacks?.onToggleMouse() },
+            MenuItem(getString(R.string.key_mapping), R.drawable.ic_key) { callbacks?.onOpenKeyMapping() },
+            MenuItem("Flash 引擎", R.drawable.ic_key) { callbacks?.onOpenFlashSettings() },
+            MenuItem(getString(R.string.refresh), R.drawable.ic_refresh) { callbacks?.onRefresh() },
+            MenuItem(getString(R.string.back), R.drawable.ic_back) { callbacks?.onBack() },
+            MenuItem(getString(R.string.close), R.drawable.ic_close) { callbacks?.onClose() }
         )
 
         items.forEach { item ->
@@ -186,7 +188,7 @@ class FloatingMenuView @JvmOverloads constructor(
                 (layoutParams as? MarginLayoutParams)?.let { it.width = dp(24); it.height = dp(24) }
             }
             val text = TextView(context).apply {
-                text = context.getString(item.titleRes)
+                text = item.title
                 setTextColor(0xFFFFFFFF.toInt())
                 textSize = 14f
             }
@@ -219,7 +221,7 @@ class FloatingMenuView @JvmOverloads constructor(
     }
 
     private data class MenuItem(
-        val titleRes: Int,
+        val title: String,
         val iconRes: Int,
         val action: () -> Unit
     )

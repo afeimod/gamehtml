@@ -29,14 +29,18 @@ object NavHelper {
     fun isSwf(url: String): Boolean =
         url.endsWith(".swf", ignoreCase = true) || url.contains(".swf?", ignoreCase = true)
 
-    /** 构造内置 Ruffle 播放器地址（带 CDN 与播放参数） */
+    /** 构造内置 Flash 播放器地址（带引擎与播放参数） */
     fun playerUrl(swfUrl: String, base: String? = null, title: String? = null): String {
         val u = Uri.parse("file:///android_asset/player.html")
             .buildUpon()
             .appendQueryParameter("swf", swfUrl)
-            .appendQueryParameter("cdn", RuffleInjector.scriptUrl())
-            .appendQueryParameter("path", RuffleInjector.publicPath())
+            .appendQueryParameter("engine", PrefsManager.flashEngine)
             .appendQueryParameter("autoplay", if (PrefsManager.isFlashAutoplay) "on" else "off")
+        // Ruffle 模式传递 CDN/本地路径
+        if (PrefsManager.flashEngine == "ruffle") {
+            u.appendQueryParameter("cdn", RuffleInjector.scriptUrl())
+            u.appendQueryParameter("path", RuffleInjector.publicPath())
+        }
         base?.let { u.appendQueryParameter("base", it) }
         title?.let { u.appendQueryParameter("title", it) }
         return u.build().toString()

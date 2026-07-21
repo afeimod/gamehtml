@@ -255,6 +255,7 @@ class GameActivity : AppCompatActivity() {
             override fun onToggleGamepad() { toggleGamepad() }
             override fun onToggleMouse() { toggleMouseMode() }
             override fun onOpenKeyMapping() { openKeyMappingDialog() }
+            override fun onOpenFlashSettings() { showFlashEnginePicker() }
             override fun onRefresh() { webView.reload() }
             override fun onBack() { if (webView.canGoBack()) webView.goBack() else finish() }
             override fun onClose() { finish() }
