@@ -133,11 +133,11 @@ class GameActivity : AppCompatActivity() {
         override fun onHideFullscreen() {
             // topBar 已移除，无需操作
         }
-        override fun onFileChooser(cb: ValueCallback<Array<Uri>>, accept: String?): Boolean {
+        override fun onFileChooser(callback: ValueCallback<Array<Uri>>, accept: String?): Boolean {
             filePathCallback?.onReceiveValue(null)
-            filePathCallback = cb
+            filePathCallback = callback
             val mimes = accept?.split(",")?.toTypedArray() ?: arrayOf("*/*")
-            try { fileChooserLauncher.launch(mimes) } catch (e: Exception) { cb.onReceiveValue(null); filePathCallback = null }
+            try { fileChooserLauncher.launch(mimes) } catch (e: Exception) { callback.onReceiveValue(null); filePathCallback = null }
             return true
         }
     }
@@ -194,6 +194,8 @@ class GameActivity : AppCompatActivity() {
         binding.dpad.overlayAlpha = alpha
         binding.actionButtons.targetWebView = webView
         binding.actionButtons.overlayAlpha = alpha
+        binding.mouseControl.targetWebView = webView
+        binding.mouseControl.overlayAlpha = alpha
 
         binding.btnStart.setOnClickListener {
             webView.injectKey(KeyMapper.toKeyCode(PrefsManager.startKey))
@@ -207,6 +209,19 @@ class GameActivity : AppCompatActivity() {
             gamepadVisible = true
             showGamepad(true)
         }
+        // 鼠标模式
+        if (PrefsManager.isMouseModeEnabled) {
+            binding.mouseControl.visibility = View.VISIBLE
+        }
+    }
+
+    /** 切换鼠标模式 */
+    private fun toggleMouseMode() {
+        val enabled = !PrefsManager.isMouseModeEnabled
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+            .edit().putBoolean("mouse_mode_enabled", enabled).apply()
+        binding.mouseControl.visibility = if (enabled) View.VISIBLE else View.GONE
+        Toast.makeText(this, if (enabled) "鼠标模式已开启" else "鼠标模式已关闭", Toast.LENGTH_SHORT).show()
     }
 
     private fun showGamepad(show: Boolean) {
@@ -235,7 +250,7 @@ class GameActivity : AppCompatActivity() {
             override fun onToggleFullscreen() { toggleFullscreen() }
             override fun onToggleOrientation() { toggleOrientation() }
             override fun onToggleGamepad() { toggleGamepad() }
-            override fun onToggleMouse() { toggleMouse() }
+            override fun onToggleMouse() { toggleMouseMode() }
             override fun onOpenKeyMapping() { openKeyMappingDialog() }
             override fun onRefresh() { webView.reload() }
             override fun onBack() { if (webView.canGoBack()) webView.goBack() else finish() }
@@ -296,6 +311,7 @@ class GameActivity : AppCompatActivity() {
             "方向键位置",
             "动作按键位置",
             "显示/隐藏按键",
+            "鼠标模式 (左键/右键/旋转)",
             "恢复默认"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -310,7 +326,8 @@ class GameActivity : AppCompatActivity() {
                     5 -> showDpadPositionPicker()
                     6 -> showActionPositionPicker()
                     7 -> showKeyVisibilityPicker()
-                    8 -> resetAllKeySettings()
+                    8 -> toggleMouseMode()
+                    9 -> resetAllKeySettings()
                 }
             }
             .show()
