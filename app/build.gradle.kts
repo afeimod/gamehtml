@@ -34,6 +34,20 @@ android {
             keyAlias = keystoreProperties["keyAlias"] as String?
             keyPassword = keystoreProperties["keyPassword"] as String?
         }
+        // 确保 debug 签名有可用 keystore（CI 环境可能没有默认 debug.keystore）
+        getByName("debug") {
+            // 优先使用项目内置的 debug.keystore，确保 CI 和本地一致
+            val localKeystore = file("debug.keystore")
+            if (localKeystore.exists()) {
+                storeFile = localKeystore
+            } else {
+                val homeKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+                if (homeKeystore.exists()) storeFile = homeKeystore
+            }
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
