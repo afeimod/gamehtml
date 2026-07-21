@@ -9,7 +9,8 @@ import androidx.preference.PreferenceManager
  */
 object PrefsManager {
 
-    private lateinit var sp: SharedPreferences
+    lateinit var sp: SharedPreferences
+        private set
 
     fun init(context: Context) {
         sp = PreferenceManager.getDefaultSharedPreferences(context)
@@ -47,10 +48,16 @@ object PrefsManager {
     val dpadOffsetX: Int get() = sp.getInt("dpad_offset_x", 0)
     /** 方向键垂直偏移（像素），正值向下，默认 0 */
     val dpadOffsetY: Int get() = sp.getInt("dpad_offset_y", 0)
+    /** 方向键绝对坐标 X（拖动模式保存的位置） */
+    val dpadPosX: Float get() = sp.getFloat("dpad_pos_x", -1f)
+    val dpadPosY: Float get() = sp.getFloat("dpad_pos_y", -1f)
     /** 动作按键水平偏移（像素），正值向右，默认 0 */
     val actionOffsetX: Int get() = sp.getInt("action_offset_x", 0)
     /** 动作按键垂直偏移（像素），正值向下，默认 0 */
     val actionOffsetY: Int get() = sp.getInt("action_offset_y", 0)
+    /** 动作按键绝对坐标 X（拖动模式保存的位置） */
+    val actionPosX: Float get() = sp.getFloat("action_pos_x", -1f)
+    val actionPosY: Float get() = sp.getFloat("action_pos_y", -1f)
     /** 6 个动作按键映射，默认 J/K/L/U/I/O */
     val gamepadKeys: List<String>
         get() = listOf(
@@ -87,6 +94,9 @@ object PrefsManager {
     val mouseOffsetX: Int get() = sp.getInt("mouse_offset_x", 0)
     /** 鼠标按钮垂直偏移 */
     val mouseOffsetY: Int get() = sp.getInt("mouse_offset_y", 0)
+    /** 鼠标按钮绝对坐标 X（拖动模式保存的位置） */
+    val mousePosX: Float get() = sp.getFloat("mouse_pos_x", -1f)
+    val mousePosY: Float get() = sp.getFloat("mouse_pos_y", -1f)
     /** 兼容旧设置 */
     val gamepadAKey: String get() = sp.getString("gamepad_a_key", "SPACE") ?: "SPACE"
     val gamepadBKey: String get() = sp.getString("gamepad_b_key", "ENTER") ?: "ENTER"
