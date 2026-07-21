@@ -84,6 +84,9 @@ class MainActivity : AppCompatActivity() {
             override fun onOpenKeyMapping() {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
+            override fun onOpenFlashSettings() {
+                startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+            }
             override fun onRefresh() {}
             override fun onBack() {
                 isFullscreen = false
