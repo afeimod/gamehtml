@@ -34,20 +34,6 @@ android {
             keyAlias = keystoreProperties["keyAlias"] as String?
             keyPassword = keystoreProperties["keyPassword"] as String?
         }
-        // 确保 debug 签名有可用 keystore（CI 环境可能没有默认 debug.keystore）
-        getByName("debug") {
-            // 优先使用项目内置的 debug.keystore，确保 CI 和本地一致
-            val localKeystore = file("debug.keystore")
-            if (localKeystore.exists()) {
-                storeFile = localKeystore
-            } else {
-                val homeKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
-                if (homeKeystore.exists()) storeFile = homeKeystore
-            }
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
     }
 
     buildTypes {
@@ -58,10 +44,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 配置了签名则用 release 签名，否则回退 debug 签名（仍可产出可安装 APK）
+            // 不签名，产出未签名 APK，用 MT 管理器等工具自行签名
+            // 配置了 keystore.properties 则用 release 签名，否则跳过签名
             signingConfig = if (keystoreProperties.containsKey("storeFile"))
-                signingConfigs.getByName("release")
-            else signingConfigs.getByName("debug")
+                signingConfigs.getByName("release") else null
         }
         debug {
             isMinifyEnabled = false
