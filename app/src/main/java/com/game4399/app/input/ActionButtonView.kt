@@ -33,6 +33,13 @@ class ActionButtonView @JvmOverloads constructor(
     var overlayAlpha: Int = 153
         set(value) { field = value.coerceIn(40, 255); invalidate() }
 
+    /** 拖动编辑模式：开启后触摸用于拖动 View 本身位置 */
+    var isDragMode: Boolean = false
+        set(value) { field = value; invalidate() }
+
+    private var dragOffsetX = 0f
+    private var dragOffsetY = 0f
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val buttonColors = intArrayOf(
         Color.argb(255, 0xE5, 0x39, 0x35),  // 红
@@ -120,9 +127,36 @@ class ActionButtonView @JvmOverloads constructor(
         }
 
         canvas.restore()
+        // 拖动模式边框提示
+        if (isDragMode) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 4f
+            paint.color = Color.argb(200, 255, 255, 0)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // 拖动编辑模式：拖动 View 本身
+        if (isDragMode) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    dragOffsetX = event.rawX - x
+                    dragOffsetY = event.rawY - y
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val newX = (event.rawX - dragOffsetX).coerceIn(0f, (parent as View).width - width.toFloat())
+                    val newY = (event.rawY - dragOffsetY).coerceIn(0f, (parent as View).height - height.toFloat())
+                    x = newX
+                    y = newY
+                    PrefsManager.sp.edit()
+                        .putFloat("action_pos_x", newX)
+                        .putFloat("action_pos_y", newY)
+                        .apply()
+                }
+            }
+            return true
+        }
         // 应用位置偏移到触点
         val offsetX = PrefsManager.actionOffsetX.toFloat()
         val offsetY = PrefsManager.actionOffsetY.toFloat()

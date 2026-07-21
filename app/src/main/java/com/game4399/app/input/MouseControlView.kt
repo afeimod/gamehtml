@@ -27,6 +27,13 @@ class MouseControlView @JvmOverloads constructor(
     var targetWebView: GameWebView? = null
     var overlayAlpha: Int = 100
 
+    /** 拖动编辑模式：开启后触摸用于拖动 View 本身位置 */
+    var isDragMode: Boolean = false
+        set(value) { field = value; invalidate() }
+
+    private var dragOffsetX = 0f
+    private var dragOffsetY = 0f
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     /** 左键按下状态 */
@@ -97,9 +104,36 @@ class MouseControlView @JvmOverloads constructor(
         }
 
         canvas.restore()
+        // 拖动模式边框提示
+        if (isDragMode) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 4f
+            paint.color = Color.argb(200, 255, 255, 0)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // 拖动编辑模式：拖动 View 本身
+        if (isDragMode) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    dragOffsetX = event.rawX - x
+                    dragOffsetY = event.rawY - y
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val newX = (event.rawX - dragOffsetX).coerceIn(0f, (parent as View).width - width.toFloat())
+                    val newY = (event.rawY - dragOffsetY).coerceIn(0f, (parent as View).height - height.toFloat())
+                    x = newX
+                    y = newY
+                    PrefsManager.sp.edit()
+                        .putFloat("mouse_pos_x", newX)
+                        .putFloat("mouse_pos_y", newY)
+                        .apply()
+                }
+            }
+            return true
+        }
         val offsetX = PrefsManager.mouseOffsetX.toFloat()
         val offsetY = PrefsManager.mouseOffsetY.toFloat()
 
