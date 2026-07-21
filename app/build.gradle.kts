@@ -28,8 +28,15 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
-    // 只有配置了 keystore.properties 才创建 release 签名，否则跳过签名（用 MT 签名）
+    // 签名配置：有 keystore.properties 用正式签名，否则用内置 debug.keystore（可用 MT 管理器重新签名）
     signingConfigs {
+        // 内置 debug keystore，确保 CI 和本地都能签名
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasReleaseKeystore) {
             create("release") {
                 storeFile = file(keystoreProperties["storeFile"] as String)
@@ -48,9 +55,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 配置了 keystore 则签名，否则产出未签名 APK（用 MT 管理器等工具自行签名）
+            // 配置了 keystore 用正式签名，否则用 debug 签名（产出可安装 APK，可用 MT 管理器重新签名）
             signingConfig = if (hasReleaseKeystore)
-                signingConfigs.getByName("release") else null
+                signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
         debug {
             isMinifyEnabled = false
@@ -75,13 +82,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-    }
-}
-
-// 禁用 release 签名验证任务（不签名时跳过，用 MT 管理器等工具自行签名）
-tasks.whenTaskAdded {
-    if (name == "validateSigningRelease" && !hasReleaseKeystore) {
-        enabled = false
     }
 }
 
