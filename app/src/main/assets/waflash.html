@@ -15,12 +15,6 @@
     color: #beb5f9; font-family: -apple-system, "Microsoft YaHei", sans-serif;
     font-size: 16px; text-align: center; z-index: 10;
   }
-  #debugLog {
-    position: fixed; bottom: 20px; left: 8px; right: 8px;
-    color: #0f0; font-family: monospace; font-size: 11px; z-index: 20;
-    max-height: 120px; overflow-y: auto; background: rgba(0,0,0,.7);
-    padding: 4px; border-radius: 4px; display: none;
-  }
   #hint {
     position: fixed; bottom: 4px; left: 0; right: 0; text-align: center;
     color: rgba(255,255,255,.3); font-size: 10px; z-index: 10;
@@ -32,19 +26,9 @@
     <canvas class="waflashCanvas" id="canvas" tabindex="1"></canvas>
     <div id="waflashStatus">Loading...</div>
   </div>
-  <div id="debugLog"></div>
   <div id="hint">WAFlash · AS2/AS3</div>
 
   <script>
-    var dbgEl = document.getElementById('debugLog');
-    var dbgVisible = false;
-    function dbg(msg) {
-      console.log('[WAF]', msg);
-      if (!dbgVisible) { dbgEl.style.display = 'block'; dbgVisible = true; }
-      dbgEl.innerHTML = msg + '<br>' + dbgEl.innerHTML;
-    }
-    window.addEventListener('error', function(e) { dbg('ERROR: ' + (e.message || e)); });
-
     function param(name, def) {
       return new URLSearchParams(location.search).get(name) || def || '';
     }
@@ -54,39 +38,27 @@
 
     var canvas = document.getElementById('canvas');
     canvas.addEventListener('click', function() { canvas.focus(); });
-
-    dbg('SWF_URL=' + SWF_URL);
-    dbg('Page URL=' + location.href);
   </script>
 
-  <!-- 从 flash.local 虚拟域名加载，shouldInterceptRequest 拦截并从 assets 返回
-       Emscripten 的 fetch/XHR 需要 CORS 头，flash.local 能提供 -->
   <script type="module">
     const SWF_URL = new URLSearchParams(location.search).get('swf') || '';
     const statusEl = document.getElementById('waflashStatus');
 
     if (!SWF_URL) { statusEl.textContent = '错误: 未指定 SWF URL'; }
 
-    dbg('加载 waflash-player.min.js...');
-
     import('https://flash.local/waflash/waflash-player.min.js').then(function(module) {
-      dbg('waflash-player 加载成功, exports: ' + Object.keys(module).join(','));
       const createWaflash = module.createWaflash;
-      if (!createWaflash) { statusEl.textContent = 'createWaflash 未找到'; return; }
+      if (!createWaflash) { statusEl.textContent = '引擎加载失败'; return; }
 
       statusEl.style.display = 'block';
       statusEl.textContent = '正在加载引擎...';
-      dbg('调用 createWaflash("' + SWF_URL + '")');
 
       try {
         createWaflash(SWF_URL, { gpu: true });
-        dbg('createWaflash 已调用');
       } catch(e) {
-        dbg('createWaflash 异常: ' + e.message);
         statusEl.textContent = '加载失败: ' + e.message;
       }
     }).catch(function(err) {
-      dbg('waflash-player 加载失败: ' + (err.message || err));
       statusEl.textContent = '引擎加载失败';
       statusEl.style.display = 'block';
     });
