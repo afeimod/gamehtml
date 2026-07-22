@@ -49,6 +49,24 @@ class WebAppInterface(private val context: Context) {
         Log.d("WebApp:${tag ?: "JS"}", msg ?: "")
     }
 
+    /**
+     * 打开 SWF 播放器（WAFlash 检测脚本调用）。
+     * 根据当前 Flash 引擎设置跳转到对应的播放器页面。
+     */
+    @JavascriptInterface
+    fun openSwf(swfUrl: String?, pageUrl: String?) {
+        if (swfUrl.isNullOrEmpty()) return
+        Log.d("WebApp:WAFlash", "openSwf: $swfUrl (from: $pageUrl)")
+        handler.post {
+            val playerUrl = NavHelper.playerUrl(swfUrl, pageUrl, null)
+            if (context is android.app.Activity) {
+                val webView = (context as? com.game4399.app.GameActivity)
+                    ?.findViewById<android.webkit.WebView>(com.game4399.app.R.id.webView)
+                webView?.loadUrl(playerUrl)
+            }
+        }
+    }
+
     /** 退出当前 Activity（全屏播放器使用） */
     @JavascriptInterface
     fun finish() {
