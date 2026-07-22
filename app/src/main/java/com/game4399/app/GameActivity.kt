@@ -177,7 +177,8 @@ class GameActivity : AppCompatActivity() {
             if (url.startsWith("file:///android_asset/waflash.html")) return false
             if (url.startsWith("https://flash.local/waflash.html")) return false
             if (url.startsWith("https://flash.local/waflash/")) return false
-            return url.contains("4399.com") && url.contains("/flash/")
+            // 4399 Flash 游戏页 + 4399 自己的 Flash 播放器页面
+            return (url.contains("4399.com") && (url.contains("/flash/") || url.contains("flash.local.4399.com") || url.contains("flash_tm3")))
         }
     }
 
@@ -187,6 +188,9 @@ class GameActivity : AppCompatActivity() {
         if (NavHelper.isSwf(url)) {
             val playerUrl = NavHelper.playerUrl(url, base = null, title = title)
             webView.loadUrl(playerUrl)
+        } else if (url.contains("4399.com")) {
+            // 4399 页面：添加 Referer 头绕过防盗链
+            webView.loadUrl(url, mapOf("Referer" to "https://www.4399.com/"))
         } else {
             webView.loadUrl(url)
         }
@@ -255,9 +259,10 @@ class GameActivity : AppCompatActivity() {
     private fun setupToolbar() {
         binding.btnRetry.setOnClickListener {
             val currentUrl = webView.url ?: ""
-            // 如果当前在播放器页面失败，回到原始游戏页面
-            if (currentUrl.startsWith("file:///android_asset/")) {
+            if (currentUrl.startsWith("file:///android_asset/") || currentUrl.startsWith("https://flash.local/")) {
                 webView.loadUrl(currentUrl)
+            } else if (currentUrl.contains("4399.com")) {
+                webView.loadUrl(currentUrl, mapOf("Referer" to "https://www.4399.com/"))
             } else {
                 webView.reload()
             }
