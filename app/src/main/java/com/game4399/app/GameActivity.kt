@@ -357,7 +357,6 @@ class GameActivity : AppCompatActivity() {
     }
 
     /** 页面缩放调整对话框：自动 / 手动滑块 */
-    @androidx.annotation.SuppressLint("InflateParams")
     private fun showPageZoomDialog() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val dialogView = android.view.LayoutInflater.from(this)
