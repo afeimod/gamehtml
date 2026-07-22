@@ -159,6 +159,10 @@ class GameActivity : AppCompatActivity() {
         }
         override fun onProgress(progress: Int) = chromeCallback.onProgress(progress)
         override fun onError(url: String?, errorCode: Int, description: String?) {
+            // 跳转到内置播放器页面时可能触发临时错误，忽略 file:/// 页面的错误
+            if (url != null && url.startsWith("file:///android_asset/")) return
+            // 忽略被中止的请求（跳转过程中旧页面被取消）
+            if (errorCode == -1 || errorCode == android.webkit.WebViewClient.ERROR_TOO_MANY_REDIRECTS) return
             binding.loadingOverlay.visibility = View.GONE
             binding.errorView.visibility = View.VISIBLE
         }
@@ -186,6 +190,11 @@ class GameActivity : AppCompatActivity() {
         } else {
             webView.loadUrl(url)
         }
+    }
+
+    /** WebAppInterface.openSwf 调用：在当前 WebView 加载 SWF 播放器页面 */
+    fun loadSwfInWebView(playerUrl: String) {
+        webView.loadUrl(playerUrl)
     }
 
     // ---------------- 虚拟手柄 ----------------
@@ -244,7 +253,15 @@ class GameActivity : AppCompatActivity() {
 
     // ---------------- 顶部工具栏（已移除，功能由悬浮菜单提供） ----------------
     private fun setupToolbar() {
-        binding.btnRetry.setOnClickListener { webView.reload() }
+        binding.btnRetry.setOnClickListener {
+            val currentUrl = webView.url ?: ""
+            // 如果当前在播放器页面失败，回到原始游戏页面
+            if (currentUrl.startsWith("file:///android_asset/")) {
+                webView.loadUrl(currentUrl)
+            } else {
+                webView.reload()
+            }
+        }
     }
 
     // ---------------- 悬浮菜单 ----------------
