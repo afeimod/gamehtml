@@ -162,7 +162,7 @@ class GameActivity : AppCompatActivity() {
             // 跳转到内置播放器页面时可能触发临时错误，忽略 file:/// 页面的错误
             if (url != null && url.startsWith("file:///android_asset/")) return
             // 忽略被中止的请求（跳转过程中旧页面被取消）
-            if (errorCode == -1 || errorCode == android.webkit.WebViewClient.ERROR_TOO_MANY_REDIRECTS) return
+            if (errorCode == -1) return
             binding.loadingOverlay.visibility = View.GONE
             binding.errorView.visibility = View.VISIBLE
         }
