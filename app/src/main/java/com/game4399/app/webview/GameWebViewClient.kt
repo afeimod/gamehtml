@@ -113,6 +113,10 @@ open class GameWebViewClient(
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
         }
+        // 4399 页面再次注入 viewport（覆盖页面自己设置的 viewport）
+        if (url != null && url.contains("4399.com")) {
+            view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
+        }
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
@@ -129,6 +133,10 @@ open class GameWebViewClient(
         // 仅对 4399 Flash 页面注入 CSS（不影响其他页面）
         if (isFlashPage) {
             view?.evaluateJavascript(CSS_INJECTION, null)
+        }
+        // 4399 页面最终覆盖 viewport（确保缩放正确）
+        if (url != null && url.contains("4399.com")) {
+            view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
         }
         callback.onPageFinished(url)
     }
@@ -172,7 +180,13 @@ open class GameWebViewClient(
                 meta.name = 'viewport';
                 document.head.appendChild(meta);
               }
-              meta.content = 'width=device-width, initial-scale=0.4, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes';
+              // 根据屏幕宽度自适应缩放：PC 页面通常宽度 1000-1200px
+              // 手机屏幕约 360-400 CSS px，scale = screen.width / 1200
+              var sw = window.screen.width || 360;
+              var scale = Math.min(1, sw / 1200);
+              scale = Math.max(0.25, scale);
+              meta.content = 'width=device-width, initial-scale=' + scale +
+                ', minimum-scale=' + scale + ', maximum-scale=5.0, user-scalable=yes';
             })();
         """
 
