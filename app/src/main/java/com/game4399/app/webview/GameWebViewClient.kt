@@ -81,7 +81,11 @@ open class GameWebViewClient(
             conn.connectTimeout = 15000
             conn.readTimeout = 15000
             conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            // 设置 Referer 为 4399 主站，绕过防盗链
+            if (url.contains("4399.com")) {
+                conn.setRequestProperty("Referer", "https://www.4399.com/")
+            }
             conn.instanceFollowRedirects = true
             conn.connect()
             val responseCode = conn.responseCode
@@ -134,6 +138,11 @@ open class GameWebViewClient(
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         callback.onPageStarted(url)
+
+        // 4399 页面：伪造 document.referrer 绕过防盗链检测
+        if (url != null && url.contains("4399.com")) {
+            view?.evaluateJavascript(REFERER_SPOOF_SCRIPT, null)
+        }
 
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
 
@@ -246,6 +255,17 @@ open class GameWebViewClient(
 
     companion object {
 
+        private const val REFERER_SPOOF_SCRIPT = """
+            (function(){
+              try {
+                Object.defineProperty(document, 'referrer', {
+                  get: function() { return 'https://www.4399.com/'; },
+                  configurable: true
+                });
+              } catch(e) {}
+            })();
+        """
+
         private const val CSS_INJECTION = """
             (function(){
               if (window.__cssInjected) return; window.__cssInjected = true;
@@ -294,11 +314,11 @@ open class GameWebViewClient(
 
         /**
          * WAFlash SWF 检测脚本：
-         * 1. Hook swfobject.embedSWF() — 4399 用 swfobject.js 动态嵌入 SWF
-         * 2. Hook AC_FL_RunContent() — 部分老页面用此方法
-         * 3. Hook document.write — 拦截写入的 <object>/<embed>
-         * 4. MutationObserver 检测动态创建的 Flash DOM 元素
-         * 检测到 SWF URL 后通过 window.Android.openSwf() 跳转到 WAFlash 播放器
+         * 1. Hook swfobject.embedSWF() — 标准 Flash 嵌入
+         * 2. Hook AC_FL_RunContent() — 老式 Flash 嵌入
+         * 3. Hook createFlash() — 4399 的 mflash-player API
+         * 4. Hook fetch/XMLHttpRequest — 拦截非 .swf 扩展名的 SWF 加载
+         * 5. MutationObserver 检测动态创建的 Flash DOM 元素
          */
         private const val WAFLASH_DETECT_SCRIPT = """
             (function(){
@@ -308,31 +328,30 @@ open class GameWebViewClient(
 
               function redirectToPlayer(swfUrl, baseUrl) {
                 if (redirected || !swfUrl) return;
-                if (!/\.swf/i.test(swfUrl)) return;
+                // 检测 SWF URL：支持 .swf 扩展名、4399 的 dw-XX 格式、flash 路径
+                var isSwf = /\.swf/i.test(swfUrl) ||
+                            /\/dw-\d+/i.test(swfUrl) ||
+                            /flash\d*\//i.test(swfUrl) ||
+                            /mm\.4399\.com/i.test(swfUrl);
+                if (!isSwf) return;
                 redirected = true;
                 try { swfUrl = new URL(swfUrl, baseUrl || window.location.href).href; } catch(e) {}
                 console.log('[WAFlash] 检测到 SWF: ' + swfUrl);
                 if (window.Android && window.Android.openSwf) {
                   window.Android.openSwf(swfUrl, baseUrl || window.location.href);
                 } else {
-                  window.location.href = 'file:///android_asset/waflash.html?swf=' + encodeURIComponent(swfUrl);
+                  window.location.href = 'https://flash.local/waflash.html?swf=' + encodeURIComponent(swfUrl);
                 }
               }
 
-              // 1. Hook swfobject.embedSWF(swfUrl, replaceId, width, height, ...)
-              if (window.swfobject) {
+              // 1. Hook swfobject.embedSWF
+              if (window.swfobject && window.swfobject.embedSWF) {
                 var origEmbed = window.swfobject.embedSWF;
                 window.swfobject.embedSWF = function() {
-                  var swfUrl = arguments[0];
-                  if (swfUrl && /\.swf/i.test(swfUrl)) {
-                    redirectToPlayer(swfUrl, window.location.href);
-                    return;
-                  }
+                  redirectToPlayer(arguments[0], window.location.href);
                   return origEmbed.apply(this, arguments);
                 };
-                console.log('[WAFlash] 已 hook swfobject.embedSWF');
               } else {
-                // swfobject 可能还没加载，用 Object.defineProperty 拦截
                 var _swfobject;
                 Object.defineProperty(window, 'swfobject', {
                   configurable: true,
@@ -342,44 +361,77 @@ open class GameWebViewClient(
                     if (val && val.embedSWF) {
                       var orig = val.embedSWF;
                       val.embedSWF = function() {
-                        var swfUrl = arguments[0];
-                        if (swfUrl && /\.swf/i.test(swfUrl)) {
-                          redirectToPlayer(swfUrl, window.location.href);
-                          return;
-                        }
+                        redirectToPlayer(arguments[0], window.location.href);
                         return orig.apply(this, arguments);
                       };
-                      console.log('[WAFlash] 已延迟 hook swfobject.embedSWF');
                     }
                   }
                 });
               }
 
-              // 2. Hook AC_FL_RunContent — 老式 Flash 嵌入
+              // 2. Hook AC_FL_RunContent
               if (window.AC_FL_RunContent) {
                 var origAC = window.AC_FL_RunContent;
                 window.AC_FL_RunContent = function() {
                   var args = Array.prototype.slice.call(arguments);
                   for (var i = 0; i < args.length - 1; i++) {
-                    if ((args[i] === 'src' || args[i] === 'movie') && /\.swf/i.test(args[i+1])) {
+                    if ((args[i] === 'src' || args[i] === 'movie') && args[i+1]) {
                       redirectToPlayer(args[i+1], window.location.href);
-                      return '';
                     }
                   }
                   return origAC.apply(this, arguments);
                 };
               }
 
-              // 3. 检测页面中已有的 <object>/<embed> Flash 元素
+              // 3. Hook createFlash — 4399 的 mflash-player API
+              //    createFlash(swfUrl, options) 或 createFlash({url: swfUrl, ...})
+              function hookCreateFlash(obj) {
+                if (!obj || !obj.createFlash || obj.__waflashHooked) return;
+                obj.__waflashHooked = true;
+                var orig = obj.createFlash;
+                obj.createFlash = function() {
+                  var swfUrl = null;
+                  if (typeof arguments[0] === 'string') {
+                    swfUrl = arguments[0];
+                  } else if (arguments[0] && typeof arguments[0] === 'object') {
+                    swfUrl = arguments[0].url || arguments[0].src || arguments[0].swf ||
+                             arguments[0].movie || arguments[0].data;
+                  }
+                  if (swfUrl) redirectToPlayer(swfUrl, window.location.href);
+                  return orig.apply(this, arguments);
+                };
+                console.log('[WAFlash] 已 hook createFlash');
+              }
+
+              // 检查 mflash-player 是否已存在
+              if (window.mflash-player) hookCreateFlash(window['mflash-player']);
+              if (window.mflashplayer) hookCreateFlash(window.mflashplayer);
+              if (window.MFlash) hookCreateFlash(window.MFlash);
+
+              // 延迟 hook：4399 可能动态加载 mflash-player
+              var _mflash;
+              Object.defineProperty(window, 'mflash-player', {
+                configurable: true,
+                get: function() { return _mflash; },
+                set: function(val) { _mflash = val; hookCreateFlash(val); }
+              });
+              var _mflash2;
+              Object.defineProperty(window, 'mflashplayer', {
+                configurable: true,
+                get: function() { return _mflash2; },
+                set: function(val) { _mflash2 = val; hookCreateFlash(val); }
+              });
+
+              // 4. 检测页面中已有的 Flash 元素
               function extractSwfUrl(el) {
                 if (!el) return null;
                 var src = el.getAttribute('data') || el.getAttribute('src') ||
                           el.getAttribute('movie') || el.getAttribute('url') || '';
-                if (src && /\.swf/i.test(src)) return src;
+                if (src) return src;
                 var params = el.querySelectorAll('param[name="movie"], param[name="src"]');
                 for (var i = 0; i < params.length; i++) {
                   var v = params[i].getAttribute('value') || '';
-                  if (/\.swf/i.test(v)) return v;
+                  if (v) return v;
                 }
                 return null;
               }
@@ -399,7 +451,7 @@ open class GameWebViewClient(
 
               checkExistingFlash();
 
-              // 4. MutationObserver 持续监控 DOM
+              // 5. MutationObserver 持续监控
               if (window.MutationObserver) {
                 var observer = new MutationObserver(function() {
                   if (redirected) { observer.disconnect(); return; }
