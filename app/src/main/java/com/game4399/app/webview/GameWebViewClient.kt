@@ -141,17 +141,35 @@ open class GameWebViewClient(
           try {
             var fp = {name:'Shockwave Flash',filename:'libflashplayer.so',description:'Shockwave Flash 32.0 r0',length:1,
               0:{type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash'}};
+            fp.namedItem = function(n){ return (n === 'Shockwave Flash') ? fp : null; };
+            fp.item = function(i){ return i === 0 ? fp : null; };
+            fp.refresh = function(){};
             var _plugins = navigator.plugins || {};
-            Object.defineProperty(navigator,'plugins',{get:function(){
-              if(!_plugins['Shockwave Flash']){try{_plugins['Shockwave Flash']=fp;_plugins[0]=fp;_plugins.length=1;}catch(e){}}
-              return _plugins;
-            },configurable:true});
+            // 保持原有方法
+            if (_plugins.namedItem) { fp.namedItem = function(n){ return (n === 'Shockwave Flash') ? fp : _plugins.namedItem.call(_plugins, n); }; }
+            if (_plugins.item) { fp.item = function(i){ return i === 0 ? fp : _plugins.item.call(_plugins, i); }; }
+            Object.defineProperty(navigator,'plugins',{
+              get:function(){
+                try {
+                  if (!_plugins['Shockwave Flash']) {
+                    _plugins['Shockwave Flash'] = fp;
+                    _plugins[0] = fp;
+                  }
+                  _plugins.length = Math.max(_plugins.length || 0, 1);
+                } catch(e) {}
+                return _plugins;
+              },
+              configurable: true
+            });
             var fm = {type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash',enabledPlugin:fp};
             var _mimes = navigator.mimeTypes || {};
-            Object.defineProperty(navigator,'mimeTypes',{get:function(){
-              if(!_mimes['application/x-shockwave-flash']){try{_mimes['application/x-shockwave-flash']=fm;}catch(e){}}
-              return _mimes;
-            },configurable:true});
+            Object.defineProperty(navigator,'mimeTypes',{
+              get:function(){
+                try { if (!_mimes['application/x-shockwave-flash']) _mimes['application/x-shockwave-flash'] = fm; } catch(e) {}
+                return _mimes;
+              },
+              configurable: true
+            });
             window.ActiveXObject = function(n){if(n&&/ShockwaveFlash/i.test(n))return {SetVariable:function(){},Variable:function(){return ''}};throw new Error('x');};
           } catch(e) {}
 
@@ -168,7 +186,9 @@ open class GameWebViewClient(
             unmuteOverlay: 'visible',
             backgroundColor: '#000000',
             letterbox: 'on',
-            polyfills: true
+            polyfills: true,
+            maxExecutionDuration: 30,
+            logLevel: 'warn'
           };
           var ruffleScript = document.createElement('script');
           ruffleScript.src = 'https://flash.local/ruffle/ruffle.js';
@@ -223,16 +243,18 @@ open class GameWebViewClient(
 
     /** 原生下载 SWF 文件，返回带 CORS 头的响应（含重试） */
     private fun interceptSwf(url: String): WebResourceResponse? {
+        // HTTP → HTTPS 升级，避免混合内容和重定向问题
+        val swfUrl = if (url.startsWith("http://")) "https://" + url.substring(7) else url
         var lastError: Exception? = null
         for (attempt in 1..3) {
             try {
-                android.util.Log.d("GameWebViewClient", "拦截 SWF 请求 (尝试 $attempt): $url")
-                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                android.util.Log.d("GameWebViewClient", "拦截 SWF 请求 (尝试 $attempt): $swfUrl")
+                val conn = java.net.URL(swfUrl).openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 10000
                 conn.readTimeout = 20000
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                if (url.contains("4399.com")) {
+                if (swfUrl.contains("4399.com")) {
                     conn.setRequestProperty("Referer", "https://www.4399.com/")
                 }
                 conn.instanceFollowRedirects = true
@@ -432,7 +454,7 @@ open class GameWebViewClient(
               if (window.__flashFaked) return;
               window.__flashFaked = true;
               try {
-                // 伪造 navigator.plugins
+                // 伪造 navigator.plugins（含 namedItem/item 方法，Ruffle 需要调用）
                 var fakePlugin = {
                   name: 'Shockwave Flash',
                   filename: 'libflashplayer.so',
@@ -440,13 +462,19 @@ open class GameWebViewClient(
                   length: 1,
                   0: { type: 'application/x-shockwave-flash', suffixes: 'swf', description: 'Shockwave Flash' }
                 };
+                fakePlugin.namedItem = function(n) { return (n === 'Shockwave Flash') ? fakePlugin : null; };
+                fakePlugin.item = function(i) { return i === 0 ? fakePlugin : null; };
+                fakePlugin.refresh = function() {};
                 var plugins = navigator.plugins || {};
+                if (plugins.namedItem) { fakePlugin.namedItem = function(n) { return (n === 'Shockwave Flash') ? fakePlugin : plugins.namedItem.call(plugins, n); }; }
+                if (plugins.item) { fakePlugin.item = function(i) { return i === 0 ? fakePlugin : plugins.item.call(plugins, i); }; }
                 Object.defineProperty(navigator, 'plugins', {
                   get: function() {
                     var p = plugins;
                     if (!p['Shockwave Flash']) {
-                      try { p['Shockwave Flash'] = fakePlugin; p[0] = fakePlugin; p.length = 1; } catch(e) {}
+                      try { p['Shockwave Flash'] = fakePlugin; p[0] = fakePlugin; } catch(e) {}
                     }
+                    p.length = Math.max(p.length || 0, 1);
                     return p;
                   },
                   configurable: true

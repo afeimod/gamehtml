@@ -72,7 +72,7 @@ object RuffleInjector {
                 "splashScreen": true,
                 "preloader": true,
                 "logLevel": "warn",
-                "maxExecutionDuration": {"secs": 30, "nanos": 0}
+                "maxExecutionDuration": 30
               };
             })();
         """.trimIndent()
