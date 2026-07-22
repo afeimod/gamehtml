@@ -58,15 +58,54 @@ open class GameWebViewClient(
             return interceptAsset(view, url.substringAfter("flash.local/").substringBefore("?"))
         }
 
-        // 3. 拦截 file:///android_asset/waflash/ 请求：
-        //    WAFlash 的 waflash-player.min.js 用静态 import 加 waflash.min.js?2022091801
-        //    WebView 默认 file 处理器可能不剥离查询参数，导致找不到文件
+        // 3. 拦截 file:///android_asset/waflash/ 请求
         if (url.startsWith("file:///android_asset/waflash/")) {
             val assetPath = url.removePrefix("file:///android_asset/").substringBefore("?")
             return interceptAsset(view, assetPath)
         }
 
+        // 4. 拦截 SWF 文件请求：WAFlash 从 flash.local 页面用 fetch() 加载远程 SWF
+        //    会被 CORS/混合内容策略阻止，这里原生下载后带 CORS 头返回
+        if (url.endsWith(".swf", ignoreCase = true) || url.contains(".swf?", ignoreCase = true)) {
+            return interceptSwf(url)
+        }
+
         return super.shouldInterceptRequest(view, request)
+    }
+
+    /** 原生下载 SWF 文件，返回带 CORS 头的响应 */
+    private fun interceptSwf(url: String): WebResourceResponse? {
+        return try {
+            android.util.Log.d("GameWebViewClient", "拦截 SWF 请求: $url")
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            conn.instanceFollowRedirects = true
+            conn.connect()
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
+                val data = conn.inputStream.readBytes()
+                android.util.Log.d("GameWebViewClient", "SWF 下载完成: ${data.size} bytes")
+                val headers = mapOf(
+                    "Access-Control-Allow-Origin" to "*",
+                    "Content-Type" to "application/x-shockwave-flash",
+                    "Cache-Control" to "no-cache"
+                )
+                WebResourceResponse(
+                    "application/x-shockwave-flash", null,
+                    200, "OK", headers,
+                    java.io.ByteArrayInputStream(data)
+                )
+            } else {
+                android.util.Log.w("GameWebViewClient", "SWF 下载失败: HTTP $responseCode")
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("GameWebViewClient", "SWF 下载异常: ${e.message}", e)
+            null
+        }
     }
 
     /** 从 assets 读取文件并返回带 CORS 头的 WebResourceResponse */
