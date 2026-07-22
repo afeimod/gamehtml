@@ -172,9 +172,7 @@ class GameActivity : AppCompatActivity() {
             if (url == null) return false
             if (url.startsWith("file:///android_asset/player.html")) return false
             if (url.startsWith("file:///android_asset/waflash.html")) return false
-            // WAFlash 引擎不注入到 4399 页面（使用独立播放器页面，通过 SWF 拦截跳转）
-            if (PrefsManager.flashEngine == "waflash") return false
-            // www.4399.com/flash/ 页面注入 Ruffle / swf2js
+            // www.4399.com/flash/ 页面注入引擎（Ruffle / swf2js polyfill 或 WAFlash 检测脚本）
             return url.contains("4399.com") && url.contains("/flash/")
         }
     }
