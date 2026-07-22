@@ -94,7 +94,7 @@ open class GameWebViewClient(
             }
             // 读取 HTML 内容
             val encoding = response.encoding ?: "UTF-8"
-            val html = response.data?.bufferedReader(Charsets.forName(encoding))?.readText() ?: return response
+            val html = response.data?.bufferedReader(java.nio.charset.Charset.forName(encoding))?.readText() ?: return response
 
             // 构建注入脚本
             val injectScript = buildFlashInjectScript(url)
