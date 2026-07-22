@@ -8,6 +8,7 @@ import androidx.fragment.app.Fragment
 import com.game4399.app.GameActivity
 import com.game4399.app.R
 import com.game4399.app.data.GameType
+import com.game4399.app.data.PrefsManager
 import com.game4399.app.databinding.FragmentWebBinding
 import com.game4399.app.webview.GameWebChromeClient
 import com.game4399.app.webview.GameWebView
