@@ -155,7 +155,6 @@ open class GameWebViewClient(
         // 4399 页面：伪造 document.referrer 绕过防盗链检测 + IE 兼容模式伪造
         if (url != null && url.contains("4399.com")) {
             view?.evaluateJavascript(REFERER_SPOOF_SCRIPT, null)
-            // IE 兼容模式：伪造 IE 特有属性让 4399 检测为 IE 浏览器
             if (PrefsManager.uaMode == "ie_compat") {
                 view?.evaluateJavascript(IE_COMPAT_SCRIPT, null)
             }
@@ -163,12 +162,19 @@ open class GameWebViewClient(
 
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
 
+        // Flash 页面：最先注入 Flash 支持伪造（在页面 JS 执行前）
+        // 让 4399 检测到浏览器"有 Flash 插件"，从而创建 <object> 元素
+        // 之后 Ruffle polyfill 会替换 <object> 为 Canvas 播放器
         if (isFlashPage) {
+            view?.evaluateJavascript(FLASH_FAKE_SUPPORT_SCRIPT, null)
             view?.evaluateJavascript(RuffleInjector.configScript(), null)
+            view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
             view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
             if (PrefsManager.flashEngine == "waflash") {
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
+            // 注入 iframe 监控：游戏可能加载在 iframe 中
+            view?.evaluateJavascript(IFRAME_INJECT_SCRIPT, null)
         }
 
         // 4399 页面注入 viewport 调整
@@ -271,6 +277,126 @@ open class GameWebViewClient(
     }
 
     companion object {
+
+        /**
+         * 伪造 Flash 插件支持：让 4399 等页面检测到浏览器"有 Flash 插件"。
+         * 必须在页面 JS 执行前注入（onPageStarted）。
+         * 伪造 navigator.plugins["Shockwave Flash"] 和 navigator.mimeTypes。
+         */
+        private const val FLASH_FAKE_SUPPORT_SCRIPT = """
+            (function(){
+              if (window.__flashFaked) return;
+              window.__flashFaked = true;
+              try {
+                // 伪造 navigator.plugins
+                var fakePlugin = {
+                  name: 'Shockwave Flash',
+                  filename: 'libflashplayer.so',
+                  description: 'Shockwave Flash 32.0 r0',
+                  length: 1,
+                  0: { type: 'application/x-shockwave-flash', suffixes: 'swf', description: 'Shockwave Flash' }
+                };
+                var plugins = navigator.plugins || {};
+                Object.defineProperty(navigator, 'plugins', {
+                  get: function() {
+                    var p = plugins;
+                    if (!p['Shockwave Flash']) {
+                      try { p['Shockwave Flash'] = fakePlugin; p[0] = fakePlugin; p.length = 1; } catch(e) {}
+                    }
+                    return p;
+                  },
+                  configurable: true
+                });
+                // 伪造 navigator.mimeTypes
+                var fakeMime = { type: 'application/x-shockwave-flash', suffixes: 'swf', description: 'Shockwave Flash', enabledPlugin: fakePlugin };
+                var mimes = navigator.mimeTypes || {};
+                Object.defineProperty(navigator, 'mimeTypes', {
+                  get: function() {
+                    if (!mimes['application/x-shockwave-flash']) {
+                      try { mimes['application/x-shockwave-flash'] = fakeMime; } catch(e) {}
+                    }
+                    return mimes;
+                  },
+                  configurable: true
+                });
+                // 伪造 ActiveXObject（IE 方式检测 Flash）
+                window.ActiveXObject = function(name) {
+                  if (name && /ShockwaveFlash/i.test(name)) return { SetVariable: function(){} };
+                  throw new Error('Not supported');
+                };
+                console.log('[Flash] 已伪造 Flash 插件支持');
+              } catch(e) { console.warn('[Flash] 伪造失败:', e); }
+            })();
+        """
+
+        /**
+         * iframe 注入监控：4399 游戏常加载在 iframe 中。
+         * 监控 iframe 创建，将 Flash 引擎注入到 iframe 内部。
+         */
+        private const val IFRAME_INJECT_SCRIPT = """
+            (function(){
+              if (window.__iframeMonitor) return;
+              window.__iframeMonitor = true;
+              function injectIntoIframe(iframe) {
+                try {
+                  var doc = iframe.contentDocument || iframe.contentWindow.document;
+                  if (!doc || doc.readyState === 'loading') {
+                    setTimeout(function(){ injectIntoIframe(iframe); }, 200);
+                    return;
+                  }
+                  // 检查是否已注入
+                  if (doc.__flashFaked) return;
+                  doc.__flashFaked = true;
+                  // 注入 Flash 支持伪造
+                  var s1 = doc.createElement('script');
+                  s1.textContent = '(' + function(){
+                    try {
+                      var fp = {name:'Shockwave Flash',filename:'libflashplayer.so',description:'Shockwave Flash 32.0 r0',length:1,
+                        0:{type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash'}};
+                      Object.defineProperty(navigator,'plugins',{get:function(){return fp;},configurable:true});
+                      Object.defineProperty(navigator,'mimeTypes',{get:function(){return {'application/x-shockwave-flash':{type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash',enabledPlugin:fp}};},configurable:true});
+                      window.ActiveXObject = function(n){if(/ShockwaveFlash/i.test(n))return {SetVariable:function(){}};throw new Error('x');};
+                    } catch(e){}
+                  } + ')();';
+                  doc.head.appendChild(s1);
+                  // 注入 Ruffle 引擎
+                  var engine = window.__ruffleLoaded ? 'ruffle' : (window.__swf2jsLoaded ? 'swf2js' : null);
+                  if (engine === 'ruffle') {
+                    var s2 = doc.createElement('script');
+                    s2.src = 'https://flash.local/ruffle/ruffle.js';
+                    s2.onload = function(){
+                      try {
+                        var r = doc.defaultView.RufflePlayer;
+                        if (r && r.newest) { var inst = r.newest(); if (inst && inst.init) inst.init(); }
+                      } catch(e){}
+                    };
+                    doc.head.appendChild(s2);
+                  }
+                  console.log('[Flash] 已注入 iframe');
+                } catch(e) {
+                  // 跨域 iframe 无法注入
+                }
+              }
+              // 监控新创建的 iframe
+              if (window.MutationObserver) {
+                var observer = new MutationObserver(function(mutations){
+                  mutations.forEach(function(m){
+                    m.addedNodes.forEach(function(node){
+                      if (node.tagName === 'IFRAME') injectIntoIframe(node);
+                      if (node.querySelectorAll) {
+                        var iframes = node.querySelectorAll('iframe');
+                        for (var i = 0; i < iframes.length; i++) injectIntoIframe(iframes[i]);
+                      }
+                    });
+                  });
+                });
+                observer.observe(document.documentElement, {childList: true, subtree: true});
+              }
+              // 检查已有的 iframe
+              var existing = document.querySelectorAll('iframe');
+              for (var i = 0; i < existing.length; i++) injectIntoIframe(existing[i]);
+            })();
+        """
 
         private const val REFERER_SPOOF_SCRIPT = """
             (function(){
