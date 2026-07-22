@@ -172,11 +172,11 @@ class GameActivity : AppCompatActivity() {
             webView.loadUrl(playerUrl)
         }
         override fun shouldInjectRuffle(url: String?): Boolean {
-            // PC Flash 页注入；内置播放器页面已自带引擎，不重复注入
             if (url == null) return false
             if (url.startsWith("file:///android_asset/player.html")) return false
             if (url.startsWith("file:///android_asset/waflash.html")) return false
-            // www.4399.com/flash/ 页面注入引擎（Ruffle / swf2js polyfill 或 WAFlash 检测脚本）
+            if (url.startsWith("https://flash.local/waflash.html")) return false
+            if (url.startsWith("https://flash.local/waflash/")) return false
             return url.contains("4399.com") && url.contains("/flash/")
         }
     }
