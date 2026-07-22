@@ -92,6 +92,9 @@ class WebFragment : Fragment() {
         }
         override fun onProgress(progress: Int) = chromeCb.onProgress(progress)
         override fun onError(url: String?, errorCode: Int, description: String?) {
+            // 忽略内置播放器页面的错误和跳转过程中的临时错误
+            if (url != null && url.startsWith("file:///android_asset/")) return
+            if (errorCode == -1) return
             binding.swipeRefresh.isRefreshing = false
             binding.errorView.visibility = View.VISIBLE
         }
