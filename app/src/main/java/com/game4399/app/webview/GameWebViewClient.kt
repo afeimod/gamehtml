@@ -66,7 +66,11 @@ open class GameWebViewClient(
 
         // 4. 拦截 SWF 文件请求：WAFlash 从 flash.local 页面用 fetch() 加载远程 SWF
         //    会被 CORS/混合内容策略阻止，这里原生下载后带 CORS 头返回
-        if (url.endsWith(".swf", ignoreCase = true) || url.contains(".swf?", ignoreCase = true)) {
+        //    支持 .swf 扩展名 + 4399 的 dw-XX 格式（非标准 SWF URL）
+        val isSwfRequest = url.endsWith(".swf", ignoreCase = true) ||
+            url.contains(".swf?", ignoreCase = true) ||
+            (url.contains("4399.com") && (url.contains("/dw-") || url.contains("flash_tm3") || url.contains("flash20")))
+        if (isSwfRequest) {
             return interceptSwf(url)
         }
 
@@ -403,8 +407,8 @@ open class GameWebViewClient(
                 console.log('[WAFlash] 已 hook createFlash');
               }
 
-              // 检查 mflash-player 是否已存在
-              if (window.mflash-player) hookCreateFlash(window['mflash-player']);
+              // 检查 mflash-player 是否已存在（注意：属性名含连字符，必须用方括号）
+              if (window['mflash-player']) hookCreateFlash(window['mflash-player']);
               if (window.mflashplayer) hookCreateFlash(window.mflashplayer);
               if (window.MFlash) hookCreateFlash(window.MFlash);
 
