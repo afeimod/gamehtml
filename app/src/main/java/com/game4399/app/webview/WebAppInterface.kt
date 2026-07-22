@@ -59,10 +59,9 @@ class WebAppInterface(private val context: Context) {
         Log.d("WebApp:WAFlash", "openSwf: $swfUrl (from: $pageUrl)")
         handler.post {
             val playerUrl = NavHelper.playerUrl(swfUrl, pageUrl, null)
-            if (context is android.app.Activity) {
-                val webView = (context as? com.game4399.app.GameActivity)
-                    ?.findViewById<android.webkit.WebView>(com.game4399.app.R.id.webView)
-                webView?.loadUrl(playerUrl)
+            if (context is com.game4399.app.GameActivity) {
+                val activity = context as com.game4399.app.GameActivity
+                activity.loadSwfInWebView(playerUrl)
             }
         }
     }
