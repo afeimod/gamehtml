@@ -55,28 +55,41 @@ open class GameWebViewClient(
 
         // 2. 拦截 flash.local 虚拟域名：从 assets 返回引擎文件
         if (url.contains("flash.local")) {
-            try {
-                val assetPath = url.substringAfter("flash.local/").substringBefore("?")
-                val input = view.context.assets.open(assetPath)
-                val (mime, charset) = when {
-                    assetPath.endsWith(".wasm") -> "application/wasm" to null
-                    assetPath.endsWith(".js") -> "application/javascript" to "UTF-8"
-                    assetPath.endsWith(".html") -> "text/html" to "UTF-8"
-                    assetPath.endsWith(".css") -> "text/css" to "UTF-8"
-                    assetPath.endsWith(".data") -> "application/octet-stream" to null
-                    else -> "application/octet-stream" to null
-                }
-                val headers = mapOf(
-                    "Access-Control-Allow-Origin" to "*",
-                    "Cache-Control" to "no-cache"
-                )
-                return WebResourceResponse(mime, charset, 200, "OK", headers, input)
-            } catch (e: Exception) {
-                android.util.Log.w("GameWebViewClient", "flash.local asset not found: $url", e)
-            }
+            return interceptAsset(view, url.substringAfter("flash.local/").substringBefore("?"))
+        }
+
+        // 3. 拦截 file:///android_asset/waflash/ 请求：
+        //    WAFlash 的 waflash-player.min.js 用静态 import 加 waflash.min.js?2022091801
+        //    WebView 默认 file 处理器可能不剥离查询参数，导致找不到文件
+        if (url.startsWith("file:///android_asset/waflash/")) {
+            val assetPath = url.removePrefix("file:///android_asset/").substringBefore("?")
+            return interceptAsset(view, assetPath)
         }
 
         return super.shouldInterceptRequest(view, request)
+    }
+
+    /** 从 assets 读取文件并返回带 CORS 头的 WebResourceResponse */
+    private fun interceptAsset(view: WebView, assetPath: String): WebResourceResponse? {
+        return try {
+            val input = view.context.assets.open(assetPath)
+            val (mime, charset) = when {
+                assetPath.endsWith(".wasm") -> "application/wasm" to null
+                assetPath.endsWith(".js") -> "application/javascript" to "UTF-8"
+                assetPath.endsWith(".html") -> "text/html" to "UTF-8"
+                assetPath.endsWith(".css") -> "text/css" to "UTF-8"
+                assetPath.endsWith(".data") -> "application/octet-stream" to null
+                else -> "application/octet-stream" to null
+            }
+            val headers = mapOf(
+                "Access-Control-Allow-Origin" to "*",
+                "Cache-Control" to "no-cache"
+            )
+            WebResourceResponse(mime, charset, 200, "OK", headers, input)
+        } catch (e: Exception) {
+            android.util.Log.w("GameWebViewClient", "asset not found: $assetPath", e)
+            null
+        }
     }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -86,19 +99,16 @@ open class GameWebViewClient(
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
 
         if (isFlashPage) {
-            // 注入引擎配置 + 隐藏 Flash 提示
             view?.evaluateJavascript(RuffleInjector.configScript(), null)
             view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
-
-            // WAFlash：注入 SWF 检测+跳转脚本（WAFlash 用独立播放器页面）
             if (PrefsManager.flashEngine == "waflash") {
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
         }
 
-        // 仅对 4399 页面注入 viewport 调整
+        // 4399 页面注入 viewport 调整
         if (url != null && url.contains("4399.com")) {
-            view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
+            view?.evaluateJavascript(buildViewportScript(), null)
         }
     }
 
@@ -108,14 +118,12 @@ open class GameWebViewClient(
         if (isFlashPage) {
             view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
             view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
-            // WAFlash 兜底检测
             if (PrefsManager.flashEngine == "waflash") {
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
         }
-        // 4399 页面再次注入 viewport（覆盖页面自己设置的 viewport）
         if (url != null && url.contains("4399.com")) {
-            view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
+            view?.evaluateJavascript(buildViewportScript(), null)
         }
     }
 
@@ -123,20 +131,16 @@ open class GameWebViewClient(
         super.onPageFinished(view, url)
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
         if (isFlashPage) {
-            // Ruffle / swf2js：兜底注入
             view?.evaluateJavascript(RuffleInjector.fullInjection(), null)
-            // WAFlash：最终检测
             if (PrefsManager.flashEngine == "waflash") {
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
         }
-        // 仅对 4399 Flash 页面注入 CSS（不影响其他页面）
         if (isFlashPage) {
             view?.evaluateJavascript(CSS_INJECTION, null)
         }
-        // 4399 页面最终覆盖 viewport（确保缩放正确）
         if (url != null && url.contains("4399.com")) {
-            view?.evaluateJavascript(VIEWPORT_SCRIPT, null)
+            view?.evaluateJavascript(buildViewportScript(), null)
         }
         callback.onPageFinished(url)
     }
@@ -171,24 +175,37 @@ open class GameWebViewClient(
         super.onReceivedError(view, errorCode, description, failingUrl)
     }
 
-    companion object {
-        private const val VIEWPORT_SCRIPT = """
+    /** 根据用户缩放设置构建 viewport 脚本 */
+    private fun buildViewportScript(): String {
+        val scale = if (PrefsManager.pageZoomMode == "manual") {
+            PrefsManager.pageZoomManual / 100.0
+        } else {
+            -1.0
+        }
+        return if (scale > 0) {
+            """
             (function(){
               var meta = document.querySelector('meta[name="viewport"]');
-              if (!meta) {
-                meta = document.createElement('meta');
-                meta.name = 'viewport';
-                document.head.appendChild(meta);
-              }
-              // 根据屏幕宽度自适应缩放：PC 页面通常宽度 1000-1200px
-              // 手机屏幕约 360-400 CSS px，scale = screen.width / 1200
+              if (!meta) { meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }
+              var s = $scale;
+              meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=' + s + ', maximum-scale=5.0, user-scalable=yes';
+            })();
+            """.trimIndent()
+        } else {
+            """
+            (function(){
+              var meta = document.querySelector('meta[name="viewport"]');
+              if (!meta) { meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }
               var sw = window.screen.width || 360;
               var scale = Math.min(1, sw / 1200);
               scale = Math.max(0.25, scale);
-              meta.content = 'width=device-width, initial-scale=' + scale +
-                ', minimum-scale=' + scale + ', maximum-scale=5.0, user-scalable=yes';
+              meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=5.0, user-scalable=yes';
             })();
-        """
+            """.trimIndent()
+        }
+    }
+
+    companion object {
 
         private const val CSS_INJECTION = """
             (function(){

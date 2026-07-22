@@ -274,6 +274,7 @@ class GameActivity : AppCompatActivity() {
             override fun onToggleMouse() { toggleMouseMode() }
             override fun onOpenKeyMapping() { openKeyMappingDialog() }
             override fun onOpenFlashSettings() { showFlashEnginePicker() }
+            override fun onOpenPageZoom() { showPageZoomDialog() }
             override fun onRefresh() { webView.reload() }
             override fun onBack() { if (webView.canGoBack()) webView.goBack() else finish() }
             override fun onClose() { finish() }
@@ -352,6 +353,65 @@ class GameActivity : AppCompatActivity() {
                     9 -> resetAllKeySettings()
                 }
             }
+            .show()
+    }
+
+    /** 页面缩放调整对话框：自动 / 手动滑块 */
+    @androidx.annotation.SuppressLint("InflateParams")
+    private fun showPageZoomDialog() {
+        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val dialogView = android.view.LayoutInflater.from(this)
+            .inflate(R.layout.dialog_page_zoom, null)
+        val radioAuto = dialogView.findViewById<android.widget.RadioButton>(R.id.radioZoomAuto)
+        val radioManual = dialogView.findViewById<android.widget.RadioButton>(R.id.radioZoomManual)
+        val slider = dialogView.findViewById<android.widget.SeekBar>(R.id.zoomSlider)
+        val tvValue = dialogView.findViewById<android.widget.TextView>(R.id.tvZoomValue)
+
+        val mode = PrefsManager.pageZoomMode
+        val manual = PrefsManager.pageZoomManual
+
+        if (mode == "manual") {
+            radioManual.isChecked = true
+            slider.isEnabled = true
+            slider.progress = manual - 25  // 25~200 → 0~175
+        } else {
+            radioAuto.isChecked = true
+            slider.isEnabled = false
+            slider.progress = 40 - 25  // 默认 40%
+        }
+        tvValue.text = "${manual}%"
+
+        slider.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                val pct = progress + 25
+                tvValue.text = "$pct%"
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
+
+        radioAuto.setOnClickListener {
+            slider.isEnabled = false
+            sp.edit().putString("page_zoom_mode", "auto").apply()
+        }
+        radioManual.setOnClickListener {
+            slider.isEnabled = true
+            sp.edit().putString("page_zoom_mode", "manual").apply()
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("页面缩放")
+            .setView(dialogView)
+            .setPositiveButton("应用") { _, _ ->
+                val newMode = if (radioAuto.isChecked) "auto" else "manual"
+                val newManual = slider.progress + 25
+                sp.edit()
+                    .putString("page_zoom_mode", newMode)
+                    .putInt("page_zoom_manual", newManual)
+                    .apply()
+                webView.reload()
+            }
+            .setNegativeButton("取消", null)
             .show()
     }
 

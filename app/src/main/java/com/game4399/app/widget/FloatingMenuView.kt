@@ -45,6 +45,7 @@ class FloatingMenuView @JvmOverloads constructor(
         fun onToggleMouse()
         fun onOpenKeyMapping()
         fun onOpenFlashSettings()
+        fun onOpenPageZoom()
         fun onRefresh()
         fun onBack()
         fun onClose()
@@ -167,6 +168,7 @@ class FloatingMenuView @JvmOverloads constructor(
             MenuItem(context.getString(R.string.mouse_cursor), R.drawable.ic_mouse) { callbacks?.onToggleMouse() },
             MenuItem(context.getString(R.string.key_mapping), R.drawable.ic_key) { callbacks?.onOpenKeyMapping() },
             MenuItem("Flash 引擎", R.drawable.ic_key) { callbacks?.onOpenFlashSettings() },
+            MenuItem("页面缩放", R.drawable.ic_key) { callbacks?.onOpenPageZoom() },
             MenuItem(context.getString(R.string.refresh), R.drawable.ic_refresh) { callbacks?.onRefresh() },
             MenuItem(context.getString(R.string.back), R.drawable.ic_back) { callbacks?.onBack() },
             MenuItem(context.getString(R.string.close), R.drawable.ic_close) { callbacks?.onClose() }

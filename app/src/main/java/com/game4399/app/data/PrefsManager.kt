@@ -33,6 +33,9 @@ object PrefsManager {
 
     // ---- 手柄 ----
     val isGamepadEnabled: Boolean get() = sp.getBoolean("gamepad_enabled", true)
+    /** 页面缩放级别：25~200，0=自动适配 */
+    val pageZoom: Int
+        get() = sp.getInt("page_zoom", 0)
     /** 0~100 → 0~255 alpha */
     val gamepadAlpha: Int
         get() = ((sp.getInt("gamepad_opacity", 60) / 100f) * 255).toInt().coerceIn(40, 255)
@@ -51,6 +54,11 @@ object PrefsManager {
     /** 方向键绝对坐标 X（拖动模式保存的位置） */
     val dpadPosX: Float get() = sp.getFloat("dpad_pos_x", -1f)
     val dpadPosY: Float get() = sp.getFloat("dpad_pos_y", -1f)
+
+    /** 页面缩放模式：auto / manual */
+    val pageZoomMode: String get() = sp.getString("page_zoom_mode", "auto") ?: "auto"
+    /** 页面手动缩放比例（25~200，表示 25%~200%），默认 40 */
+    val pageZoomManual: Int get() = sp.getInt("page_zoom_manual", 40).coerceIn(25, 200)
     /** 动作按键水平偏移（像素），正值向右，默认 0 */
     val actionOffsetX: Int get() = sp.getInt("action_offset_x", 0)
     /** 动作按键垂直偏移（像素），正值向下，默认 0 */

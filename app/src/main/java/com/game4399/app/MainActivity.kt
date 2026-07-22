@@ -87,6 +87,9 @@ class MainActivity : AppCompatActivity() {
             override fun onOpenFlashSettings() {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
+            override fun onOpenPageZoom() {
+                startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+            }
             override fun onRefresh() {}
             override fun onBack() {
                 isFullscreen = false

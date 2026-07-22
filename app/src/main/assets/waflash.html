@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>WAFlash 播放器</title>
-<link rel="stylesheet" href="https://flash.local/waflash/waflash-style.css" />
+<link rel="stylesheet" href="./waflash/waflash-style.css" />
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
@@ -15,20 +15,39 @@
     color: #beb5f9; font-family: -apple-system, "Microsoft YaHei", sans-serif;
     font-size: 16px; text-align: center; z-index: 10;
   }
+  #debugLog {
+    position: fixed; bottom: 20px; left: 8px; right: 8px;
+    color: #0f0; font-family: monospace; font-size: 11px; z-index: 20;
+    max-height: 120px; overflow-y: auto; background: rgba(0,0,0,.7);
+    padding: 4px; border-radius: 4px; display: none;
+  }
   #hint {
-    position: fixed; bottom: 8px; left: 0; right: 0; text-align: center;
-    color: rgba(255,255,255,.4); font-size: 11px; z-index: 10;
+    position: fixed; bottom: 4px; left: 0; right: 0; text-align: center;
+    color: rgba(255,255,255,.3); font-size: 10px; z-index: 10;
   }
 </style>
 </head>
 <body>
   <div id="waflashContainer">
     <canvas class="waflashCanvas" id="canvas" tabindex="1"></canvas>
-    <div id="waflashStatus" style="display: none;">Loading...</div>
+    <div id="waflashStatus">Loading...</div>
   </div>
-  <div id="hint">WAFlash 引擎 · AS2/AS3 完整支持</div>
+  <div id="debugLog"></div>
+  <div id="hint">WAFlash · AS2/AS3</div>
 
   <script>
+    // 调试日志
+    var dbgEl = document.getElementById('debugLog');
+    var dbgVisible = false;
+    function dbg(msg) {
+      console.log('[WAF]', msg);
+      if (!dbgVisible) { dbgEl.style.display = 'block'; dbgVisible = true; }
+      dbgEl.innerHTML = msg + '<br>' + dbgEl.innerHTML;
+    }
+    window.addEventListener('error', function(e) {
+      dbg('ERROR: ' + (e.message || e.error || e));
+    });
+
     function param(name, def) {
       return new URLSearchParams(location.search).get(name) || def || '';
     }
@@ -36,49 +55,58 @@
     var TITLE = param('title') || 'Flash 游戏';
     document.title = TITLE;
 
-    // canvas 点击聚焦（键盘输入需要）
     var canvas = document.getElementById('canvas');
     canvas.addEventListener('click', function() { canvas.focus(); });
-    canvas.addEventListener('keydown', function(ev) { ev.preventDefault(); ev.stopPropagation(); });
+
+    dbg('SWF_URL=' + SWF_URL);
+    dbg('Page URL=' + location.href);
   </script>
 
-  <!-- WAFlash 入口：waflash-player.min.js 导出 createWaflash(swfUrl, options)
-       它内部 import waflash.min.js (Emscripten 模块) 并加载 waflash.wasm + waflash.data
-       使用 flash.local 虚拟域名，shouldInterceptRequest 从 assets 返回文件 -->
+  <!-- WAFlash 入口：使用相对路径加载
+       waflash-player.min.js 内部 import waflash.min.js (Emscripten)
+       然后 locateFile 加载 waflash.wasm + waflash.data
+       页面在 file:///android_asset/waflash.html，相对路径解析到 file:///android_asset/waflash/ -->
   <script type="module">
     const SWF_URL = new URLSearchParams(location.search).get('swf') || '';
-    const WAFLASH_BASE = 'https://flash.local/waflash/';
+    const statusEl = document.getElementById('waflashStatus');
 
-    // 动态 import waflash-player.min.js
-    import(WAFLASH_BASE + 'waflash-player.min.js').then(function(module) {
+    if (!SWF_URL) {
+      statusEl.textContent = '错误: 未指定 SWF URL';
+    }
+
+    dbg('开始加载 waflash-player.min.js...');
+
+    import('./waflash/waflash-player.min.js').then(function(module) {
+      dbg('waflash-player.min.js 加载成功');
+      dbg('module keys: ' + Object.keys(module).join(','));
+
       const createWaflash = module.createWaflash;
-      const statusEl = document.getElementById('waflashStatus');
-
-      statusEl.style.display = 'block';
-      statusEl.textContent = '正在加载 WAFlash 引擎...';
-
-      // createWaflash(swfUrl, options)
-      // swfUrl 为空时 createWaflash 会直接 return，所以必须确保有值
-      if (!SWF_URL) {
-        statusEl.textContent = '错误: 未指定 SWF URL';
+      if (!createWaflash) {
+        statusEl.textContent = '错误: createWaflash 未找到';
+        dbg('createWaflash not found! exports: ' + Object.keys(module).join(','));
         return;
       }
 
-      // 调用 createWaflash，传入 SWF URL 和选项
-      createWaflash(SWF_URL, {
-        gpu: true,           // 使用 WebGL 渲染
-        enableFilters: false  // 禁用滤镜（提升性能）
-      });
+      statusEl.style.display = 'block';
+      statusEl.textContent = '正在加载 WAFlash 引擎...';
+      dbg('调用 createWaflash("' + SWF_URL + '")');
 
-      console.log('[WAFlash] createWaflash called with: ' + SWF_URL);
+      // 调用 createWaflash，传入 SWF URL
+      try {
+        createWaflash(SWF_URL, {
+          gpu: true
+        });
+        dbg('createWaflash 已调用');
+      } catch(e) {
+        dbg('createWaflash 异常: ' + e.message);
+        statusEl.textContent = '加载失败: ' + e.message;
+      }
     }).catch(function(err) {
-      console.error('[WAFlash] module load failed:', err);
-      const statusEl = document.getElementById('waflashStatus');
-      statusEl.textContent = 'WAFlash 引擎加载失败: ' + (err.message || err);
+      dbg('waflash-player.min.js 加载失败: ' + (err.message || err));
+      statusEl.textContent = '引擎加载失败: ' + (err.message || err);
       statusEl.style.display = 'block';
     });
 
-    // 禁用长按选择 / 上下文菜单
     document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
     document.addEventListener('selectstart', function(e) { e.preventDefault(); });
   </script>
