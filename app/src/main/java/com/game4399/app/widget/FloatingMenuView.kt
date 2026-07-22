@@ -155,10 +155,14 @@ class FloatingMenuView @JvmOverloads constructor(
     }
 
     private fun showMenu() {
+        val isLandscape = resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val columns = if (isLandscape) 2 else 1
+
         val menuContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.bg_top_bar)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(6), dp(6), dp(6), dp(6))
         }
 
         val items = listOf(
@@ -174,25 +178,25 @@ class FloatingMenuView @JvmOverloads constructor(
             MenuItem(context.getString(R.string.close), R.drawable.ic_close) { callbacks?.onClose() }
         )
 
-        items.forEach { item ->
+        // 构建按钮视图
+        fun buildItemView(item: MenuItem): View {
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setPadding(dp(10), dp(8), dp(10), dp(8))
                 gravity = Gravity.CENTER_VERTICAL
                 isClickable = true
                 isFocusable = true
                 setBackgroundResource(R.drawable.bg_top_button)
             }
-            val icon = ImageButton(context).apply {
+            val icon = android.widget.ImageView(context).apply {
                 setImageResource(item.iconRes)
-                setBackgroundResource(android.R.color.transparent)
-                setPadding(0, 0, dp(8), 0)
-                (layoutParams as? MarginLayoutParams)?.let { it.width = dp(24); it.height = dp(24) }
+                setPadding(0, 0, dp(6), 0)
+                layoutParams = LinearLayout.LayoutParams(dp(20), dp(20))
             }
             val text = TextView(context).apply {
                 text = item.title
                 setTextColor(0xFFFFFFFF.toInt())
-                textSize = 14f
+                textSize = 13f
             }
             row.addView(icon)
             row.addView(text)
@@ -200,7 +204,31 @@ class FloatingMenuView @JvmOverloads constructor(
                 item.action()
                 popup?.dismiss()
             }
-            menuContainer.addView(row)
+            return row
+        }
+
+        if (columns == 1) {
+            // 竖屏：单列垂直排列
+            items.forEach { menuContainer.addView(buildItemView(it)) }
+        } else {
+            // 横屏：双列网格排列
+            var row: LinearLayout? = null
+            items.forEachIndexed { index, item ->
+                if (index % 2 == 0) {
+                    row = LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setPadding(0, 0, 0, 0)
+                    }
+                    menuContainer.addView(row)
+                }
+                val cell = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(4), dp(0), dp(4), dp(0))
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                cell.addView(buildItemView(item))
+                row?.addView(cell)
+            }
         }
 
         popup = PopupWindow(menuContainer, ViewGroup.LayoutParams.WRAP_CONTENT,
