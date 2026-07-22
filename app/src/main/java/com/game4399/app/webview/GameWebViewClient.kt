@@ -64,9 +64,7 @@ open class GameWebViewClient(
             return interceptAsset(view, assetPath)
         }
 
-        // 4. 拦截 SWF 文件请求：WAFlash 从 flash.local 页面用 fetch() 加载远程 SWF
-        //    会被 CORS/混合内容策略阻止，这里原生下载后带 CORS 头返回
-        //    支持 .swf 扩展名 + 4399 的 dw-XX 格式（非标准 SWF URL）
+        // 4. 拦截 SWF 文件请求
         val isSwfRequest = url.endsWith(".swf", ignoreCase = true) ||
             url.contains(".swf?", ignoreCase = true) ||
             (url.contains("4399.com") && (url.contains("/dw-") || url.contains("flash_tm3") || url.contains("flash20")))
@@ -74,7 +72,153 @@ open class GameWebViewClient(
             return interceptSwf(url)
         }
 
+        // 5. 拦截 4399 HTML 页面：注入 Flash 支持伪造脚本到 <head>
+        //    evaluateJavascript 是异步的，页面 JS 可能先执行导致检测失败
+        //    直接修改 HTML 保证脚本在页面 JS 之前运行
+        val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
+        if (isFlashPage && (url.contains("4399.com") || url.contains("flash.local.4399.com"))) {
+            return interceptHtml(view, url, request)
+        }
+
         return super.shouldInterceptRequest(view, request)
+    }
+
+    /** 拦截 HTML 页面，注入 Flash 伪造 + Ruffle 引擎到 <head> */
+    private fun interceptHtml(view: WebView, url: String, request: WebResourceRequest): WebResourceResponse? {
+        return try {
+            val response = super.shouldInterceptRequest(view, request) ?: return null
+            // 检查是否是 HTML
+            val contentType = response.mimeType ?: ""
+            if (!contentType.contains("text/html") && !contentType.contains("application/xhtml")) {
+                return response
+            }
+            // 读取 HTML 内容
+            val encoding = response.encoding ?: "UTF-8"
+            val html = response.data?.bufferedReader(Charsets.forName(encoding))?.readText() ?: return response
+
+            // 构建注入脚本
+            val injectScript = buildFlashInjectScript(url)
+
+            // 在 <head> 或 <html> 后注入（避免正则替换问题）
+            val modifiedHtml: String
+            val headIdx = html.indexOf("<head", ignoreCase = true)
+            if (headIdx >= 0) {
+                val tagEnd = html.indexOf(">", headIdx)
+                modifiedHtml = if (tagEnd >= 0) {
+                    html.substring(0, tagEnd + 1) + injectScript + html.substring(tagEnd + 1)
+                } else { injectScript + html }
+            } else {
+                val htmlIdx = html.indexOf("<html", ignoreCase = true)
+                modifiedHtml = if (htmlIdx >= 0) {
+                    val tagEnd = html.indexOf(">", htmlIdx)
+                    if (tagEnd >= 0) html.substring(0, tagEnd + 1) + injectScript + html.substring(tagEnd + 1)
+                    else injectScript + html
+                } else {
+                    injectScript + html
+                }
+            }
+
+            android.util.Log.d("GameWebViewClient", "HTML 注入成功: $url (${modifiedHtml.length} chars)")
+
+            WebResourceResponse(
+                "text/html", "UTF-8", 200, "OK",
+                mapOf("Access-Control-Allow-Origin" to "*"),
+                java.io.ByteArrayInputStream(modifiedHtml.toByteArray(Charsets.UTF_8))
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("GameWebViewClient", "HTML 注入失败: ${e.message}")
+            null
+        }
+    }
+
+    /** 构建 Flash 支持伪造 + Ruffle/WAFlash 注入脚本 */
+    private fun buildFlashInjectScript(pageUrl: String): String {
+        val isWaflash = PrefsManager.flashEngine == "waflash"
+        return """
+        <script>
+        (function(){
+          // === 1. 伪造 Flash 插件支持（必须在页面 JS 之前） ===
+          try {
+            var fp = {name:'Shockwave Flash',filename:'libflashplayer.so',description:'Shockwave Flash 32.0 r0',length:1,
+              0:{type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash'}};
+            var _plugins = navigator.plugins || {};
+            Object.defineProperty(navigator,'plugins',{get:function(){
+              if(!_plugins['Shockwave Flash']){try{_plugins['Shockwave Flash']=fp;_plugins[0]=fp;_plugins.length=1;}catch(e){}}
+              return _plugins;
+            },configurable:true});
+            var fm = {type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash',enabledPlugin:fp};
+            var _mimes = navigator.mimeTypes || {};
+            Object.defineProperty(navigator,'mimeTypes',{get:function(){
+              if(!_mimes['application/x-shockwave-flash']){try{_mimes['application/x-shockwave-flash']=fm;}catch(e){}}
+              return _mimes;
+            },configurable:true});
+            window.ActiveXObject = function(n){if(n&&/ShockwaveFlash/i.test(n))return {SetVariable:function(){},Variable:function(){return ''}};throw new Error('x');};
+          } catch(e) {}
+
+          // === 2. 伪造 document.referrer ===
+          try {
+            Object.defineProperty(document,'referrer',{get:function(){return 'https://www.4399.com/';},configurable:true});
+          } catch(e) {}
+
+          // === 3. Ruffle polyfill（Ruffle 模式） ===
+          ${if (!isWaflash) """
+          window.RufflePlayer = window.RufflePlayer || {};
+          window.RufflePlayer.config = {
+            autoplay: 'on',
+            unmuteOverlay: 'visible',
+            backgroundColor: '#000000',
+            letterbox: 'on',
+            polyfills: true
+          };
+          var ruffleScript = document.createElement('script');
+          ruffleScript.src = 'https://flash.local/ruffle/ruffle.js';
+          ruffleScript.onload = function() {
+            console.log('[Ruffle] 引擎加载完成');
+          };
+          document.head.appendChild(ruffleScript);
+          """ else """
+          // === WAFlash 模式：hook Flash 创建，跳转到 WAFlash 播放器 ===
+          var __wafRedirected = false;
+          function __wafRedirect(swfUrl, baseUrl) {
+            if (__wafRedirected || !swfUrl) return;
+            var isSwf = /\.swf/i.test(swfUrl) || /\/dw-\d+/i.test(swfUrl) ||
+                        /flash\d*\//i.test(swfUrl) || /mm\.4399\.com/i.test(swfUrl);
+            if (!isSwf) return;
+            __wafRedirected = true;
+            try { swfUrl = new URL(swfUrl, baseUrl || window.location.href).href; } catch(e) {}
+            console.log('[WAFlash] 检测到 SWF: ' + swfUrl);
+            if (window.Android && window.Android.openSwf) {
+              window.Android.openSwf(swfUrl, baseUrl || window.location.href);
+            } else {
+              window.location.href = 'https://flash.local/waflash.html?swf=' + encodeURIComponent(swfUrl);
+            }
+          }
+          // hook swfobject.embedSWF
+          if (window.swfobject && window.swfobject.embedSWF) {
+            var oe = window.swfobject.embedSWF;
+            window.swfobject.embedSWF = function(){__wafRedirect(arguments[0],window.location.href);return oe.apply(this,arguments);};
+          } else {
+            var _swo; Object.defineProperty(window,'swfobject',{configurable:true,get:function(){return _swo;},set:function(v){_swo=v;if(v&&v.embedSWF){var o=v.embedSWF;v.embedSWF=function(){__wafRedirect(arguments[0],window.location.href);return o.apply(this,arguments);};}}});
+          }
+          // hook createFlash (mflash-player)
+          function __hookCF(obj){if(!obj||!obj.createFlash||obj.__wafH)return;obj.__wafH=true;var o=obj.createFlash;obj.createFlash=function(){var u=null;if(typeof arguments[0]==='string')u=arguments[0];else if(arguments[0]&&typeof arguments[0]==='object')u=arguments[0].url||arguments[0].src||arguments[0].swf||arguments[0].movie;if(u)__wafRedirect(u,window.location.href);return o.apply(this,arguments);};}
+          if(window['mflash-player'])__hookCF(window['mflash-player']);
+          var _mp;Object.defineProperty(window,'mflash-player',{configurable:true,get:function(){return _mp;},set:function(v){_mp=v;__hookCF(v);}});
+          // hook AC_FL_RunContent
+          if(window.AC_FL_RunContent){var oAC=window.AC_FL_RunContent;window.AC_FL_RunContent=function(){var a=Array.prototype.slice.call(arguments);for(var i=0;i<a.length-1;i++){if((a[i]==='src'||a[i]==='movie')&&a[i+1])__wafRedirect(a[i+1],window.location.href);}return oAC.apply(this,arguments);};}
+          // DOM 检测
+          function __checkFlash(){
+            if(__wafRedirected)return;
+            var sel='object[type="application/x-shockwave-flash"],embed[type="application/x-shockwave-flash"],object[data$=".swf" i],embed[src$=".swf" i],object[classid*="D27CDB6E" i]';
+            var els=document.querySelectorAll(sel);
+            for(var i=0;i<els.length;i++){var s=els[i].getAttribute('data')||els[i].getAttribute('src')||'';if(!s){var ps=els[i].querySelectorAll('param[name="movie"],param[name="src"]');for(var j=0;j<ps.length;j++){var v=ps[j].getAttribute('value')||'';if(v){s=v;break;}}}if(s)__wafRedirect(s,window.location.href);}
+          }
+          __checkFlash();
+          if(window.MutationObserver){var mo=new MutationObserver(function(){if(__wafRedirected){mo.disconnect();return;}__checkFlash();});try{mo.observe(document.documentElement||document.body||document,{childList:true,subtree:true});}catch(e){}setTimeout(function(){mo.disconnect();},15000);}
+          """}
+        })();
+        </script>
+        """.trimIndent()
     }
 
     /** 原生下载 SWF 文件，返回带 CORS 头的响应（含重试） */
