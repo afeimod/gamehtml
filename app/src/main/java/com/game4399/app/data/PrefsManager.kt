@@ -107,8 +107,10 @@ object PrefsManager {
     val mousePosY: Float get() = sp.getFloat("mouse_pos_y", -1f)
 
     // ---- Flash 引擎 ----
-    /** Flash 引擎：ruffle / swf2js */
+    /** Flash 引擎：ruffle / swf2js / waflash */
     val flashEngine: String get() = sp.getString("flash_engine", "ruffle") ?: "ruffle"
+    /** UA 模式：desktop / ie_compat / mobile */
+    val uaMode: String get() = sp.getString("ua_mode", "desktop") ?: "desktop"
     /** 兼容旧设置 */
     val gamepadAKey: String get() = sp.getString("gamepad_a_key", "SPACE") ?: "SPACE"
     val gamepadBKey: String get() = sp.getString("gamepad_b_key", "ENTER") ?: "ENTER"

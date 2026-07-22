@@ -77,43 +77,52 @@ open class GameWebViewClient(
         return super.shouldInterceptRequest(view, request)
     }
 
-    /** 原生下载 SWF 文件，返回带 CORS 头的响应 */
+    /** 原生下载 SWF 文件，返回带 CORS 头的响应（含重试） */
     private fun interceptSwf(url: String): WebResourceResponse? {
-        return try {
-            android.util.Log.d("GameWebViewClient", "拦截 SWF 请求: $url")
-            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 15000
-            conn.readTimeout = 15000
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            // 设置 Referer 为 4399 主站，绕过防盗链
-            if (url.contains("4399.com")) {
-                conn.setRequestProperty("Referer", "https://www.4399.com/")
+        var lastError: Exception? = null
+        for (attempt in 1..3) {
+            try {
+                android.util.Log.d("GameWebViewClient", "拦截 SWF 请求 (尝试 $attempt): $url")
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 10000
+                conn.readTimeout = 20000
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                if (url.contains("4399.com")) {
+                    conn.setRequestProperty("Referer", "https://www.4399.com/")
+                }
+                conn.instanceFollowRedirects = true
+                conn.connect()
+                val responseCode = conn.responseCode
+                if (responseCode in 200..299) {
+                    val data = conn.inputStream.readBytes()
+                    android.util.Log.d("GameWebViewClient", "SWF 下载完成: ${data.size} bytes")
+                    val headers = mapOf(
+                        "Access-Control-Allow-Origin" to "*",
+                        "Content-Type" to "application/x-shockwave-flash",
+                        "Cache-Control" to "no-cache"
+                    )
+                    return WebResourceResponse(
+                        "application/x-shockwave-flash", null,
+                        200, "OK", headers,
+                        java.io.ByteArrayInputStream(data)
+                    )
+                } else if (responseCode in 500..599 && attempt < 3) {
+                    android.util.Log.w("GameWebViewClient", "SWF 服务器错误 $responseCode, 重试...")
+                    Thread.sleep(500L * attempt)
+                    continue
+                } else {
+                    android.util.Log.w("GameWebViewClient", "SWF 下载失败: HTTP $responseCode")
+                    return null
+                }
+            } catch (e: Exception) {
+                lastError = e
+                android.util.Log.w("GameWebViewClient", "SWF 下载异常 (尝试 $attempt): ${e.message}")
+                if (attempt < 3) Thread.sleep(500L * attempt)
             }
-            conn.instanceFollowRedirects = true
-            conn.connect()
-            val responseCode = conn.responseCode
-            if (responseCode in 200..299) {
-                val data = conn.inputStream.readBytes()
-                android.util.Log.d("GameWebViewClient", "SWF 下载完成: ${data.size} bytes")
-                val headers = mapOf(
-                    "Access-Control-Allow-Origin" to "*",
-                    "Content-Type" to "application/x-shockwave-flash",
-                    "Cache-Control" to "no-cache"
-                )
-                WebResourceResponse(
-                    "application/x-shockwave-flash", null,
-                    200, "OK", headers,
-                    java.io.ByteArrayInputStream(data)
-                )
-            } else {
-                android.util.Log.w("GameWebViewClient", "SWF 下载失败: HTTP $responseCode")
-                null
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("GameWebViewClient", "SWF 下载异常: ${e.message}", e)
-            null
         }
+        android.util.Log.e("GameWebViewClient", "SWF 下载最终失败: ${lastError?.message}")
+        return null
     }
 
     /** 从 assets 读取文件并返回带 CORS 头的 WebResourceResponse */
@@ -143,9 +152,13 @@ open class GameWebViewClient(
         super.onPageStarted(view, url, favicon)
         callback.onPageStarted(url)
 
-        // 4399 页面：伪造 document.referrer 绕过防盗链检测
+        // 4399 页面：伪造 document.referrer 绕过防盗链检测 + IE 兼容模式伪造
         if (url != null && url.contains("4399.com")) {
             view?.evaluateJavascript(REFERER_SPOOF_SCRIPT, null)
+            // IE 兼容模式：伪造 IE 特有属性让 4399 检测为 IE 浏览器
+            if (PrefsManager.uaMode == "ie_compat") {
+                view?.evaluateJavascript(IE_COMPAT_SCRIPT, null)
+            }
         }
 
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
@@ -266,6 +279,37 @@ open class GameWebViewClient(
                   get: function() { return 'https://www.4399.com/'; },
                   configurable: true
                 });
+              } catch(e) {}
+            })();
+        """
+
+        /** IE 兼容模式伪造：4399 检测 IE 特有属性来判断兼容模式 */
+        private const val IE_COMPAT_SCRIPT = """
+            (function(){
+              try {
+                // 伪造 IE 的 documentMode（IE 独有属性）
+                Object.defineProperty(document, 'documentMode', {
+                  get: function() { return 11; }, configurable: true
+                });
+                // 伪造 IE 的 uniqueID
+                Object.defineProperty(document, 'uniqueID', {
+                  get: function() { return '_ie_id_'; }, configurable: true
+                });
+                // 伪造 IE 的 all 集合
+                if (!document.all) {
+                  document.all = document.getElementsByTagName('*');
+                }
+                // 伪装 navigator.userAgent 中含 Trident
+                var origUA = navigator.userAgent;
+                if (!/Trident/.test(origUA)) {
+                  try {
+                    Object.defineProperty(navigator, 'userAgent', {
+                      get: function() {
+                        return origUA + ' Trident/7.0; rv:11.0';
+                      }, configurable: true
+                    });
+                  } catch(e) {}
+                }
               } catch(e) {}
             })();
         """

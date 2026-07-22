@@ -87,6 +87,20 @@ open class GameWebView @JvmOverloads constructor(
         settings.userAgentString = if (enabled) DESKTOP_UA else "$mobileUa 4399App/1.0 (Android)"
     }
 
+    /**
+     * 设置 UA 模式：
+     * - "desktop": Windows Chrome UA
+     * - "ie_compat": IE11 兼容模式 UA（Trident/7.0）
+     * - 其他: 默认移动版 UA
+     */
+    fun useUaMode(mode: String) {
+        settings.userAgentString = when (mode) {
+            "desktop" -> DESKTOP_UA
+            "ie_compat" -> IE_COMPAT_UA
+            else -> "$mobileUa 4399App/1.0 (Android)"
+        }
+    }
+
     // ---------------- 触屏 ----------------
     override fun onTouchEvent(event: MotionEvent): Boolean {
         gestureDetector.onTouchEvent(event)
@@ -240,6 +254,9 @@ open class GameWebView @JvmOverloads constructor(
     companion object {
         /** 桌面版 Chrome UA（Windows），不含 Mobile/Android，4399 据此返回 PC 版页面 */
         const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+        /** IE11 兼容模式 UA（Trident/7.0），4399 部分页面需要此 UA 才能正常加载 */
+        const val IE_COMPAT_UA = "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko"
 
         /** 游戏常用按键白名单 */
         val GAME_KEYS = intArrayOf(

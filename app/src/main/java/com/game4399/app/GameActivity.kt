@@ -107,12 +107,16 @@ class GameActivity : AppCompatActivity() {
             webChromeClient = object : GameWebChromeClient(chromeCallback) {}
             webViewClient = object : GameWebViewClient(viewClientCallback) {}
 
-            // PC Flash 页面（www.4399.com/flash/）使用桌面 UA，确保 4399 返回电脑版网页
-            // H5 游戏（h.4399.com）和手机版页面保持移动 UA
-            val isPcPage = currentUrl.contains("www.4399.com") ||
-                currentType == GameType.FLASH ||
-                currentUrl.contains("/flash/")
-            useDesktopMode(isPcPage)
+            // UA 模式：优先使用用户设置，否则根据页面类型自动选择
+            val uaMode = PrefsManager.uaMode
+            if (uaMode == "ie_compat") {
+                webView.useUaMode("ie_compat")
+            } else {
+                val isPcPage = currentUrl.contains("www.4399.com") ||
+                    currentType == GameType.FLASH ||
+                    currentUrl.contains("/flash/")
+                useDesktopMode(isPcPage)
+            }
         }
     }
 
@@ -121,6 +125,12 @@ class GameActivity : AppCompatActivity() {
             binding.progressBar.apply {
                 visibility = if (progress in 1..99) View.VISIBLE else View.GONE
                 this.progress = progress
+            }
+            // 进度到 80% 就隐藏加载遮罩，部分 Flash 页面因长轮询永远到不了 100%
+            if (progress >= 80) {
+                binding.loadingOverlay.visibility = View.GONE
+            } else if (progress in 1..79) {
+                binding.loadingOverlay.visibility = View.VISIBLE
             }
         }
         override fun onTitle(title: String?) {
@@ -280,6 +290,7 @@ class GameActivity : AppCompatActivity() {
             override fun onOpenKeyMapping() { openKeyMappingDialog() }
             override fun onOpenFlashSettings() { showFlashEnginePicker() }
             override fun onOpenPageZoom() { showPageZoomDialog() }
+            override fun onOpenUaMode() { showUaModeDialog() }
             override fun onRefresh() { webView.reload() }
             override fun onBack() { if (webView.canGoBack()) webView.goBack() else finish() }
             override fun onClose() { finish() }
@@ -413,6 +424,26 @@ class GameActivity : AppCompatActivity() {
                     .putString("page_zoom_mode", newMode)
                     .putInt("page_zoom_manual", newManual)
                     .apply()
+                webView.reload()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** UA 兼容模式切换：桌面 Chrome / IE11 兼容 / 移动版 */
+    private fun showUaModeDialog() {
+        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val modes = arrayOf("desktop" to "桌面模式 (Chrome)", "ie_compat" to "兼容模式 (IE11)", "mobile" to "移动模式")
+        val current = PrefsManager.uaMode
+        val checked = modes.indexOfFirst { it.first == current }.coerceAtLeast(0)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("浏览器兼容模式")
+            .setSingleChoiceItems(modes.map { it.second }.toTypedArray(), checked) { dialog, which ->
+                val mode = modes[which].first
+                sp.edit().putString("ua_mode", mode).apply()
+                webView.useUaMode(mode)
+                dialog.dismiss()
                 webView.reload()
             }
             .setNegativeButton("取消", null)
