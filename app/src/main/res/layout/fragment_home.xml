@@ -63,13 +63,31 @@
                 app:rowCount="2"
                 app:orientation="horizontal" />
 
-            <!-- 经典怀旧 -->
-            <TextView
-                style="@style/TextAppearance.Title"
-                android:layout_width="wrap_content"
+            <!-- 本地 SWF -->
+            <LinearLayout
+                xmlns:app="http://schemas.android.com/apk/res-auto"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_xl"
-                android:text="经典怀旧 Flash" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    style="@style/TextAppearance.Title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="本地 SWF" />
+
+                <ImageButton
+                    android:id="@+id/btnAddSwf"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_input_add"
+                    android:contentDescription="添加本地 SWF"
+                    app:tint="?attr/colorPrimary" />
+            </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/classicList"
