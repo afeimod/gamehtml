@@ -41,7 +41,7 @@
     var SWF_URL    = param('swf');
     var BASE_URL   = param('base');
     var TITLE      = param('title') || 'Flash 游戏';
-    var ENGINE     = param('engine', 'ruffle');  // ruffle / swf2js
+    var ENGINE     = param('engine', 'ruffle');  // ruffle
     var CDN_URL    = param('cdn', '');
     var CDN_PATH   = param('path', '');
     var AUTOPLAY   = param('autoplay', 'on');
@@ -50,120 +50,71 @@
     var loadText = document.getElementById('loadText');
     var stage = document.getElementById('stage');
 
-    // 根据引擎选择加载方式
-    if (ENGINE === 'swf2js') {
-      // ===== swf2js 引擎 =====
-      loadText.textContent = '正在加载 swf2js 引擎…';
-      var swf2jsUrl = CDN_URL || 'https://flash.local/swf2js/swf2js.js';
-      var s2 = document.createElement('script');
-      s2.src = swf2jsUrl;
-      s2.async = true;
-      s2.onload = function () {
-        loadText.textContent = '正在加载游戏: ' + TITLE;
-        try {
-          // 设置 base 标签，SWF 内部相对路径以原始页面 URL 为 base
-          if (BASE_URL) {
-            try {
-              var baseObj = new URL(BASE_URL);
-              var baseTag = document.createElement('base');
-              baseTag.href = baseObj.origin + baseObj.pathname.substring(0, baseObj.pathname.lastIndexOf('/') + 1);
-              document.head.appendChild(baseTag);
-              console.log('[swf2js] base: ' + baseTag.href);
-            } catch(e) {}
-          }
-          var container = document.createElement('div');
-          container.style.cssText = 'width:100%;height:100%;position:relative;';
-          stage.appendChild(container);
-          console.log('[swf2js] loading: ' + SWF_URL);
-          swf2js.load(SWF_URL, { tag: container });
-          document.getElementById('loading').style.display = 'none';
-        } catch (e) {
-          loadText.textContent = '加载失败: ' + e.message;
-          console.error('[swf2js]', e);
-        }
-      };
-      s2.onerror = function () {
-        loadText.textContent = 'swf2js 引擎加载失败';
-      };
-      document.head.appendChild(s2);
+    // ===== Ruffle 引擎 =====
+    loadText.textContent = '正在加载 Ruffle 引擎…';
 
-    } else {
-      // ===== Ruffle 引擎 =====
-      loadText.textContent = '正在加载 Ruffle 引擎…';
+    var ruffleUrl = CDN_URL || 'https://flash.local/ruffle/ruffle.js';
+    var rufflePath = CDN_PATH || 'https://flash.local/ruffle/';
 
-      var ruffleUrl = CDN_URL || 'https://flash.local/ruffle/ruffle.js';
-      var rufflePath = CDN_PATH || 'https://flash.local/ruffle/';
+    // 1) 预置 Ruffle 配置（必须早于 ruffle.js）
+    window.RufflePlayer = window.RufflePlayer || {};
+    window.RufflePlayer.config = {
+      "publicPath": rufflePath,
+      "polyfills": true,
+      "autoplay": AUTOPLAY,
+      "unmuteOverlay": "visible",
+      "letterbox": "fullscreen",
+      "upgradeToHttps": true,
+      "allowScriptAccess": true,
+      "scale": "showAll",
+      "quality": "high",
+      "allowFullscreen": true,
+      "splashScreen": true,
+      "preloader": true,
+      "logLevel": "warn",
+      "maxExecutionDuration": 30
+    };
 
-      // 1) 预置 Ruffle 配置（必须早于 ruffle.js）
-      window.RufflePlayer = window.RufflePlayer || {};
-      window.RufflePlayer.config = {
-        "publicPath": rufflePath,
-        "polyfills": true,
-        "autoplay": AUTOPLAY,
-        "unmuteOverlay": "visible",
-        "letterbox": "fullscreen",
-        "upgradeToHttps": true,
-        "allowScriptAccess": true,
-        "scale": "showAll",
-        "quality": "high",
-        "allowFullscreen": true,
-        "splashScreen": true,
-        "preloader": true,
-        "logLevel": "warn",
-        "maxExecutionDuration": 30
-      };
-
-      // 2) 动态加载 Ruffle
-      var s = document.createElement('script');
-      s.src = ruffleUrl;
-      s.async = true;
-      s.onload = function () {
-        loadText.textContent = '正在加载游戏: ' + TITLE;
-        try {
-          var ruffle = window.RufflePlayer.newest();
-          var player = ruffle.createPlayer();
-          stage.appendChild(player);
-          player.style.width = '100%';
-          player.style.height = '100%';
-          player.style.display = 'block';
-          var opt = { url: SWF_URL, allowScriptAccess: true };
-          if (BASE_URL) opt.base = BASE_URL;
-          player.ruffle().load(opt);
-          document.getElementById('loading').style.display = 'none';
-        } catch (e) {
-          loadText.textContent = '加载失败: ' + e.message;
-          console.error(e);
-        }
-      };
-      s.onerror = function () {
-        loadText.textContent = 'Ruffle 引擎加载失败，请检查网络';
-      };
-      document.head.appendChild(s);
-    }
+    // 2) 动态加载 Ruffle
+    var s = document.createElement('script');
+    s.src = ruffleUrl;
+    s.async = true;
+    s.onload = function () {
+      loadText.textContent = '正在加载游戏: ' + TITLE;
+      try {
+        var ruffle = window.RufflePlayer.newest();
+        var player = ruffle.createPlayer();
+        stage.appendChild(player);
+        player.style.width = '100%';
+        player.style.height = '100%';
+        player.style.display = 'block';
+        var opt = { url: SWF_URL, allowScriptAccess: true };
+        if (BASE_URL) opt.base = BASE_URL;
+        player.ruffle().load(opt);
+        document.getElementById('loading').style.display = 'none';
+      } catch (e) {
+        loadText.textContent = '加载失败: ' + e.message;
+        console.error(e);
+      }
+    };
+    s.onerror = function () {
+      loadText.textContent = 'Ruffle 引擎加载失败，请检查网络';
+    };
+    document.head.appendChild(s);
 
     // 暴露给 Android 调用的播放接口
     window.__playSwf = function(url, base) {
-      if (ENGINE === 'swf2js') {
-        try {
-          var c = document.createElement('div');
-          c.style.cssText = 'width:100%;height:100%;position:relative;';
-          stage.innerHTML = '';
-          stage.appendChild(c);
-          swf2js.load(url, { tag: c });
-        } catch(e) { console.error(e); }
-      } else {
-        try {
-          var ruffle = window.RufflePlayer.newest();
-          var player = ruffle.createPlayer();
-          stage.innerHTML = '';
-          stage.appendChild(player);
-          player.style.width = '100%';
-          player.style.height = '100%';
-          var opt = { url: url, allowScriptAccess: true };
-          if (base) opt.base = base;
-          player.ruffle().load(opt);
-        } catch(e) { console.error(e); }
-      }
+      try {
+        var ruffle = window.RufflePlayer.newest();
+        var player = ruffle.createPlayer();
+        stage.innerHTML = '';
+        stage.appendChild(player);
+        player.style.width = '100%';
+        player.style.height = '100%';
+        var opt = { url: url, allowScriptAccess: true };
+        if (base) opt.base = base;
+        player.ruffle().load(opt);
+      } catch(e) { console.error(e); }
     };
 
     // 禁用长按选择 / 上下文菜单 / 缩放
