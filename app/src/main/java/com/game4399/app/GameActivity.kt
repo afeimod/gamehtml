@@ -198,8 +198,12 @@ class GameActivity : AppCompatActivity() {
 
     private fun loadGame(url: String, title: String, type: GameType) {
         currentUrl = url; currentTitle = title; currentType = type
-        // SWF 直链 → 内置播放器
-        if (NavHelper.isSwf(url)) {
+        // 本地 SWF 文件 → WAFlash 播放器
+        if (type == GameType.LOCAL_SWF || NavHelper.isLocalFile(url)) {
+            val playerUrl = NavHelper.playerUrl(url, base = null, title = title)
+            webView.loadUrl(playerUrl)
+        } else if (NavHelper.isSwf(url)) {
+            // 远程 SWF 直链 → 内置播放器
             val playerUrl = NavHelper.playerUrl(url, base = null, title = title)
             webView.loadUrl(playerUrl)
         } else if (url.contains("4399.com")) {
