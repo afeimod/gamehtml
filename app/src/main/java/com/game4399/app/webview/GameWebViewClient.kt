@@ -180,6 +180,43 @@ open class GameWebViewClient(
             Object.defineProperty(document,'referrer',{get:function(){return 'https://www.4399.com/';},configurable:true});
           } catch(e) {}
 
+          // === 2.5 自动关闭 4399 "不支持 Flash" 弹窗 ===
+          //     4399 检测到"无 Flash 插件"会弹出模态框，自动点击关闭按钮
+          (function(){
+            function closeFlashDialog() {
+              // 方式1：点击弹窗的关闭按钮（X）
+              var closeBtns = document.querySelectorAll('.close, .dialog-close, .modal-close, [class*="close"][onclick*="close"], [class*="Close"]');
+              closeBtns.forEach(function(btn){ try{ btn.click(); }catch(e){} });
+              // 方式2：隐藏包含"不支持"或"Flash官方插件"文字的弹窗
+              var allDivs = document.querySelectorAll('div, section, aside');
+              for (var i = 0; i < allDivs.length; i++) {
+                var el = allDivs[i];
+                if (el.children.length > 0 && el.children.length < 30) {
+                  var text = el.textContent || '';
+                  if ((text.indexOf('不支持') >= 0 || text.indexOf('Flash官方插件') >= 0 ||
+                       text.indexOf('兼容模式') >= 0 || text.indexOf('继续游戏') >= 0) &&
+                      text.length < 500) {
+                    el.style.display = 'none';
+                    console.log('[Flash] 已关闭不支持Flash弹窗');
+                  }
+                }
+              }
+              // 方式3：移除遮罩层
+              var masks = document.querySelectorAll('.mask, .overlay, .modal-mask, [class*="mask"], [class*="overlay"]');
+              masks.forEach(function(m){ m.style.display = 'none'; });
+            }
+            // 立即检查一次
+            setTimeout(closeFlashDialog, 500);
+            setTimeout(closeFlashDialog, 1500);
+            setTimeout(closeFlashDialog, 3000);
+            // 持续监控
+            if (window.MutationObserver) {
+              var obs = new MutationObserver(function(){ closeFlashDialog(); });
+              try { obs.observe(document.documentElement, {childList:true, subtree:true}); } catch(e){}
+              setTimeout(function(){ obs.disconnect(); }, 10000);
+            }
+          })();
+
           // === 3. Ruffle polyfill（Ruffle 模式） ===
           ${if (!isWaflash) """
           window.RufflePlayer = window.RufflePlayer || {};
