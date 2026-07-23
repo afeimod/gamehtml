@@ -241,7 +241,7 @@ open class GameWebViewClient(
         """.trimIndent()
     }
 
-    /** 原生下载 SWF 文件，返回带 CORS 头的响应（含重试） */
+    /** 原生下载 SWF 文件，返回带 CORS 头的响应（含重试 + SSL 兼容 + CORS 兜底） */
     private fun interceptSwf(url: String): WebResourceResponse? {
         // HTTP → HTTPS 升级，避免混合内容和重定向问题
         val swfUrl = if (url.startsWith("http://")) "https://" + url.substring(7) else url
@@ -250,10 +250,16 @@ open class GameWebViewClient(
             try {
                 android.util.Log.d("GameWebViewClient", "拦截 SWF 请求 (尝试 $attempt): $swfUrl")
                 val conn = java.net.URL(swfUrl).openConnection() as java.net.HttpURLConnection
+                // HTTPS: 信任所有证书，防止 SSL 握手失败导致 SWF 下载不了
+                if (conn is javax.net.ssl.HttpsURLConnection) {
+                    conn.sslSocketFactory = trustAllSslSocketFactory()
+                    conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                }
                 conn.connectTimeout = 10000
                 conn.readTimeout = 20000
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                conn.setRequestProperty("Accept", "*/*")
                 if (swfUrl.contains("4399.com")) {
                     conn.setRequestProperty("Referer", "https://www.4399.com/")
                 }
@@ -262,7 +268,7 @@ open class GameWebViewClient(
                 val responseCode = conn.responseCode
                 if (responseCode in 200..299) {
                     val data = conn.inputStream.readBytes()
-                    android.util.Log.d("GameWebViewClient", "SWF 下载完成: ${data.size} bytes")
+                    android.util.Log.d("GameWebViewClient", "SWF 下载完成: ${data.size} bytes, URL=$swfUrl")
                     val headers = mapOf(
                         "Access-Control-Allow-Origin" to "*",
                         "Content-Type" to "application/x-shockwave-flash",
@@ -278,8 +284,8 @@ open class GameWebViewClient(
                     Thread.sleep(500L * attempt)
                     continue
                 } else {
-                    android.util.Log.w("GameWebViewClient", "SWF 下载失败: HTTP $responseCode")
-                    return null
+                    android.util.Log.w("GameWebViewClient", "SWF 下载失败: HTTP $responseCode, URL=$swfUrl")
+                    lastError = RuntimeException("HTTP $responseCode")
                 }
             } catch (e: Exception) {
                 lastError = e
@@ -287,8 +293,34 @@ open class GameWebViewClient(
                 if (attempt < 3) Thread.sleep(500L * attempt)
             }
         }
-        android.util.Log.e("GameWebViewClient", "SWF 下载最终失败: ${lastError?.message}")
-        return null
+        android.util.Log.e("GameWebViewClient", "SWF 下载最终失败: ${lastError?.message}, URL=$swfUrl")
+        // 不返回 null！返回带 CORS 头的空响应，让 WAFlash 知道请求被处理但数据为空
+        // 这样 WAFlash 会报错而不是无限等待
+        return WebResourceResponse(
+            "application/x-shockwave-flash", null,
+            404, "Not Found",
+            mapOf("Access-Control-Allow-Origin" to "*"),
+            java.io.ByteArrayInputStream(ByteArray(0))
+        )
+    }
+
+    /** 信任所有 SSL 证书的 SSLSocketFactory（用于 SWF 下载兼容） */
+    @Volatile private var _sslFactory: javax.net.ssl.SSLSocketFactory? = null
+    private fun trustAllSslSocketFactory(): javax.net.ssl.SSLSocketFactory {
+        return _sslFactory ?: synchronized(this) {
+            _sslFactory ?: try {
+                val tm = object : javax.net.ssl.X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                    override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+                }
+                val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
+                ctx.init(null, arrayOf(tm), java.security.SecureRandom())
+                ctx.socketFactory
+            } catch (e: Exception) {
+                javax.net.ssl.HttpsURLConnection.getDefaultSSLSocketFactory()
+            }.also { _sslFactory = it }
+        }
     }
 
     /** 从 assets 读取文件并返回带 CORS 头的 WebResourceResponse */
