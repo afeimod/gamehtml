@@ -184,9 +184,12 @@ class GameActivity : AppCompatActivity() {
         override fun shouldInjectRuffle(url: String?): Boolean {
             if (url == null) return false
             if (url.startsWith("file:///android_asset/player.html")) return false
-            if (url.startsWith("file:///android_asset/waflash.html")) return false
+            if (url.startsWith("file:///android_asset/player.html")) return false
+            if (url.startsWith("https://flash.local/player.html")) return false
             if (url.startsWith("https://flash.local/waflash.html")) return false
             if (url.startsWith("https://flash.local/waflash/")) return false
+            if (url.startsWith("https://flash.local/ruffle/")) return false
+            if (url.startsWith("https://flash.local/swf2js/")) return false
             // 4399 Flash 游戏页 + 4399 自己的 Flash 播放器页面
             return (url.contains("4399.com") && (url.contains("/flash/") || url.contains("flash.local.4399.com") || url.contains("flash_tm3")))
         }
