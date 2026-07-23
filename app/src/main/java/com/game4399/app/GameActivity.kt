@@ -460,17 +460,16 @@ class GameActivity : AppCompatActivity() {
         val engines = arrayOf(
             "Ruffle 最新版 (推荐, AS1/2/3 全面支持)",
             "WAFlash (AS2/AS3 完整支持, Canvas渲染)",
-            "swf2js (仅 AS1/2, 作为备选)",
             "关闭 Flash"
         )
-        val values = arrayOf("ruffle", "waflash", "swf2js", "off")
+        val values = arrayOf("ruffle", "waflash", "off")
         val current = if (PrefsManager.isFlashEnabled) PrefsManager.flashEngine else "off"
         val checked = values.indexOf(current).coerceAtLeast(0)
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Flash 引擎")
             .setSingleChoiceItems(engines, checked) { dialog, which ->
-                if (which == 3) {
-                    // "关闭 Flash" 是索引 3
+                if (which == 2) {
+                    // "关闭 Flash" 是索引 2
                     sp.edit().putBoolean("flash_enabled", false).apply()
                     Toast.makeText(this, "Flash 已关闭", Toast.LENGTH_SHORT).show()
                 } else {
@@ -609,6 +608,8 @@ class GameActivity : AppCompatActivity() {
             .setTitle(title)
             .setSingleChoiceItems(displayList, checked) { dialog, which ->
                 sp.edit().putString(prefKey, fullKeyList[which]).apply()
+                // 刷新按键视图
+                binding.actionButtons.invalidate()
                 Toast.makeText(this, "$title → ${fullKeyList[which]}", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
             }
@@ -621,6 +622,8 @@ class GameActivity : AppCompatActivity() {
         val current = PrefsManager.dpadMode
         val newMode = if (current == "wasd") "dpad" else "wasd"
         sp.edit().putString("dpad_mode", newMode).apply()
+        // 刷新方向键视图
+        binding.dpad.invalidate()
         Toast.makeText(this, "方向键已切换为 ${if (newMode == "wasd") "WASD" else "DPAD"}", Toast.LENGTH_SHORT).show()
     }
 
@@ -676,6 +679,11 @@ class GameActivity : AppCompatActivity() {
                 sp.edit().putBoolean(prefKeys[which], isChecked).apply()
             }
             .setPositiveButton("确定") { _, _ ->
+                // 刷新所有手柄视图
+                binding.dpad.invalidate()
+                binding.actionButtons.invalidate()
+                binding.systemButtons.invalidate()
+                showGamepad(gamepadVisible)
                 Toast.makeText(this, "按键显示已更新", Toast.LENGTH_SHORT).show()
             }
             .show()
@@ -702,6 +710,11 @@ class GameActivity : AppCompatActivity() {
             .putBoolean("flash_enabled", true).putString("flash_engine", "ruffle")
             .apply()
         binding.mouseControl.visibility = View.GONE
+        // 刷新所有手柄视图
+        binding.dpad.invalidate()
+        binding.actionButtons.invalidate()
+        binding.systemButtons.invalidate()
+        showGamepad(gamepadVisible)
         Toast.makeText(this, "已恢复全部默认设置", Toast.LENGTH_SHORT).show()
     }
 
@@ -774,6 +787,13 @@ class GameActivity : AppCompatActivity() {
         webView.onResume()
         // 横竖屏切换或从后台返回后重新隐藏系统栏
         applyImmersiveFullscreen()
+        // 刷新手柄视图（从设置页面返回后恢复最新配置）
+        binding.dpad.invalidate()
+        binding.actionButtons.invalidate()
+        if (PrefsManager.isGamepadEnabled && !gamepadVisible) {
+            gamepadVisible = true
+            showGamepad(true)
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
