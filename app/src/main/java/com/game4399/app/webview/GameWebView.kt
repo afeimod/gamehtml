@@ -60,7 +60,7 @@ open class GameWebView @JvmOverloads constructor(
         loadWithOverviewMode = true
         useWideViewPort = true
         cacheMode = WebSettings.LOAD_DEFAULT
-        mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         // 双指缩放：PC 网页内容通常较宽，需要缩放查看
         setSupportZoom(true)
         builtInZoomControls = true
