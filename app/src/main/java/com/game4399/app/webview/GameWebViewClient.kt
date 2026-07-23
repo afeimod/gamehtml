@@ -181,39 +181,72 @@ open class GameWebViewClient(
           } catch(e) {}
 
           // === 2.5 自动关闭 4399 "不支持 Flash" 弹窗 ===
-          //     4399 检测到"无 Flash 插件"会弹出模态框，自动点击关闭按钮
+          //     4399 检测到"无 Flash 插件"会弹出模态框，自动关闭
           (function(){
-            function closeFlashDialog() {
-              // 方式1：点击弹窗的关闭按钮（X）
-              var closeBtns = document.querySelectorAll('.close, .dialog-close, .modal-close, [class*="close"][onclick*="close"], [class*="Close"]');
-              closeBtns.forEach(function(btn){ try{ btn.click(); }catch(e){} });
-              // 方式2：隐藏包含"不支持"或"Flash官方插件"文字的弹窗
-              var allDivs = document.querySelectorAll('div, section, aside');
-              for (var i = 0; i < allDivs.length; i++) {
-                var el = allDivs[i];
-                if (el.children.length > 0 && el.children.length < 30) {
-                  var text = el.textContent || '';
-                  if ((text.indexOf('不支持') >= 0 || text.indexOf('Flash官方插件') >= 0 ||
-                       text.indexOf('兼容模式') >= 0 || text.indexOf('继续游戏') >= 0) &&
-                      text.length < 500) {
-                    el.style.display = 'none';
-                    console.log('[Flash] 已关闭不支持Flash弹窗');
+            var flashKeywords = ['不支持打开游戏', 'Flash官方插件', '兼容模式', '继续游戏',
+              '不支持flash', '极速模式', 'QQ浏览器', '搜狗浏览器', '360浏览器',
+              'EDGE浏览器请按教程', '无需下载插件打开即玩', '为您提供以下方案'];
+            function closeInDoc(doc) {
+              if (!doc) return;
+              try {
+                // 方式1：点击所有可见的关闭按钮
+                var btns = doc.querySelectorAll('a, button, span, div, i, img');
+                for (var i = 0; i < btns.length; i++) {
+                  var b = btns[i];
+                  var cls = (b.className || '').toString();
+                  var txt = (b.textContent || '').trim();
+                  if (txt === '×' || txt === 'X' || txt === '关闭' ||
+                      /close| Close|关闭|shut/i.test(cls)) {
+                    if (b.offsetWidth > 0 || b.offsetHeight > 0) {
+                      try { b.click(); } catch(e){}
+                    }
                   }
                 }
-              }
-              // 方式3：移除遮罩层
-              var masks = document.querySelectorAll('.mask, .overlay, .modal-mask, [class*="mask"], [class*="overlay"]');
-              masks.forEach(function(m){ m.style.display = 'none'; });
+                // 方式2：遍历所有元素，移除包含关键词的弹窗
+                var all = doc.querySelectorAll('div, section, aside, table, ul, li');
+                for (var i = 0; i < all.length; i++) {
+                  var el = all[i];
+                  var text = el.textContent || '';
+                  var matchCount = 0;
+                  for (var k = 0; k < flashKeywords.length; k++) {
+                    if (text.indexOf(flashKeywords[k]) >= 0) matchCount++;
+                  }
+                  // 匹配2个以上关键词的元素 = 弹窗本身，移除它
+                  if (matchCount >= 2 && text.length < 800) {
+                    el.remove();
+                    console.log('[Flash] 已移除不支持Flash弹窗 (匹配' + matchCount + '个关键词)');
+                  }
+                }
+                // 方式3：移除遮罩层
+                var masks = doc.querySelectorAll('[class*="mask"], [class*="overlay"], [class*="Mask"], [class*="Overlay"], [id*="mask"], [id*="overlay"]');
+                masks.forEach(function(m){
+                  var t = (m.textContent || '');
+                  var mc = 0;
+                  for (var k = 0; k < flashKeywords.length; k++) { if (t.indexOf(flashKeywords[k]) >= 0) mc++; }
+                  if (mc >= 1 || t.length < 5) { m.style.display = 'none'; }
+                });
+              } catch(e) {}
             }
-            // 立即检查一次
-            setTimeout(closeFlashDialog, 500);
-            setTimeout(closeFlashDialog, 1500);
-            setTimeout(closeFlashDialog, 3000);
-            // 持续监控
+            function closeFlashDialog() {
+              closeInDoc(document);
+              // 也检查 iframe 内部
+              var iframes = document.querySelectorAll('iframe');
+              for (var i = 0; i < iframes.length; i++) {
+                try { closeInDoc(iframes[i].contentDocument); } catch(e) {}
+              }
+            }
+            // 高频检查：200ms间隔，持续10秒
+            var checkCount = 0;
+            var interval = setInterval(function(){
+              closeFlashDialog();
+              checkCount++;
+              if (checkCount > 50) clearInterval(interval); // 50 * 200ms = 10s
+            }, 200);
+            // MutationObserver 持续监控
             if (window.MutationObserver) {
               var obs = new MutationObserver(function(){ closeFlashDialog(); });
               try { obs.observe(document.documentElement, {childList:true, subtree:true}); } catch(e){}
-              setTimeout(function(){ obs.disconnect(); }, 10000);
+              setTimeout(function(){ obs.disconnect(); }, 15000);
             }
           })();
 
