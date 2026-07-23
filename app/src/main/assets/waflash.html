@@ -38,6 +38,49 @@
 
     var canvas = document.getElementById('canvas');
     canvas.addEventListener('click', function() { canvas.focus(); });
+
+    // 重写 fetch：WAFlash 内部的 fetch() 不被 shouldInterceptRequest 拦截，
+    // 用 XMLHttpRequest 替代（XHR 一定被拦截），SWF 请求会被 interceptSwf 原生代理
+    var _origFetch = window.fetch;
+    window.fetch = function(input, init) {
+      var url = (typeof input === 'string') ? input : (input && input.url) || '';
+      // 只拦截 SWF 相关请求，其他请求走原始 fetch
+      if (url && (/\.swf/i.test(url) || /\/dw-\d+/i.test(url) || /4399\.com/i.test(url))) {
+        return new Promise(function(resolve, reject) {
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', url, true);
+          xhr.responseType = 'arraybuffer';
+          if (init && init.headers) {
+            try {
+              Object.keys(init.headers).forEach(function(k) {
+                xhr.setRequestHeader(k, init.headers[k]);
+              });
+            } catch(e) {}
+          }
+          xhr.onload = function() {
+            var headers = new Headers();
+            try {
+              var allHeaders = xhr.getAllResponseHeaders().split('\r\n');
+              allHeaders.forEach(function(h) {
+                var idx = h.indexOf(': ');
+                if (idx > 0) headers.set(h.substring(0, idx), h.substring(idx + 2));
+              });
+            } catch(e) {}
+            resolve(new Response(xhr.response, {
+              status: xhr.status,
+              statusText: xhr.statusText,
+              headers: headers
+            }));
+          };
+          xhr.onerror = function() { reject(new TypeError('Network request failed (XHR fallback)')); };
+          xhr.ontimeout = function() { reject(new TypeError('Network request timed out')); };
+          xhr.timeout = 30000;
+          xhr.send();
+        });
+      }
+      return _origFetch.apply(this, arguments);
+    };
+    console.log('[WAF] fetch 已重写（XHR fallback for SWF）');
   </script>
 
   <script type="module">
