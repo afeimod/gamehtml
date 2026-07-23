@@ -23,7 +23,8 @@ data class GameItem(
         GameType.FLASH -> "https://www.4399.com/flash/$id.htm"
         GameType.H5    -> "https://h.4399.com/play/$id.htm"
         GameType.URL   -> id
+        GameType.LOCAL_SWF -> id  // id 存放文件 URI
     }
 }
 
-enum class GameType { FLASH, H5, URL }
+enum class GameType { FLASH, H5, URL, LOCAL_SWF }
