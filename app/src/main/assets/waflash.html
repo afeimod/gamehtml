@@ -42,30 +42,82 @@
 
     var canvas = document.getElementById('canvas');
     canvas.addEventListener('click', function() { canvas.focus(); });
+
+    var statusEl = document.getElementById('waflashStatus');
+
+    if (!SWF_URL) {
+      statusEl.textContent = '错误: 未指定 SWF URL';
+    } else {
+      statusEl.style.display = 'block';
+      statusEl.textContent = '正在加载 SWF...';
+    }
   </script>
 
   <script type="module">
-    const SWF_URL = new URLSearchParams(location.search).get('swf') || '';
     const statusEl = document.getElementById('waflashStatus');
+    const SWF_URL = (function(){
+      var u = new URLSearchParams(location.search).get('swf') || '';
+      if (u && u.indexOf('http://') === 0) u = 'https://' + u.substring(7);
+      return u;
+    })();
 
-    if (!SWF_URL) { statusEl.textContent = '错误: 未指定 SWF URL'; }
+    if (!SWF_URL) {
+      statusEl.textContent = '错误: 未指定 SWF URL';
+    } else {
+      // 方案：先用 XMLHttpRequest 预加载 SWF（XHR 一定被 shouldInterceptRequest 拦截），
+      // 然后创建 Blob URL 传给 WAFlash（blob: URL 同源，不会被 CORS 阻止）
+      console.log('[WAF] 预加载 SWF: ' + SWF_URL);
 
-    import('https://flash.local/waflash/waflash-player.min.js').then(function(module) {
-      const createWaflash = module.createWaflash;
-      if (!createWaflash) { statusEl.textContent = '引擎加载失败'; return; }
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', SWF_URL, true);
+      xhr.responseType = 'arraybuffer';
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const swfData = xhr.response;
+          console.log('[WAF] SWF 预加载完成: ' + swfData.byteLength + ' bytes');
+          // 创建 Blob URL（同源，WAFlash 内部 fetch 可以正常加载）
+          const blob = new Blob([swfData], { type: 'application/x-shockwave-flash' });
+          const blobUrl = URL.createObjectURL(blob);
+          console.log('[WAF] Blob URL: ' + blobUrl);
 
-      statusEl.style.display = 'block';
-      statusEl.textContent = '正在加载引擎...';
+          statusEl.textContent = '正在启动引擎...';
 
-      try {
-        createWaflash(SWF_URL, { gpu: true });
-      } catch(e) {
-        statusEl.textContent = '加载失败: ' + e.message;
-      }
-    }).catch(function(err) {
-      statusEl.textContent = '引擎加载失败';
-      statusEl.style.display = 'block';
-    });
+          // 加载 WAFlash 引擎
+          import('https://flash.local/waflash/waflash-player.min.js').then(function(module) {
+            const createWaflash = module.createWaflash;
+            if (!createWaflash) {
+              statusEl.textContent = '引擎加载失败';
+              return;
+            }
+
+            try {
+              // 用 Blob URL 代替原始 SWF URL
+              createWaflash(blobUrl, { gpu: true });
+              console.log('[WAF] createWaflash 已调用 (blob URL)');
+            } catch(e) {
+              statusEl.textContent = '加载失败: ' + e.message;
+              console.error('[WAF] createWaflash 异常: ' + e.message);
+            }
+          }).catch(function(err) {
+            statusEl.textContent = '引擎加载失败';
+            console.error('[WAF] 引擎加载失败: ' + (err.message || err));
+          });
+        } else {
+          statusEl.textContent = 'SWF 下载失败: HTTP ' + xhr.status;
+          console.error('[WAF] SWF 下载失败: HTTP ' + xhr.status);
+        }
+      };
+      xhr.onerror = function() {
+        statusEl.textContent = 'SWF 下载失败（网络错误）';
+        console.error('[WAF] SWF 下载失败（网络错误）');
+      };
+      xhr.ontimeout = function() {
+        statusEl.textContent = 'SWF 下载超时';
+        console.error('[WAF] SWF 下载超时');
+      };
+      xhr.timeout = 30000;
+      xhr.send();
+    }
 
     document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
     document.addEventListener('selectstart', function(e) { e.preventDefault(); });
