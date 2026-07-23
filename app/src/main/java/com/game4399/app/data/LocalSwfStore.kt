@@ -76,7 +76,7 @@ object LocalSwfStore {
     /** 从文件名提取显示标题 */
     fun titleFromUri(uri: Uri): String {
         val name = uri.lastPathSegment ?: "未知"
-        return name.substringBeforeLast(".swf", ignoreCase = true)
-            .ifEmpty { name }
+        val dotIdx = name.lowercase().lastIndexOf(".swf")
+        return if (dotIdx > 0) name.substring(0, dotIdx) else name
     }
 }
