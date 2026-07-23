@@ -1,4 +1,4 @@
-# 4399 游戏盒 (Game4399)
+# Flash 游戏盒 (Game4399)
 
 [![Build APK](https://github.com/<你的用户名>/Game4399/actions/workflows/build-apk.yml/badge.svg)](https://github.com/<你的用户名>/Game4399/actions/workflows/build-apk.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -159,7 +159,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - [Ruffle](https://github.com/ruffle-rs/ruffle) — Flash Player 模拟器 (MIT)
 - [AndroidX WebKit](https://developer.android.com/jetpack/androidx/releases/webkit) — AndroidX
-- .[waflash](https://github.com/RealOnePc/Waflash-Player)
 - 4399 仅作为内容入口
 
 ## 📄 许可证
