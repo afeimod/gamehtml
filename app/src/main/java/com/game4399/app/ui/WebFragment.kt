@@ -105,6 +105,7 @@ class WebFragment : Fragment() {
         override fun shouldInjectRuffle(url: String?): Boolean {
             if (url == null) return false
             if (url.startsWith("file:///android_asset/")) return false
+            if (url.startsWith("https://flash.local/")) return false
             return url.contains("4399.com") && (url.contains("/flash/") || url.contains(".swf"))
         }
         override fun getCachedSwfPath(): String? = null
