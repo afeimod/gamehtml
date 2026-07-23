@@ -33,6 +33,10 @@
       return new URLSearchParams(location.search).get(name) || def || '';
     }
     var SWF_URL = param('swf');
+    // 混合内容修复：HTTPS 页面不能加载 HTTP 资源，升级为 HTTPS
+    if (SWF_URL && SWF_URL.indexOf('http://') === 0) {
+      SWF_URL = 'https://' + SWF_URL.substring(7);
+    }
     var TITLE = param('title') || 'Flash 游戏';
     document.title = TITLE;
 
