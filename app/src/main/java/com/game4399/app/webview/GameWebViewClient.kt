@@ -66,7 +66,12 @@ open class GameWebViewClient(
             return interceptAsset(view, assetPath)
         }
 
-        // 4. 拦截 SWF 文件请求
+        // 4. 拦截本地 SWF 文件（content:// 或 file://）
+        if (url.startsWith("content://") || url.startsWith("file://")) {
+            return interceptLocalFile(view, url)
+        }
+
+        // 5. 拦截远程 SWF 文件请求
         val isSwfRequest = url.endsWith(".swf", ignoreCase = true) ||
             url.contains(".swf?", ignoreCase = true) ||
             (url.contains("4399.com") && (url.contains("/dw-") || url.contains("flash_tm3") || url.contains("flash20")))
@@ -311,6 +316,34 @@ open class GameWebViewClient(
         })();
         </script>
         """.trimIndent()
+    }
+
+    /** 读取本地 SWF 文件（content:// 或 file://），返回带 CORS 头的响应 */
+    private fun interceptLocalFile(view: WebView, url: String): WebResourceResponse? {
+        return try {
+            android.util.Log.d("GameWebViewClient", "读取本地文件: $url")
+            val uri = android.net.Uri.parse(url)
+            val data = view.context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: throw java.io.IOException("无法打开文件流")
+            android.util.Log.d("GameWebViewClient", "本地文件读取完成: ${data.size} bytes")
+            WebResourceResponse(
+                "application/x-shockwave-flash", null,
+                200, "OK",
+                mapOf(
+                    "Access-Control-Allow-Origin" to "*",
+                    "Content-Type" to "application/x-shockwave-flash",
+                    "Cache-Control" to "no-cache"
+                ),
+                java.io.ByteArrayInputStream(data)
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("GameWebViewClient", "本地文件读取失败: ${e.message}")
+            WebResourceResponse(
+                "application/x-shockwave-flash", null, 404, "Not Found",
+                mapOf("Access-Control-Allow-Origin" to "*"),
+                java.io.ByteArrayInputStream(ByteArray(0))
+            )
+        }
     }
 
     /** 原生下载 SWF 文件，返回带 CORS 头的响应（含重试 + SSL 兼容 + CORS 兜底） */

@@ -23,20 +23,29 @@ object NavHelper {
         GameType.FLASH -> "https://www.4399.com/flash/$id.htm"
         GameType.H5    -> "https://h.4399.com/play/$id.htm"
         GameType.URL   -> id
+        GameType.LOCAL_SWF -> id
     }
 
     /** 判断是否为 SWF 资源 */
     fun isSwf(url: String): Boolean =
         url.endsWith(".swf", ignoreCase = true) || url.contains(".swf?", ignoreCase = true)
 
+    /** 判断是否为本地文件 URI（content:// 或 file://） */
+    fun isLocalFile(url: String): Boolean =
+        url.startsWith("content://") || url.startsWith("file://")
+
     /** 构造内置 Flash 播放器地址（根据引擎选择不同播放器页面） */
     fun playerUrl(swfUrl: String, base: String? = null, title: String? = null): String {
+        // 本地 SWF：直接用 WAFlash（本地文件无需网络下载，waflash 可直接加载）
+        // 将 content:// URI 转为 file:// 供 WebView 加载
+        val effectiveSwfUrl = if (isLocalFile(swfUrl)) swfUrl else swfUrl
+
         // WAFlash 引擎使用独立的 waflash.html 页面（canvas 渲染 + ES module）
         // 从 flash.local 虚拟域名加载，确保 Emscripten 的 fetch/XHR 能正常工作
-        if (PrefsManager.flashEngine == "waflash") {
+        if (PrefsManager.flashEngine == "waflash" || isLocalFile(swfUrl)) {
             val u = Uri.parse("https://flash.local/waflash.html")
                 .buildUpon()
-                .appendQueryParameter("swf", swfUrl)
+                .appendQueryParameter("swf", effectiveSwfUrl)
             base?.let { u.appendQueryParameter("base", it) }
             title?.let { u.appendQueryParameter("title", it) }
             return u.build().toString()
