@@ -469,7 +469,8 @@ class GameActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Flash 引擎")
             .setSingleChoiceItems(engines, checked) { dialog, which ->
-                if (which == 2) {
+                if (which == 3) {
+                    // "关闭 Flash" 是索引 3
                     sp.edit().putBoolean("flash_enabled", false).apply()
                     Toast.makeText(this, "Flash 已关闭", Toast.LENGTH_SHORT).show()
                 } else {
