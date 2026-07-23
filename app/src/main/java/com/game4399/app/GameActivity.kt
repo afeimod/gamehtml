@@ -53,8 +53,6 @@ class GameActivity : AppCompatActivity() {
     private var gamepadVisible = false
     private var isFullscreen = false
     private var isMouseEnabled = false
-    /** WAFlash 缓存的 SWF 文件路径（shouldInterceptRequest 用） */
-    @Volatile var waflashCachedSwf: String? = null
     private lateinit var floatingMenu: FloatingMenuView
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -192,7 +190,7 @@ class GameActivity : AppCompatActivity() {
             // 4399 Flash 游戏页 + 4399 自己的 Flash 播放器页面
             return (url.contains("4399.com") && (url.contains("/flash/") || url.contains("flash.local.4399.com") || url.contains("flash_tm3")))
         }
-        override fun getCachedSwfPath(): String? = waflashCachedSwf
+        override fun getCachedSwfPath(): String? = null
     }
 
     private fun loadGame(url: String, title: String, type: GameType) {
@@ -212,31 +210,6 @@ class GameActivity : AppCompatActivity() {
     /** WebAppInterface.openSwf 调用：在当前 WebView 加载 SWF 播放器页面 */
     fun loadSwfInWebView(playerUrl: String) {
         webView.loadUrl(playerUrl)
-    }
-
-    /** WAFlash 专用：原生预下载 SWF，然后用 flash.local/cached.swf 加载 */
-    fun preloadSwfForWaflash(swfUrl: String, pageUrl: String?) {
-        // 后台线程下载 SWF
-        Thread {
-            val cachedFile = com.game4399.app.webview.WebAppInterface.downloadSwf(this, swfUrl)
-            runOnUiThread {
-                if (cachedFile != null && cachedFile.exists()) {
-                    // 保存当前缓存文件路径，shouldInterceptRequest 会用它
-                    waflashCachedSwf = cachedFile.absolutePath
-                    // 加载 waflash.html，SWF URL 用 flash.local/cached.swf
-                    val u = android.net.Uri.parse("https://flash.local/waflash.html")
-                        .buildUpon()
-                        .appendQueryParameter("swf", "https://flash.local/cached.swf")
-                        .appendQueryParameter("title", currentTitle)
-                    pageUrl?.let { u.appendQueryParameter("base", it) }
-                    webView.loadUrl(u.build().toString())
-                } else {
-                    // 下载失败：仍然用原始 URL 加载（fallback 到 shouldInterceptRequest）
-                    val playerUrl = com.game4399.app.webview.NavHelper.playerUrl(swfUrl, pageUrl, null)
-                    webView.loadUrl(playerUrl)
-                }
-            }
-        }.start()
     }
 
     // ---------------- 虚拟手柄 ----------------
