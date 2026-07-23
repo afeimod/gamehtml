@@ -55,14 +55,9 @@ open class GameWebViewClient(
             return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
         }
 
-        // 2. 拦截 flash.local 虚拟域名
+        // 2. 拦截 flash.local 虚拟域名：从 assets 返回引擎文件
         if (url.contains("flash.local")) {
-            val path = url.substringAfter("flash.local/").substringBefore("?")
-            // 特殊处理：cached.swf 是预下载的 SWF 缓存文件
-            if (path == "cached.swf") {
-                return interceptCachedSwf()
-            }
-            return interceptAsset(view, path)
+            return interceptAsset(view, url.substringAfter("flash.local/").substringBefore("?"))
         }
 
         // 3. 拦截 file:///android_asset/waflash/ 请求
@@ -246,32 +241,6 @@ open class GameWebViewClient(
         })();
         </script>
         """.trimIndent()
-    }
-
-    /** 返回预下载的 SWF 缓存文件 */
-    private fun interceptCachedSwf(): WebResourceResponse? {
-        val path = callback.getCachedSwfPath()
-        if (path == null) {
-            android.util.Log.w("GameWebViewClient", "cached.swf: 无缓存文件")
-            return WebResourceResponse("application/x-shockwave-flash", null, 404, "Not Found",
-                mapOf("Access-Control-Allow-Origin" to "*"), java.io.ByteArrayInputStream(ByteArray(0)))
-        }
-        val file = java.io.File(path)
-        if (!file.exists()) {
-            android.util.Log.w("GameWebViewClient", "cached.swf: 文件不存在 $path")
-            return WebResourceResponse("application/x-shockwave-flash", null, 404, "Not Found",
-                mapOf("Access-Control-Allow-Origin" to "*"), java.io.ByteArrayInputStream(ByteArray(0)))
-        }
-        android.util.Log.d("GameWebViewClient", "cached.swf: 返回 ${file.length()} bytes")
-        return WebResourceResponse(
-            "application/x-shockwave-flash", null, 200, "OK",
-            mapOf(
-                "Access-Control-Allow-Origin" to "*",
-                "Content-Type" to "application/x-shockwave-flash",
-                "Cache-Control" to "no-cache"
-            ),
-            java.io.ByteArrayInputStream(file.readBytes())
-        )
     }
 
     /** 原生下载 SWF 文件，返回带 CORS 头的响应（含重试 + SSL 兼容 + CORS 兜底） */
