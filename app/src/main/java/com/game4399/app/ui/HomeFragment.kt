@@ -1,5 +1,8 @@
 package com.game4399.app.ui
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -11,11 +14,12 @@ import com.game4399.app.MainActivity
 import com.game4399.app.R
 import com.game4399.app.data.GameRepository
 import com.game4399.app.data.GameType
+import com.game4399.app.data.LocalSwfStore
 import com.game4399.app.databinding.FragmentHomeBinding
 import com.game4399.app.webview.NavHelper
 
 /**
- * 首页：Banner + 快捷入口 + 经典怀旧游戏列表 + 自定义 URL 输入。
+ * 首页：Banner + 快捷入口 + 本地 SWF 列表 + 自定义 URL 输入。
  */
 class HomeFragment : Fragment() {
 
@@ -34,7 +38,7 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupQuickEntries()
-        setupClassicList()
+        setupLocalSwfList()
         setupCustomInput()
         binding.swipeRefresh.isEnabled = false
     }
@@ -61,13 +65,68 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun setupClassicList() {
+    private fun setupLocalSwfList() {
         adapter = GameAdapter { item ->
             GameActivity.launch(requireContext(), item.resolveUrl(), item.title, item.type)
         }
         binding.classicList.layoutManager = LinearLayoutManager(requireContext())
         binding.classicList.adapter = adapter
-        adapter.submit(GameRepository.classicItems())
+
+        // 添加本地 SWF 按钮
+        binding.btnAddSwf.setOnClickListener {
+            openFilePicker()
+        }
+
+        // 加载已保存的本地 SWF 列表
+        refreshLocalSwfList()
+    }
+
+    private fun refreshLocalSwfList() {
+        val items = LocalSwfStore.toGameItems()
+        adapter.submit(items)
+        // 空列表时显示提示
+        binding.classicList.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    private fun openFilePicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            // 支持 .swf 文件
+            val mimeTypes = arrayOf(
+                "application/x-shockwave-flash",
+                "application/octet-stream",
+                "*/*"
+            )
+            putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+        }
+        try {
+            startActivityForResult(intent, REQUEST_CODE_OPEN_SWF)
+        } catch (e: Exception) {
+            // fallback
+            val fallback = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "*/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            startActivityForResult(fallback, REQUEST_CODE_OPEN_SWF)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_OPEN_SWF && resultCode == Activity.RESULT_OK) {
+            val uri = data?.data ?: return
+            try {
+                // 持久化 URI 权限
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                requireContext().contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (e: Exception) {
+                // 某些设备不支持，忽略
+            }
+            val title = LocalSwfStore.titleFromUri(uri)
+            LocalSwfStore.add(uri.toString(), title)
+            refreshLocalSwfList()
+        }
     }
 
     private fun setupCustomInput() {
@@ -82,8 +141,20 @@ class HomeFragment : Fragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 从 GameActivity 返回后刷新列表
+        if (::adapter.isInitialized) {
+            refreshLocalSwfList()
+        }
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        private const val REQUEST_CODE_OPEN_SWF = 1001
     }
 }
