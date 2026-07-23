@@ -61,14 +61,25 @@
       s2.onload = function () {
         loadText.textContent = '正在加载游戏: ' + TITLE;
         try {
+          // 设置 base 标签，SWF 内部相对路径以原始页面 URL 为 base
+          if (BASE_URL) {
+            try {
+              var baseObj = new URL(BASE_URL);
+              var baseTag = document.createElement('base');
+              baseTag.href = baseObj.origin + baseObj.pathname.substring(0, baseObj.pathname.lastIndexOf('/') + 1);
+              document.head.appendChild(baseTag);
+              console.log('[swf2js] base: ' + baseTag.href);
+            } catch(e) {}
+          }
           var container = document.createElement('div');
           container.style.cssText = 'width:100%;height:100%;position:relative;';
           stage.appendChild(container);
+          console.log('[swf2js] loading: ' + SWF_URL);
           swf2js.load(SWF_URL, { tag: container });
           document.getElementById('loading').style.display = 'none';
         } catch (e) {
           loadText.textContent = '加载失败: ' + e.message;
-          console.error(e);
+          console.error('[swf2js]', e);
         }
       };
       s2.onerror = function () {
@@ -99,7 +110,7 @@
         "splashScreen": true,
         "preloader": true,
         "logLevel": "warn",
-        "maxExecutionDuration": { "secs": 30, "nanos": 0 }
+        "maxExecutionDuration": 30
       };
 
       // 2) 动态加载 Ruffle
