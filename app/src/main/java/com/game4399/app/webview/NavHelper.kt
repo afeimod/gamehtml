@@ -41,8 +41,8 @@ object NavHelper {
             title?.let { u.appendQueryParameter("title", it) }
             return u.build().toString()
         }
-        // Ruffle / swf2js 使用 player.html
-        val u = Uri.parse("file:///android_asset/player.html")
+        // Ruffle / swf2js 使用 player.html（从 flash.local 加载，确保 XHR/fetch 能被拦截）
+        val u = Uri.parse("https://flash.local/player.html")
             .buildUpon()
             .appendQueryParameter("swf", swfUrl)
             .appendQueryParameter("engine", PrefsManager.flashEngine)
