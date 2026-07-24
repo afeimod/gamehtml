@@ -204,7 +204,9 @@ class GameActivity : AppCompatActivity() {
         // 本地 SWF 文件 → WAFlash 播放器（用虚拟 URL 代理，shouldInterceptRequest 读取实际文件）
         if (type == GameType.LOCAL_SWF || NavHelper.isLocalFile(url)) {
             localSwfUri = url  // 保存真实 URI，shouldInterceptRequest 用它读取文件
-            val playerUrl = NavHelper.playerUrl("https://flash.local/local.swf", base = null, title = title)
+            // 加时间戳参数破坏 WebView 缓存，确保每次都重新读取
+            val swfProxyUrl = "https://flash.local/local.swf?t=${System.currentTimeMillis()}"
+            val playerUrl = NavHelper.playerUrl(swfProxyUrl, base = null, title = title)
             webView.loadUrl(playerUrl)
         } else if (NavHelper.isSwf(url)) {
             // 远程 SWF 直链 → 内置播放器
