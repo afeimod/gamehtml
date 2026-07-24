@@ -68,7 +68,7 @@ object RuffleInjector {
                 "allowScriptAccess": true,
                 "scale": "showAll",
                 "quality": "${quality()}",
-                "allowFullscreen": true,
+                "allowFullscreen": false,
                 "splashScreen": true,
                 "preloader": true,
                 "logLevel": "warn",
