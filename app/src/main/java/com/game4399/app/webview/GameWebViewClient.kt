@@ -259,9 +259,27 @@ open class GameWebViewClient(
         return mime to charset
     }
 
+    /** 判断是否为游戏页面（非主页/列表页），用于决定是否降级 UA */
+    private fun isGamePageUrl(url: String): Boolean {
+        val urlNoQuery = url.substringBefore("?").substringBefore("#")
+        // 4399 主页和列表页 — 不降级 UA，保留极速模式
+        if (urlNoQuery.endsWith("4399.com/") || urlNoQuery.endsWith("4399.com")) return false
+        if (urlNoQuery.endsWith("/flash/") || urlNoQuery.endsWith("/flash")) return false
+        if (urlNoQuery.endsWith("/category") || urlNoQuery.endsWith("/category/")) return false
+        // 游戏页面特征：含 .htm/.html、/flash/数字、play. 子域名等
+        if (urlNoQuery.contains(".htm", ignoreCase = true) || urlNoQuery.contains(".html", ignoreCase = true)) return true
+        if (urlNoQuery.contains("play.", ignoreCase = true)) return true
+        if (urlNoQuery.contains("/flash/") && urlNoQuery.substringAfterLast("/").isNotEmpty()) return true
+        if (urlNoQuery.contains("game", ignoreCase = true)) return true
+        // 其他站点默认按游戏页面处理（Flash 注入已由 shouldInjectRuffle 过滤）
+        return true
+    }
+
     /** 构建 Flash 支持伪造 + Ruffle/WAFlash 注入脚本 */
     private fun buildFlashInjectScript(pageUrl: String): String {
         val isWaflash = PrefsManager.flashEngine == "waflash"
+        // 仅对游戏页面降级 UA（让 4399 Flash 检测通过），主页/列表页保持 Chrome 120（保留极速模式）
+        val isGamePage = isGamePageUrl(pageUrl)
         return """
         <script>
         (function(){
@@ -298,7 +316,9 @@ open class GameWebViewClient(
             window.ActiveXObject = function(n){if(n&&/ShockwaveFlash/i.test(n))return {SetVariable:function(){},Variable:function(){return ''}};throw new Error('x');};
           } catch(e) {}
 
-          // === 1.5 伪造 navigator.userAgent（降级到 Chrome 87，让 4399 认为浏览器支持 Flash） ===
+          // === 1.5 伪造 navigator.userAgent（仅游戏页面：降级到 Chrome 87，让 4399 Flash 检测通过） ===
+          //         主页/列表页不降级，保留极速模式
+          ${if (isGamePage) """
           try {
             var curUA = navigator.userAgent || '';
             var chromeMatch = curUA.match(/Chrome\/(\d+)/);
@@ -308,6 +328,7 @@ open class GameWebViewClient(
               Object.defineProperty(navigator, 'appVersion', {get:function(){return newUA.replace('Mozilla/','');}, configurable:true});
             }
           } catch(e) {}
+          """ else ""}
 
           // === 2. 伪造 document.referrer ===
           try {
@@ -659,7 +680,7 @@ open class GameWebViewClient(
                 conn.connectTimeout = 10000
                 conn.readTimeout = 20000
                 conn.requestMethod = "GET"
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36")
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 conn.setRequestProperty("Accept", "*/*")
                 if (swfUrl.contains("4399.com")) {
                     conn.setRequestProperty("Referer", "https://www.4399.com/")
@@ -930,15 +951,9 @@ open class GameWebViewClient(
                   if (name && /ShockwaveFlash/i.test(name)) return { SetVariable: function(){} };
                   throw new Error('Not supported');
                 };
-                // 降级 UA 到 Chrome 87（4399 检测 Chrome 88+ 不支持 Flash）
-                try {
-                  var cUA = navigator.userAgent || '';
-                  var cM = cUA.match(/Chrome\/(\d+)/);
-                  if (cM && parseInt(cM[1]) >= 88) {
-                    var nUA = cUA.replace(/Chrome\/[\d.]+/, 'Chrome/87.0.4280.141');
-                    Object.defineProperty(navigator, 'userAgent', {get:function(){return nUA;}, configurable:true});
-                  }
-                } catch(e) {}
+                // 注意：不在此处降级 navigator.userAgent
+                // UA 降级由 buildFlashInjectScript 按游戏页面条件执行
+                // 此脚本是备份（evaluateJavascript），对主页也会执行，降级会导致极速模式丢失
                 console.log('[Flash] 已伪造 Flash 插件支持');
               } catch(e) { console.warn('[Flash] 伪造失败:', e); }
             })();
