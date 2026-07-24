@@ -204,10 +204,22 @@ class GameActivity : AppCompatActivity() {
             if (url.contains("17173.com")) return true
             if (url.contains("3366.com")) return true
             if (url.contains("4399er.com")) return true
+            if (url.contains("2144.cn")) return true
+            if (url.contains("3839.com")) return true
+            if (url.contains("5068.com")) return true
+            if (url.contains("4355.com")) return true
+            if (url.contains("77l.com")) return true
+            if (url.contains("17yy.com")) return true
+            if (url.contains("2133.com")) return true
+            if (url.contains("game777.com")) return true
+            if (url.contains("kuwo.com")) return true
+            if (url.contains("17vee.com")) return true
             // 通用 Flash 页面特征（URL 中包含 flash 相关关键词）
             if (url.contains("flashhtml", ignoreCase = true)) return true
             if (url.contains("/flash_game", ignoreCase = true)) return true
             if (url.contains("play_flash", ignoreCase = true)) return true
+            // HTTP 页面中的 Flash 游戏（很多老网站只有 HTTP）
+            if (url.startsWith("http://") && url.contains("play", ignoreCase = true)) return true
             return false
         }
         override fun getCachedSwfPath(): String? = null
