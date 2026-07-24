@@ -214,6 +214,13 @@ open class GameWebViewClient(
     /** 使用 HttpURLConnection 获取 HTTP URL，绕过 WebView 明文限制 */
     private fun fetchHttpUrl(url: String, request: WebResourceRequest): WebResourceResponse? {
         return try {
+            // 游戏页面用 Chrome 87 UA（让 4399 等返回含 Flash 元素的兼容版页面），
+            // 非游戏页面用 Chrome 120（保留极速模式）
+            val ua = if (isGamePageUrl(url)) {
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36"
+            } else {
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
             val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
                 if (this is javax.net.ssl.HttpsURLConnection) {
                     sslSocketFactory = trustAllSslSocketFactory()
@@ -223,7 +230,10 @@ open class GameWebViewClient(
                 readTimeout = 20000
                 requestMethod = request.method ?: "GET"
                 instanceFollowRedirects = true
+                // 先复制原始请求头
                 request.requestHeaders?.forEach { (key, value) -> setRequestProperty(key, value) }
+                // 再用游戏页面 UA 覆盖（必须在复制请求头之后）
+                setRequestProperty("User-Agent", ua)
             }
             conn.connect()
             val responseCode = conn.responseCode
@@ -293,26 +303,32 @@ open class GameWebViewClient(
             fp.namedItem = function(n){ return (n === 'Shockwave Flash') ? fp : null; };
             fp.item = function(i){ return i === 0 ? fp : null; };
             fp.refresh = function(){};
-            // 创建伪造的 PluginArray（使用普通对象，避免原 PluginArray 只读限制）
-            var fakePA = {length:1, 0:fp, 'Shockwave Flash':fp};
-            fakePA.namedItem = function(n){ return fakePA[n] || null; };
-            fakePA.item = function(i){ return fakePA[i] || null; };
-            fakePA.refresh = function(){};
-            try {
-              var origP = navigator.plugins;
-              for (var pi = 0; pi < origP.length; pi++) {
-                var op = origP[pi];
-                if (op && op.name !== 'Shockwave Flash') {
-                  fakePA[fakePA.length] = op; fakePA[op.name] = op; fakePA.length++;
-                }
-              }
-            } catch(e) {}
-            Object.defineProperty(navigator,'plugins',{get:function(){return fakePA;},configurable:true});
+            // 修改原生 navigator.plugins（保持 PluginArray 原型，Ruffle 需要检测）
+            var _plugins = navigator.plugins || {};
+            if (_plugins.namedItem) { fp.namedItem = function(n){ return (n === 'Shockwave Flash') ? fp : _plugins.namedItem.call(_plugins, n); }; }
+            if (_plugins.item) { fp.item = function(i){ return i === 0 ? fp : _plugins.item.call(_plugins, i); }; }
+            Object.defineProperty(navigator,'plugins',{
+              get:function(){
+                try {
+                  if (!_plugins['Shockwave Flash']) {
+                    _plugins['Shockwave Flash'] = fp;
+                    _plugins[0] = fp;
+                  }
+                  _plugins.length = Math.max(_plugins.length || 0, 1);
+                } catch(e) {}
+                return _plugins;
+              },
+              configurable: true
+            });
             var fm = {type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash',enabledPlugin:fp};
-            var fakeMA = {length:1, 0:fm, 'application/x-shockwave-flash':fm};
-            fakeMA.namedItem = function(n){ return fakeMA[n] || null; };
-            fakeMA.item = function(i){ return fakeMA[i] || null; };
-            Object.defineProperty(navigator,'mimeTypes',{get:function(){return fakeMA;},configurable:true});
+            var _mimes = navigator.mimeTypes || {};
+            Object.defineProperty(navigator,'mimeTypes',{
+              get:function(){
+                try { if (!_mimes['application/x-shockwave-flash']) _mimes['application/x-shockwave-flash'] = fm; } catch(e) {}
+                return _mimes;
+              },
+              configurable: true
+            });
             window.ActiveXObject = function(n){if(n&&/ShockwaveFlash/i.test(n))return {SetVariable:function(){},Variable:function(){return ''}};throw new Error('x');};
           } catch(e) {}
 
@@ -680,7 +696,7 @@ open class GameWebViewClient(
                 conn.connectTimeout = 10000
                 conn.readTimeout = 20000
                 conn.requestMethod = "GET"
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36")
                 conn.setRequestProperty("Accept", "*/*")
                 if (swfUrl.contains("4399.com")) {
                     conn.setRequestProperty("Referer", "https://www.4399.com/")
@@ -920,30 +936,30 @@ open class GameWebViewClient(
                 fakePlugin.item = function(i) { return i === 0 ? fakePlugin : null; };
                 fakePlugin.refresh = function() {};
                 var plugins = navigator.plugins || {};
-                // 创建伪造的 PluginArray（使用普通对象，避免原 PluginArray 只读限制）
-                var fakePA = {length:1, 0:fakePlugin, 'Shockwave Flash':fakePlugin};
-                fakePA.namedItem = function(n) { return fakePA[n] || null; };
-                fakePA.item = function(i) { return fakePA[i] || null; };
-                fakePA.refresh = function() {};
-                try {
-                  for (var pi = 0; pi < plugins.length; pi++) {
-                    var op = plugins[pi];
-                    if (op && op.name !== 'Shockwave Flash') {
-                      fakePA[fakePA.length] = op; fakePA[op.name] = op; fakePA.length++;
-                    }
-                  }
-                } catch(e) {}
+                // 修改原生 navigator.plugins（保持 PluginArray 原型，Ruffle 需要检测）
+                if (plugins.namedItem) { fakePlugin.namedItem = function(n) { return (n === 'Shockwave Flash') ? fakePlugin : plugins.namedItem.call(plugins, n); }; }
+                if (plugins.item) { fakePlugin.item = function(i) { return i === 0 ? fakePlugin : plugins.item.call(plugins, i); }; }
                 Object.defineProperty(navigator, 'plugins', {
-                  get: function() { return fakePA; },
+                  get: function() {
+                    var p = plugins;
+                    if (!p['Shockwave Flash']) {
+                      try { p['Shockwave Flash'] = fakePlugin; p[0] = fakePlugin; } catch(e) {}
+                    }
+                    p.length = Math.max(p.length || 0, 1);
+                    return p;
+                  },
                   configurable: true
                 });
                 // 伪造 navigator.mimeTypes
                 var fakeMime = { type: 'application/x-shockwave-flash', suffixes: 'swf', description: 'Shockwave Flash', enabledPlugin: fakePlugin };
-                var fakeMA = {length:1, 0:fakeMime, 'application/x-shockwave-flash':fakeMime};
-                fakeMA.namedItem = function(n) { return fakeMA[n] || null; };
-                fakeMA.item = function(i) { return fakeMA[i] || null; };
+                var mimes = navigator.mimeTypes || {};
                 Object.defineProperty(navigator, 'mimeTypes', {
-                  get: function() { return fakeMA; },
+                  get: function() {
+                    if (!mimes['application/x-shockwave-flash']) {
+                      try { mimes['application/x-shockwave-flash'] = fakeMime; } catch(e) {}
+                    }
+                    return mimes;
+                  },
                   configurable: true
                 });
                 // 伪造 ActiveXObject（IE 方式检测 Flash）
