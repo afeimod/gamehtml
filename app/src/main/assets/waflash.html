@@ -35,8 +35,8 @@
     var canvas = document.getElementById('canvas');
     canvas.addEventListener('click', function() { canvas.focus(); });
 
-    // 判断是否为本地文件代理 URL（flash.local/local.swf）
-    var isLocalFile = SWF_URL.indexOf('https://flash.local/local.swf') === 0;
+    // 判断是否为本地文件代理 URL（flash.local/local.swf），处理可能的时间戳参数
+    var isLocalFile = SWF_URL.split('?')[0] === 'https://flash.local/local.swf';
 
     if (!SWF_URL) {
       statusEl.textContent = '错误: 未指定 SWF URL';
