@@ -62,4 +62,24 @@ class WebAppInterface(private val context: Context) {
     fun finish() {
         if (context is Activity) handler.post { context.finish() }
     }
+
+    /**
+     * 读取本地 SWF 文件内容（Base64），供 JS 创建 Blob URL。
+     * 绕过 WebView 对 content:// URI 的跨域限制。
+     */
+    @JavascriptInterface
+    fun readLocalSwf(uri: String?): String? {
+        if (uri.isNullOrEmpty()) return null
+        return try {
+            Log.d("WebApp:LocalSwf", "读取本地文件: $uri")
+            val parsed = android.net.Uri.parse(uri)
+            val data = context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
+                ?: throw java.io.IOException("无法打开文件流")
+            Log.d("WebApp:LocalSwf", "读取完成: ${data.size} bytes")
+            android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.e("WebApp:LocalSwf", "读取失败: ${e.message}")
+            null
+        }
+    }
 }
