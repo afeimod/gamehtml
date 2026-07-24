@@ -53,6 +53,8 @@ class GameActivity : AppCompatActivity() {
     private var gamepadVisible = false
     private var isFullscreen = false
     private var isMouseEnabled = false
+    /** 本地 SWF 文件的真实 URI（shouldInterceptRequest 用它读取文件） */
+    @Volatile var localSwfUri: String? = null
     private lateinit var floatingMenu: FloatingMenuView
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -194,13 +196,15 @@ class GameActivity : AppCompatActivity() {
             return (url.contains("4399.com") && (url.contains("/flash/") || url.contains("flash.local.4399.com") || url.contains("flash_tm3")))
         }
         override fun getCachedSwfPath(): String? = null
+        override fun getLocalSwfUri(): String? = localSwfUri
     }
 
     private fun loadGame(url: String, title: String, type: GameType) {
         currentUrl = url; currentTitle = title; currentType = type
-        // 本地 SWF 文件 → WAFlash 播放器
+        // 本地 SWF 文件 → WAFlash 播放器（用虚拟 URL 代理，shouldInterceptRequest 读取实际文件）
         if (type == GameType.LOCAL_SWF || NavHelper.isLocalFile(url)) {
-            val playerUrl = NavHelper.playerUrl(url, base = null, title = title)
+            localSwfUri = url  // 保存真实 URI，shouldInterceptRequest 用它读取文件
+            val playerUrl = NavHelper.playerUrl("https://flash.local/local.swf", base = null, title = title)
             webView.loadUrl(playerUrl)
         } else if (NavHelper.isSwf(url)) {
             // 远程 SWF 直链 → 内置播放器
