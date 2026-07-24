@@ -72,8 +72,42 @@ object RuffleInjector {
                 "splashScreen": true,
                 "preloader": true,
                 "logLevel": "warn",
-                "maxExecutionDuration": 30
+                "maxExecutionDuration": 30,
+                "defaultFonts": {
+                  "sans": ["Noto Sans CJK SC", "Noto Sans SC", "SimHei", "Microsoft YaHei", "WenQuanYi Micro Hei", "Droid Sans Fallback", "sans-serif"],
+                  "serif": ["Noto Serif CJK SC", "Noto Serif SC", "SimSun", "宋体", "STSong", "Noto Sans CJK SC", "serif"],
+                  "typewriter": ["Noto Sans CJK SC", "Courier New", "monospace"]
+                }
               };
+              // 字体别名注入：通过 @font-face 将中文字体名映射到 Android 系统的 CJK 字体
+              if (!window.__fontAliasInjected) {
+                window.__fontAliasInjected = true;
+                var fa = {
+                  'SimHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+                  '黑体': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+                  'Microsoft YaHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','PingFang SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+                  '微软雅黑': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+                  'SimSun': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+                  '宋体': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+                  'KaiTi': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+                  '楷体': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+                  'FangSong': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+                  '仿宋': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+                  'Arial': ['Arial','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+                  'Tahoma': ['Tahoma','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+                  'Helvetica': ['Helvetica','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif']
+                };
+                var css = '';
+                for (var n in fa) {
+                  var s = fa[n].map(function(f){return "local('"+f+"')";}).join(',');
+                  css += "@font-face{font-family:'"+n+"';src:"+s+";font-weight:normal;font-style:normal;}";
+                  var bs = fa[n].map(function(f){return "local('"+f+" Bold')";}).concat(fa[n].map(function(f){return "local('"+f+"')"; })).join(',');
+                  css += "@font-face{font-family:'"+n+"';src:"+bs+";font-weight:bold;font-style:normal;}";
+                }
+                var st = document.createElement('style');
+                st.textContent = css;
+                (document.head || document.documentElement).appendChild(st);
+              }
             })();
         """.trimIndent()
     }

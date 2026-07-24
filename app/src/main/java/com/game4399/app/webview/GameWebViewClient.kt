@@ -431,6 +431,40 @@ open class GameWebViewClient(
             }
           })();
 
+          // === 2.8 字体别名注入：通过 @font-face 将中文字体名映射到 Android 系统的 CJK 字体 ===
+          //      Ruffle/WAFlash 渲染时通过浏览器 FontFace API 查找字体
+          //      这些别名让 "SimHei"、"宋体"、"Microsoft YaHei" 等都能找到 Noto Sans CJK SC
+          (function(){
+            if (window.__fontAliasInjected) return;
+            window.__fontAliasInjected = true;
+            var fontAliases = {
+              'SimHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+              '黑体': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+              'Microsoft YaHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','PingFang SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+              '微软雅黑': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+              'SimSun': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+              '宋体': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+              'KaiTi': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+              '楷体': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+              'FangSong': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+              '仿宋': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+              'Arial': ['Arial','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+              'Tahoma': ['Tahoma','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+              'Helvetica': ['Helvetica','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif']
+            };
+            var css = '';
+            for (var name in fontAliases) {
+              var src = fontAliases[name].map(function(f){ return "local('"+f+"')"; }).join(',');
+              css += "@font-face{font-family:'"+name+"';src:"+src+";font-weight:normal;font-style:normal;}";
+              var boldSrc = fontAliases[name].map(function(f){ return "local('"+f+" Bold')"; }).concat(fontAliases[name].map(function(f){ return "local('"+f+"')"; })).join(',');
+              css += "@font-face{font-family:'"+name+"';src:"+boldSrc+";font-weight:bold;font-style:normal;}";
+            }
+            var style = document.createElement('style');
+            style.textContent = css;
+            (document.head || document.documentElement).appendChild(style);
+            console.log('[Font] 已注入 ' + Object.keys(fontAliases).length + ' 个字体别名');
+          })();
+
           // === 3. Flash 引擎注入（Ruffle polyfill 或 WAFlash 页内播放） ===
           ${if (!isWaflash) """
           // --- Ruffle polyfill 模式 ---
@@ -447,7 +481,12 @@ open class GameWebViewClient(
             upgradeToHttps: true,
             scale: 'showAll',
             maxExecutionDuration: 30,
-            logLevel: 'warn'
+            logLevel: 'warn',
+            defaultFonts: {
+              sans: ['Noto Sans CJK SC', 'Noto Sans SC', 'SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'sans-serif'],
+              serif: ['Noto Serif CJK SC', 'Noto Serif SC', 'SimSun', '宋体', 'STSong', 'Noto Sans CJK SC', 'serif'],
+              typewriter: ['Noto Sans CJK SC', 'Courier New', 'monospace']
+            }
           };
           var ruffleScript = document.createElement('script');
           ruffleScript.src = 'https://flash.local/ruffle/ruffle.js';
@@ -462,6 +501,18 @@ open class GameWebViewClient(
           var __wafPlayed = false;
           var __wafEngineReady = false;
           var __wafModule = null;
+          var __wafUseGpu = true;
+
+          // WebGL 可用性检测（某些 Android 设备 WebGL 不完整）
+          function __wafCheckWebGL() {
+            try {
+              var c = document.createElement('canvas');
+              var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+              return !!gl;
+            } catch(e) { return false; }
+          }
+          __wafUseGpu = __wafCheckWebGL();
+          console.log('[WAFlash] WebGL 支持检测: ' + (__wafUseGpu ? 'webgl' : 'Canvas2D'));
 
           // 预加载 WAFlash 引擎
           function __wafLoadEngine() {
@@ -505,6 +556,11 @@ open class GameWebViewClient(
             canvas.id = 'canvas';
             canvas.style.cssText = 'width:100%;height:100%;display:block;outline:none;';
             canvas.setAttribute('tabindex', '1');
+            // 设置 canvas 物理尺寸（WAFlash 需要非零尺寸才能正确渲染）
+            var cw = window.innerWidth || document.documentElement.clientWidth || 800;
+            var ch = window.innerHeight || document.documentElement.clientHeight || 600;
+            canvas.width = cw;
+            canvas.height = ch;
             container.appendChild(canvas);
 
             // 隐藏页面其他内容
@@ -527,16 +583,27 @@ open class GameWebViewClient(
             }
 
             // 调用 WAFlash 引擎播放
+            // createWaflash(swfUrl, options)
+            // options.gpu: true=WebGL, false=Canvas2D
+            // options.enableFilters: true=启用滤镜
             var fn = (__wafModule && __wafModule.createWaflash) || window.createWaflash;
             if (fn) {
               try {
-                fn(swfUrl, { gpu: true });
-                console.log('[WAFlash] 页内播放已启动: ' + swfUrl);
+                fn(swfUrl, { gpu: __wafUseGpu, enableFilters: true });
+                console.log('[WAFlash] 页内播放已启动: ' + swfUrl + ' (gpu=' + __wafUseGpu + ')');
               } catch(e) {
-                console.error('[WAFlash] 播放失败: ' + e.message);
-                // 回退到独立播放器页面
-                if (window.Android && window.Android.openSwf) {
-                  window.Android.openSwf(swfUrl, baseUrl || window.location.href);
+                console.error('[WAFlash] 播放失败(WebGL): ' + e.message + '，尝试回退到 Canvas2D');
+                // WebGL 失败时回退到 Canvas2D
+                try {
+                  __wafUseGpu = false;
+                  fn(swfUrl, { gpu: false, enableFilters: true });
+                  console.log('[WAFlash] Canvas2D 回退成功');
+                } catch(e2) {
+                  console.error('[WAFlash] Canvas2D 也失败: ' + e2.message);
+                  // 回退到独立播放器页面
+                  if (window.Android && window.Android.openSwf) {
+                    window.Android.openSwf(swfUrl, baseUrl || window.location.href);
+                  }
                 }
               }
             } else {
@@ -1190,6 +1257,18 @@ open class GameWebViewClient(
               var played = false;
               var engineReady = false;
               var wafModule = null;
+              var wafUseGpu = true;
+
+              // WebGL 可用性检测
+              function checkWGL() {
+                try {
+                  var c = document.createElement('canvas');
+                  var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+                  return !!gl;
+                } catch(e) { return false; }
+              }
+              wafUseGpu = checkWGL();
+              console.log('[WAFlash] WebGL 检测(备份): ' + (wafUseGpu ? 'webgl' : 'Canvas2D'));
 
               function loadEngine() {
                 if (window.__wafEngineLoading) return;
@@ -1218,6 +1297,10 @@ open class GameWebViewClient(
                 canvas.className = 'waflashCanvas'; canvas.id = 'canvas';
                 canvas.style.cssText = 'width:100%;height:100%;display:block;outline:none;';
                 canvas.setAttribute('tabindex','1');
+                // 设置 canvas 物理尺寸
+                var cw = window.innerWidth || document.documentElement.clientWidth || 800;
+                var ch = window.innerHeight || document.documentElement.clientHeight || 600;
+                canvas.width = cw; canvas.height = ch;
                 container.appendChild(canvas);
                 var bc = document.body.children;
                 for (var i = 0; i < bc.length; i++) { if(bc[i]!==container){try{bc[i].style.display='none';}catch(e){}} }
@@ -1230,10 +1313,14 @@ open class GameWebViewClient(
                 }
                 var fn = (wafModule && wafModule.createWaflash) || window.createWaflash;
                 if (fn) {
-                  try { fn(swfUrl, {gpu:true}); console.log('[WAFlash] 页内播放已启动(备份)'); }
+                  try { fn(swfUrl, {gpu: wafUseGpu, enableFilters: true}); console.log('[WAFlash] 页内播放已启动(备份) gpu=' + wafUseGpu); }
                   catch(e) {
-                    console.error('[WAFlash] 播放失败: '+e.message);
-                    if (window.Android && window.Android.openSwf) window.Android.openSwf(swfUrl, baseUrl||window.location.href);
+                    console.error('[WAFlash] WebGL失败(备份): '+e.message+'，回退Canvas2D');
+                    try { wafUseGpu = false; fn(swfUrl, {gpu: false, enableFilters: true}); console.log('[WAFlash] Canvas2D回退成功(备份)'); }
+                    catch(e2) {
+                      console.error('[WAFlash] Canvas2D也失败(备份): '+e2.message);
+                      if (window.Android && window.Android.openSwf) window.Android.openSwf(swfUrl, baseUrl||window.location.href);
+                    }
                   }
                 } else { console.log('[WAFlash] createWaflash 未找到'); }
               }
