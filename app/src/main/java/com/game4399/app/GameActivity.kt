@@ -204,8 +204,6 @@ class GameActivity : AppCompatActivity() {
             if (url.contains("17173.com")) return true
             if (url.contains("3366.com")) return true
             if (url.contains("4399er.com")) return true
-            if (url.contains("flash.")) return true
-            if (url.contains("mini游戏") || url.contains("xiaoyouxi")) return true
             // 通用 Flash 页面特征（URL 中包含 flash 相关关键词）
             if (url.contains("flashhtml", ignoreCase = true)) return true
             if (url.contains("/flash_game", ignoreCase = true)) return true
