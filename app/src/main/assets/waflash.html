@@ -35,8 +35,8 @@
     var canvas = document.getElementById('canvas');
     canvas.addEventListener('click', function() { canvas.focus(); });
 
-    // 判断是否为本地文件
-    var isLocalFile = SWF_URL.indexOf('content://') === 0 || SWF_URL.indexOf('file://') === 0;
+    // 判断是否为本地文件代理 URL（flash.local/local.swf）
+    var isLocalFile = SWF_URL.indexOf('https://flash.local/local.swf') === 0;
 
     if (!SWF_URL) {
       statusEl.textContent = '错误: 未指定 SWF URL';
@@ -86,36 +86,11 @@
     }
 
     if (isLocalFile) {
-      // 本地文件：WebView 不允许从 https://flash.local 页面 XHR content:// URI
-      // 通过 JS 接口让原生读取文件，返回 Base64 → JS 解码为 Blob URL
-      statusEl.textContent = '正在读取本地文件...';
-      console.log('[WAF] 本地文件模式：JS 接口读取');
-
-      try {
-        var base64 = window.Android.readLocalSwf(SWF_URL);
-        if (base64) {
-          console.log('[WAF] 原生返回 Base64 数据，长度: ' + base64.length);
-          // Base64 → ArrayBuffer
-          var binaryString = atob(base64);
-          var len = binaryString.length;
-          var bytes = new Uint8Array(len);
-          for (var i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          console.log('[WAF] SWF 解码完成: ' + bytes.byteLength + ' bytes');
-          var blob = new Blob([bytes], { type: 'application/x-shockwave-flash' });
-          var blobUrl = URL.createObjectURL(blob);
-          console.log('[WAF] Blob URL: ' + blobUrl);
-          statusEl.textContent = '正在启动引擎...';
-          loadEngine(blobUrl);
-        } else {
-          statusEl.textContent = '本地文件读取失败';
-          console.error('[WAF] readLocalSwf 返回 null');
-        }
-      } catch(e) {
-        statusEl.textContent = '本地文件读取失败: ' + e.message;
-        console.error('[WAF] 读取异常: ' + e.message);
-      }
+      // 本地文件：SWF_URL 已被替换为 https://flash.local/local.swf
+      // shouldInterceptRequest 会拦截此 URL 并读取真实文件
+      // 直接传给 WAFlash 即可（WAFlash 的 fetch 能拦截 flash.local 的 HTTP 请求）
+      console.log('[WAF] 本地文件模式：虚拟 URL 代理');
+      loadEngine(SWF_URL);
     } else {
       // 远程 SWF：直接传 URL 给 WAFlash
       loadEngine(SWF_URL);
