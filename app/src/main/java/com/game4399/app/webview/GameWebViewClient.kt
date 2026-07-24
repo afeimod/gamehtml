@@ -80,18 +80,25 @@ open class GameWebViewClient(
 
         // 5. 拦截远程 SWF 文件请求
         //    URL 模式 + Accept header 双重检测
+        //    注意：必须先去掉 query 参数再匹配，否则 trace.js?uddd=...flash/35744.htm 会误匹配
+        val urlNoQuery = url.substringBefore("?").substringBefore("#")
         val acceptHeader = request.requestHeaders?.get("Accept") ?: ""
-        val isSwfRequest = url.endsWith(".swf", ignoreCase = true) ||
-            url.contains(".swf?", ignoreCase = true) ||
-            url.contains(".swf#", ignoreCase = true) ||
-            url.contains("/swf/", ignoreCase = true) ||
-            url.contains("flashgame", ignoreCase = true) ||
-            url.contains("main.swf", ignoreCase = true) ||
-            url.contains("game.swf", ignoreCase = true) ||
-            url.contains("index.swf", ignoreCase = true) ||
-            url.contains("play.swf", ignoreCase = true) ||
+        // 排除 HTML 页面（.htm/.html），这些是游戏页面不是 SWF
+        val isHtmlPage = urlNoQuery.endsWith(".htm", ignoreCase = true) ||
+            urlNoQuery.endsWith(".html", ignoreCase = true) ||
+            urlNoQuery.endsWith(".php", ignoreCase = true) ||
+            urlNoQuery.endsWith(".asp", ignoreCase = true) ||
+            urlNoQuery.endsWith(".jsp", ignoreCase = true) ||
+            urlNoQuery.endsWith(".js", ignoreCase = true) ||
+            urlNoQuery.endsWith(".css", ignoreCase = true)
+        val isSwfRequest = (!isHtmlPage) && (
+            urlNoQuery.endsWith(".swf", ignoreCase = true) ||
+            urlNoQuery.contains("/swf/", ignoreCase = true) ||
+            urlNoQuery.contains("flashgame", ignoreCase = true) ||
             acceptHeader.contains("application/x-shockwave-flash", ignoreCase = true) ||
-            (url.contains("4399.com") && (url.contains("/dw-") || url.contains("flash_tm3") || url.contains("flash20") || url.contains("/flash/") || url.contains("flashhtml")))
+            // 4399 特有的 SWF URL 模式（只匹配 path，不匹配 query）
+            (urlNoQuery.contains("4399.com") && (urlNoQuery.contains("/dw-") || urlNoQuery.contains("flash_tm3") || urlNoQuery.contains("flash20")))
+        )
         if (isSwfRequest) {
             return interceptSwf(url)
         }
