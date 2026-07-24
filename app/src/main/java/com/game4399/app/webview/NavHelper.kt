@@ -36,16 +36,12 @@ object NavHelper {
 
     /** 构造内置 Flash 播放器地址（根据引擎选择不同播放器页面） */
     fun playerUrl(swfUrl: String, base: String? = null, title: String? = null): String {
-        // 本地 SWF：直接用 WAFlash（本地文件无需网络下载，waflash 可直接加载）
-        // 将 content:// URI 转为 file:// 供 WebView 加载
-        val effectiveSwfUrl = if (isLocalFile(swfUrl)) swfUrl else swfUrl
-
         // WAFlash 引擎使用独立的 waflash.html 页面（canvas 渲染 + ES module）
         // 从 flash.local 虚拟域名加载，确保 Emscripten 的 fetch/XHR 能正常工作
-        if (PrefsManager.flashEngine == "waflash" || isLocalFile(swfUrl)) {
+        if (PrefsManager.flashEngine == "waflash") {
             val u = Uri.parse("https://flash.local/waflash.html")
                 .buildUpon()
-                .appendQueryParameter("swf", effectiveSwfUrl)
+                .appendQueryParameter("swf", swfUrl)
             base?.let { u.appendQueryParameter("base", it) }
             title?.let { u.appendQueryParameter("title", it) }
             return u.build().toString()
