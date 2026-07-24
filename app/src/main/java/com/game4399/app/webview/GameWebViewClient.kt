@@ -880,9 +880,9 @@ open class GameWebViewClient(
             view?.evaluateJavascript(IFRAME_INJECT_SCRIPT, null)
         }
 
-        // 所有页面注入 viewport + CSS zoom 缩放（不限于 4399）
+        // 所有页面注入 viewport + CSS zoom 缩放（Flash 播放器页面除外）
         if (url != null) {
-            view?.evaluateJavascript(buildViewportScript(), null)
+            view?.evaluateJavascript(buildViewportScript(url), null)
         }
     }
 
@@ -896,9 +896,9 @@ open class GameWebViewClient(
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
         }
-        // 所有页面注入缩放
+        // 所有页面注入缩放（Flash 播放器页面除外）
         if (url != null) {
-            view?.evaluateJavascript(buildViewportScript(), null)
+            view?.evaluateJavascript(buildViewportScript(url), null)
         }
     }
 
@@ -916,7 +916,7 @@ open class GameWebViewClient(
         }
         // 所有页面注入缩放（页面加载完成后再次应用，防止被页面 JS 覆盖）
         if (url != null) {
-            view?.evaluateJavascript(buildViewportScript(), null)
+            view?.evaluateJavascript(buildViewportScript(url), null)
         }
         callback.onPageFinished(url)
     }
@@ -951,8 +951,15 @@ open class GameWebViewClient(
         super.onReceivedError(view, errorCode, description, failingUrl)
     }
 
-    /** 根据用户缩放设置构建 viewport + CSS zoom 脚本（适用于所有页面，不限于 4399） */
-    private fun buildViewportScript(): String {
+    /**
+     * 根据用户缩放设置构建 viewport + CSS zoom 脚本。
+     * Flash 播放器页面（flash.local）不应用 CSS zoom，否则 Ruffle/WAFlash 的
+     * canvas 坐标映射会出错，导致点击位置与实际位置不同步。
+     */
+    private fun buildViewportScript(url: String? = null): String {
+        // Flash 播放器页面已有自己的 viewport 和布局，不注入额外缩放
+        if (url != null && url.contains("flash.local")) return ""
+
         val scale = if (PrefsManager.pageZoomMode == "manual") {
             PrefsManager.pageZoomManual / 100.0
         } else {
