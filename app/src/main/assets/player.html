@@ -36,6 +36,39 @@
     color: rgba(255,255,255,.5); font-size: 12px; z-index: 10;
   }
 </style>
+<script>
+  // === 字体别名注入：通过 @font-face 将中文字体名映射到 Android 系统的 CJK 字体 ===
+  // Ruffle 通过浏览器 FontFace API 查找字体，这些别名让 "SimHei"、"宋体" 等都能找到 CJK 字体
+  (function(){
+    var fontAliases = {
+      'SimHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      '黑体': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      'Microsoft YaHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','PingFang SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      '微软雅黑': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      'SimSun': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      '宋体': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      'KaiTi': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+      '楷体': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+      'FangSong': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      '仿宋': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      'Arial': ['Arial','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+      'Tahoma': ['Tahoma','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+      'Helvetica': ['Helvetica','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif']
+    };
+    var css = '';
+    for (var name in fontAliases) {
+      var src = fontAliases[name].map(function(f){ return "local('"+f+"')"; }).join(',');
+      css += "@font-face{font-family:'"+name+"';src:"+src+";font-weight:normal;font-style:normal;}";
+      // bold variant
+      var boldSrc = fontAliases[name].map(function(f){ return "local('"+f+" Bold')"; }).concat(fontAliases[name].map(function(f){ return "local('"+f+"')"; })).join(',');
+      css += "@font-face{font-family:'"+name+"';src:"+boldSrc+";font-weight:bold;font-style:normal;}";
+    }
+    var style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    console.log('[Font] 已注入 ' + Object.keys(fontAliases).length + ' 个字体别名');
+  })();
+</script>
 </head>
 <body>
   <div id="stage"></div>
@@ -69,6 +102,8 @@
     var rufflePath = CDN_PATH || 'https://flash.local/ruffle/';
 
     // 1) 预置 Ruffle 配置（必须早于 ruffle.js）
+    //    defaultFonts: 映射 Flash 的 _sans/_serif/_typewriter 到含 CJK 的字体
+    //    fontSources 暂不支持（需要 SWF 格式字体文件），依赖 @font-face 别名 + 系统字体
     window.RufflePlayer = window.RufflePlayer || {};
     window.RufflePlayer.config = {
       "publicPath": rufflePath,
@@ -84,7 +119,12 @@
       "splashScreen": true,
       "preloader": true,
       "logLevel": "warn",
-      "maxExecutionDuration": 30
+      "maxExecutionDuration": 30,
+      "defaultFonts": {
+        "sans": ["Noto Sans CJK SC", "Noto Sans SC", "SimHei", "Microsoft YaHei", "WenQuanYi Micro Hei", "Droid Sans Fallback", "sans-serif"],
+        "serif": ["Noto Serif CJK SC", "Noto Serif SC", "SimSun", "宋体", "STSong", "Noto Sans CJK SC", "serif"],
+        "typewriter": ["Noto Sans CJK SC", "Courier New", "monospace"]
+      }
     };
 
     // 2) 动态加载 Ruffle

@@ -30,6 +30,38 @@
     color: rgba(255,255,255,.3); font-size: 10px; z-index: 10;
   }
 </style>
+<script>
+  // === 字体别名注入：通过 @font-face 将中文字体名映射到 Android 系统的 CJK 字体 ===
+  // WAFlash 渲染时会通过浏览器 FontFace API 查找字体
+  (function(){
+    var fontAliases = {
+      'SimHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      '黑体': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      'Microsoft YaHei': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','PingFang SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      '微软雅黑': ['Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC','WenQuanYi Micro Hei','Droid Sans Fallback','sans-serif'],
+      'SimSun': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      '宋体': ['Noto Serif CJK SC','Noto Serif SC','Source Han Serif SC','Song','STSong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      'KaiTi': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+      '楷体': ['Noto Sans CJK SC','KaiTi SC','STKaiti','Droid Sans Fallback','sans-serif'],
+      'FangSong': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      '仿宋': ['Noto Serif CJK SC','STFangsong','Noto Sans CJK SC','Droid Sans Fallback','serif'],
+      'Arial': ['Arial','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+      'Tahoma': ['Tahoma','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif'],
+      'Helvetica': ['Helvetica','Noto Sans CJK SC','Noto Sans SC','Droid Sans Fallback','sans-serif']
+    };
+    var css = '';
+    for (var name in fontAliases) {
+      var src = fontAliases[name].map(function(f){ return "local('"+f+"')"; }).join(',');
+      css += "@font-face{font-family:'"+name+"';src:"+src+";font-weight:normal;font-style:normal;}";
+      var boldSrc = fontAliases[name].map(function(f){ return "local('"+f+" Bold')"; }).concat(fontAliases[name].map(function(f){ return "local('"+f+"')"; })).join(',');
+      css += "@font-face{font-family:'"+name+"';src:"+boldSrc+";font-weight:bold;font-style:normal;}";
+    }
+    var style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    console.log('[Font] 已注入 ' + Object.keys(fontAliases).length + ' 个字体别名');
+  })();
+</script>
 </head>
 <body>
   <canvas class="waflashCanvas" id="canvas" tabindex="1"></canvas>
@@ -70,6 +102,43 @@
     console.log('[WAF] SWF_URL: ' + SWF_URL);
     console.log('[WAF] isLocalFile: ' + isLocalFile);
 
+    // === WebGL 可用性检测 ===
+    // 某些 Android 设备 WebGL 支持不完整，需要检测后决定是否使用 GPU 渲染
+    function checkWebGLSupport() {
+      try {
+        var testCanvas = document.createElement('canvas');
+        var gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+        if (!gl) return false;
+        // 检查 WebGL 是否真正可用（有些设备返回 context 但实际无法渲染）
+        var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        var renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : '';
+        // 如果渲染器为空或包含 "SwiftShader"（软件渲染），仍然可以使用但性能差
+        // 这里我们允许使用，只在完全无 WebGL 时回退
+        return true;
+      } catch(e) {
+        console.warn('[WAF] WebGL 检测失败: ' + e.message);
+        return false;
+      }
+    }
+
+    var useGpu = checkWebGLSupport();
+    console.log('[WAF] WebGL 支持检测: ' + (useGpu ? 'webgl' : 'default(Canvas2D)'));
+
+    // 设置 canvas 物理尺寸（WAFlash 需要 canvas 有明确的尺寸才能正确渲染）
+    function resizeCanvas() {
+      var w = window.innerWidth || document.documentElement.clientWidth || 800;
+      var h = window.innerHeight || document.documentElement.clientHeight || 600;
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+    }
+    resizeCanvas();
+    window.addEventListener('resize', function() {
+      // WAFlash 内部会处理 resize，这里只确保 canvas 尺寸非零
+      if (canvas.width === 0 || canvas.height === 0) resizeCanvas();
+    });
+
     // 加载 WAFlash 引擎
     function loadEngine(swfUrlToLoad) {
       import('https://flash.local/waflash/waflash-player.min.js').then(function(module) {
@@ -84,12 +153,30 @@
         }
 
         try {
-          fn(swfUrlToLoad, { gpu: true });
-          console.log('[WAF] createWaflash 已调用: ' + swfUrlToLoad);
+          // WAFlash createWaflash 参数: (swfUrl, options)
+          // options.gpu: true=WebGL渲染, false=Canvas2D渲染
+          // options.enableFilters: true=启用滤镜, false=禁用滤镜(性能更好)
+          fn(swfUrlToLoad, {
+            gpu: useGpu,
+            enableFilters: true
+          });
+          console.log('[WAF] createWaflash 已调用: ' + swfUrlToLoad + ' (gpu=' + useGpu + ')');
           setTimeout(function() { statusEl.style.display = 'none'; }, 3000);
         } catch(e) {
-          statusEl.textContent = '加载失败: ' + e.message;
-          console.error('[WAF] ' + e.message);
+          console.error('[WAF] 播放失败(WebGL): ' + e.message + '，尝试回退到 Canvas2D');
+          // WebGL 失败时回退到 Canvas2D
+          try {
+            useGpu = false;
+            fn(swfUrlToLoad, {
+              gpu: false,
+              enableFilters: true
+            });
+            console.log('[WAF] Canvas2D 回退成功');
+            setTimeout(function() { statusEl.style.display = 'none'; }, 3000);
+          } catch(e2) {
+            statusEl.textContent = '加载失败: ' + e2.message;
+            console.error('[WAF] Canvas2D 也失败: ' + e2.message);
+          }
         }
       }).catch(function(err) {
         statusEl.textContent = '引擎加载失败';
@@ -100,7 +187,6 @@
     if (isLocalFile) {
       // 本地文件：SWF_URL 已被替换为 https://flash.local/local.swf
       // shouldInterceptRequest 会拦截此 URL 并读取真实文件
-      // 直接传给 WAFlash 即可（WAFlash 的 fetch 能拦截 flash.local 的 HTTP 请求）
       console.log('[WAF] 本地文件模式：虚拟 URL 代理');
       loadEngine(SWF_URL);
     } else {
