@@ -30,6 +30,8 @@ open class GameWebViewClient(
         fun shouldInjectRuffle(url: String?): Boolean
         /** 获取 WAFlash 预下载的 SWF 缓存文件路径 */
         fun getCachedSwfPath(): String?
+        /** 获取本地 SWF 文件的真实 URI */
+        fun getLocalSwfUri(): String?
     }
 
     /** 常见广告域名 */
@@ -55,9 +57,14 @@ open class GameWebViewClient(
             return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
         }
 
-        // 2. 拦截 flash.local 虚拟域名：从 assets 返回引擎文件
+        // 2. 拦截 flash.local 虚拟域名
         if (url.contains("flash.local")) {
-            return interceptAsset(view, url.substringAfter("flash.local/").substringBefore("?"))
+            val path = url.substringAfter("flash.local/").substringBefore("?")
+            // 本地 SWF 代理：flash.local/local.swf → 读取真实文件
+            if (path == "local.swf") {
+                return interceptLocalSwfProxy(view)
+            }
+            return interceptAsset(view, path)
         }
 
         // 3. 拦截 file:///android_asset/waflash/ 请求
@@ -316,6 +323,36 @@ open class GameWebViewClient(
         })();
         </script>
         """.trimIndent()
+    }
+
+    /** 读取本地 SWF 文件代理（flash.local/local.swf → 真实 content:// URI） */
+    private fun interceptLocalSwfProxy(view: WebView): WebResourceResponse? {
+        val uri = callback.getLocalSwfUri()
+        if (uri == null) {
+            android.util.Log.w("GameWebViewClient", "local.swf: 无本地文件 URI")
+            return WebResourceResponse("application/x-shockwave-flash", null, 404, "Not Found",
+                mapOf("Access-Control-Allow-Origin" to "*"), java.io.ByteArrayInputStream(ByteArray(0)))
+        }
+        return try {
+            android.util.Log.d("GameWebViewClient", "local.swf 代理: 读取 $uri")
+            val parsed = android.net.Uri.parse(uri)
+            val data = view.context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
+                ?: throw java.io.IOException("无法打开文件流")
+            android.util.Log.d("GameWebViewClient", "local.swf 读取完成: ${data.size} bytes")
+            WebResourceResponse(
+                "application/x-shockwave-flash", null, 200, "OK",
+                mapOf(
+                    "Access-Control-Allow-Origin" to "*",
+                    "Content-Type" to "application/x-shockwave-flash",
+                    "Cache-Control" to "no-cache"
+                ),
+                java.io.ByteArrayInputStream(data)
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("GameWebViewClient", "local.swf 读取失败: ${e.message}")
+            WebResourceResponse("application/x-shockwave-flash", null, 404, "Not Found",
+                mapOf("Access-Control-Allow-Origin" to "*"), java.io.ByteArrayInputStream(ByteArray(0)))
+        }
     }
 
     /** 读取本地 SWF 文件（content:// 或 file://），返回带 CORS 头的响应 */
