@@ -813,8 +813,8 @@ open class GameWebViewClient(
             view?.evaluateJavascript(IFRAME_INJECT_SCRIPT, null)
         }
 
-        // 4399 页面注入 viewport 调整
-        if (url != null && url.contains("4399.com")) {
+        // 所有页面注入 viewport + CSS zoom 缩放（不限于 4399）
+        if (url != null) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
     }
@@ -829,7 +829,8 @@ open class GameWebViewClient(
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
         }
-        if (url != null && url.contains("4399.com")) {
+        // 所有页面注入缩放
+        if (url != null) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
     }
@@ -846,7 +847,8 @@ open class GameWebViewClient(
         if (isFlashPage) {
             view?.evaluateJavascript(CSS_INJECTION, null)
         }
-        if (url != null && url.contains("4399.com")) {
+        // 所有页面注入缩放（页面加载完成后再次应用，防止被页面 JS 覆盖）
+        if (url != null) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
         callback.onPageFinished(url)
@@ -882,7 +884,7 @@ open class GameWebViewClient(
         super.onReceivedError(view, errorCode, description, failingUrl)
     }
 
-    /** 根据用户缩放设置构建 viewport 脚本 */
+    /** 根据用户缩放设置构建 viewport + CSS zoom 脚本（适用于所有页面，不限于 4399） */
     private fun buildViewportScript(): String {
         val scale = if (PrefsManager.pageZoomMode == "manual") {
             PrefsManager.pageZoomManual / 100.0
@@ -890,15 +892,31 @@ open class GameWebViewClient(
             -1.0
         }
         return if (scale > 0) {
+            // 手动缩放：viewport meta + CSS zoom 双重生效
+            // viewport meta 对响应式页面生效，CSS zoom 对固定布局桌面页面生效
             """
             (function(){
+              var s = $scale;
+              // 1. viewport meta
               var meta = document.querySelector('meta[name="viewport"]');
               if (!meta) { meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }
-              var s = $scale;
               meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=' + s + ', maximum-scale=5.0, user-scalable=yes';
+              // 2. CSS zoom（对桌面固定布局页面有效，viewport meta 无效时兜底）
+              document.documentElement.style.zoom = s;
+              // 3. 监听 DOM 变化，确保动态加载的内容也应用 zoom
+              if (!window.__zoomObserver) {
+                window.__zoomObserver = true;
+                var applyZoom = function() { document.documentElement.style.zoom = s; };
+                if (window.MutationObserver) {
+                  var mo = new MutationObserver(function(){ applyZoom(); });
+                  try { mo.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['style','class']}); } catch(e){}
+                  setTimeout(function(){ mo.disconnect(); }, 5000);
+                }
+              }
             })();
             """.trimIndent()
         } else {
+            // 自动缩放：根据屏幕宽度适配桌面页面
             """
             (function(){
               var meta = document.querySelector('meta[name="viewport"]');
@@ -907,6 +925,8 @@ open class GameWebViewClient(
               var scale = Math.min(1, sw / 1200);
               scale = Math.max(0.25, scale);
               meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=5.0, user-scalable=yes';
+              // 自动模式也应用 CSS zoom，保证桌面页面缩放生效
+              document.documentElement.style.zoom = scale;
             })();
             """.trimIndent()
         }
