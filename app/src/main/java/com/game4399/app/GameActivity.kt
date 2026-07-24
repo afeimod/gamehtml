@@ -140,10 +140,11 @@ class GameActivity : AppCompatActivity() {
         }
         override fun onConsole(level: String, msg: String, sourceId: String?, line: Int) {}
         override fun onShowFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
-            // Flash 全屏：直接铺满（topBar 已移除，无需操作）
+            // Flash 全屏：WebView 已占满屏幕，无需额外操作
+            // 保存 callback 以便退出全屏时调用
         }
         override fun onHideFullscreen() {
-            // topBar 已移除，无需操作
+            // 退出全屏：无需操作
         }
         override fun onFileChooser(callback: ValueCallback<Array<Uri>>, accept: String?): Boolean {
             filePathCallback?.onReceiveValue(null)
@@ -185,15 +186,31 @@ class GameActivity : AppCompatActivity() {
         }
         override fun shouldInjectRuffle(url: String?): Boolean {
             if (url == null) return false
+            // 排除内部播放器页面
             if (url.startsWith("file:///android_asset/player.html")) return false
-            if (url.startsWith("file:///android_asset/player.html")) return false
+            if (url.startsWith("file:///android_asset/waflash.html")) return false
             if (url.startsWith("https://flash.local/player.html")) return false
             if (url.startsWith("https://flash.local/waflash.html")) return false
             if (url.startsWith("https://flash.local/waflash/")) return false
             if (url.startsWith("https://flash.local/ruffle/")) return false
             if (url.startsWith("https://flash.local/swf2js/")) return false
-            // 4399 Flash 游戏页 + 4399 自己的 Flash 播放器页面
-            return (url.contains("4399.com") && (url.contains("/flash/") || url.contains("flash.local.4399.com") || url.contains("flash_tm3")))
+            if (!com.game4399.app.data.PrefsManager.isFlashEnabled) return false
+            // 所有 4399 域名页面（主站、子域名、游戏页、iframe 内容）
+            if (url.contains("4399.com")) return true
+            // 常见 Flash 游戏托管域名/路径关键词
+            if (url.contains("/flash/") || url.contains("/swf/") || url.contains("flashgame")) return true
+            // 其他常见 Flash 游戏网站
+            if (url.contains("7k7k.com")) return true
+            if (url.contains("17173.com")) return true
+            if (url.contains("3366.com")) return true
+            if (url.contains("4399er.com")) return true
+            if (url.contains("flash.")) return true
+            if (url.contains("mini游戏") || url.contains("xiaoyouxi")) return true
+            // 通用 Flash 页面特征（URL 中包含 flash 相关关键词）
+            if (url.contains("flashhtml", ignoreCase = true)) return true
+            if (url.contains("/flash_game", ignoreCase = true)) return true
+            if (url.contains("play_flash", ignoreCase = true)) return true
+            return false
         }
         override fun getCachedSwfPath(): String? = null
         override fun getLocalSwfUri(): String? = localSwfUri
