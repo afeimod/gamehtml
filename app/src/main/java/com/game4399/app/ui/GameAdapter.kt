@@ -4,14 +4,17 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.game4399.app.data.GameItem
+import com.game4399.app.data.GameType
 import com.game4399.app.databinding.ItemGameBinding
 
 /**
  * 游戏列表适配器。点击整项触发 [onPlay]。
+ * 长按触发 [onLongClick]（用于删除本地 SWF 等）。
  */
 class GameAdapter(
     private val items: MutableList<GameItem> = mutableListOf(),
-    private val onPlay: (GameItem) -> Unit
+    private val onPlay: (GameItem) -> Unit,
+    private val onLongClick: ((GameItem) -> Boolean)? = null
 ) : RecyclerView.Adapter<GameAdapter.VH>() {
 
     fun submit(list: List<GameItem>) {
@@ -33,6 +36,13 @@ class GameAdapter(
             tvDesc.text = item.desc
             root.setOnClickListener { onPlay(item) }
             btnPlay.setOnClickListener { onPlay(item) }
+            // 长按删除（仅本地 SWF）
+            if (onLongClick != null && item.type == GameType.LOCAL_SWF) {
+                root.setOnLongClickListener { onLongClick.invoke(item) }
+            } else {
+                root.setOnLongClickListener(null)
+                root.isLongClickable = false
+            }
         }
     }
 

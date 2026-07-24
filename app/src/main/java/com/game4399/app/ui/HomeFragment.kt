@@ -66,9 +66,24 @@ class HomeFragment : Fragment() {
     }
 
     private fun setupLocalSwfList() {
-        adapter = GameAdapter { item ->
-            GameActivity.launch(requireContext(), item.resolveUrl(), item.title, item.type)
-        }
+        adapter = GameAdapter(
+            onPlay = { item ->
+                GameActivity.launch(requireContext(), item.resolveUrl(), item.title, item.type)
+            },
+            onLongClick = { item ->
+                // 长按删除本地 SWF
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("删除")
+                    .setMessage("确定要删除「${item.title}」吗？")
+                    .setPositiveButton("删除") { _, _ ->
+                        LocalSwfStore.remove(item.id)
+                        refreshLocalSwfList()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+                true
+            }
+        )
         binding.classicList.layoutManager = LinearLayoutManager(requireContext())
         binding.classicList.adapter = adapter
 
