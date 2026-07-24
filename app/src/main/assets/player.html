@@ -6,8 +6,20 @@
 <title>4399 Flash 播放器</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  html, body {
+    width: 100%; height: 100%; background: #000; overflow: hidden;
+    font-family: "Microsoft YaHei", "微软雅黑", "Noto Sans CJK SC", "Source Han Sans SC",
+                 "PingFang SC", "Heiti SC", "SimHei", "WenQuanYi Micro Hei",
+                 Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
   #stage { position: fixed; inset: 0; width: 100%; height: 100%; background: #000; }
+  #stage canvas, #stage ruffle-player {
+    font-family: "Microsoft YaHei", "微软雅黑", "Noto Sans CJK SC", "Source Han Sans SC",
+                 "PingFang SC", "Heiti SC", "SimHei", "WenQuanYi Micro Hei",
+                 Arial, Helvetica, sans-serif !important;
+  }
   #loading {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     flex-direction: column; color: #FFC107; font-family: -apple-system, "Microsoft YaHei", sans-serif;
@@ -68,7 +80,7 @@
       "allowScriptAccess": true,
       "scale": "showAll",
       "quality": "high",
-      "allowFullscreen": true,
+      "allowFullscreen": false,
       "splashScreen": true,
       "preloader": true,
       "logLevel": "warn",

@@ -6,8 +6,20 @@
 <title>WAFlash 播放器</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-  canvas { width: 100%; height: 100%; display: block; outline: none; }
+  html, body {
+    width: 100%; height: 100%; background: #000; overflow: hidden;
+    font-family: "Microsoft YaHei", "微软雅黑", "Noto Sans CJK SC", "Source Han Sans SC",
+                 "PingFang SC", "Heiti SC", "SimHei", "WenQuanYi Micro Hei",
+                 Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  canvas {
+    width: 100%; height: 100%; display: block; outline: none;
+    font-family: "Microsoft YaHei", "微软雅黑", "Noto Sans CJK SC", "Source Han Sans SC",
+                 "PingFang SC", "Heiti SC", "SimHei", "WenQuanYi Micro Hei",
+                 Arial, Helvetica, sans-serif !important;
+  }
   #waflashStatus {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
     color: #beb5f9; font-family: -apple-system, "Microsoft YaHei", sans-serif;
