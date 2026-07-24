@@ -35,9 +35,11 @@ class FavoritesActivity : AppCompatActivity() {
             )
         }
 
-        adapter = GameAdapter { item ->
-            GameActivity.launch(this, item.resolveUrl(), item.title, item.type)
-        }
+        adapter = GameAdapter(
+            onPlay = { item ->
+                GameActivity.launch(this, item.resolveUrl(), item.title, item.type)
+            }
+        )
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
 
