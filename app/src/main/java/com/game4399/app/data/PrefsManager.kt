@@ -105,6 +105,9 @@ object PrefsManager {
     /** 鼠标按钮绝对坐标 X（拖动模式保存的位置） */
     val mousePosX: Float get() = sp.getFloat("mouse_pos_x", -1f)
     val mousePosY: Float get() = sp.getFloat("mouse_pos_y", -1f)
+    /** Start/Select 按钮绝对坐标 */
+    val systemPosX: Float get() = sp.getFloat("system_pos_x", -1f)
+    val systemPosY: Float get() = sp.getFloat("system_pos_y", -1f)
 
     // ---- Flash 引擎 ----
     /** Flash 引擎：ruffle / swf2js / waflash */
