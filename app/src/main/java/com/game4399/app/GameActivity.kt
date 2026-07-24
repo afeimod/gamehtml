@@ -201,13 +201,10 @@ class GameActivity : AppCompatActivity() {
 
     private fun loadGame(url: String, title: String, type: GameType) {
         currentUrl = url; currentTitle = title; currentType = type
-        // 本地 SWF 文件 → WAFlash 播放器（用虚拟 URL 代理，shouldInterceptRequest 读取实际文件）
+        // 本地 SWF 文件 → 引擎选择后加载
         if (type == GameType.LOCAL_SWF || NavHelper.isLocalFile(url)) {
             localSwfUri = url  // 保存真实 URI，shouldInterceptRequest 用它读取文件
-            // 加时间戳参数破坏 WebView 缓存，确保每次都重新读取
-            val swfProxyUrl = "https://flash.local/local.swf?t=${System.currentTimeMillis()}"
-            val playerUrl = NavHelper.playerUrl(swfProxyUrl, base = null, title = title)
-            webView.loadUrl(playerUrl)
+            showLocalSwfEnginePicker(url, title)
         } else if (NavHelper.isSwf(url)) {
             // 远程 SWF 直链 → 内置播放器
             val playerUrl = NavHelper.playerUrl(url, base = null, title = title)
@@ -223,6 +220,27 @@ class GameActivity : AppCompatActivity() {
     /** WebAppInterface.openSwf 调用：在当前 WebView 加载 SWF 播放器页面 */
     fun loadSwfInWebView(playerUrl: String) {
         webView.loadUrl(playerUrl)
+    }
+
+    /** 本地 SWF 引擎选择对话框 */
+    private fun showLocalSwfEnginePicker(url: String, title: String) {
+        val engines = arrayOf("WAFlash (推荐)", "Ruffle")
+        val currentEngine = PrefsManager.flashEngine
+        val checked = if (currentEngine == "waflash") 0 else 1
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("选择播放引擎")
+            .setSingleChoiceItems(engines, checked) { dialog, which ->
+                val engine = if (which == 0) "waflash" else "ruffle"
+                PrefsManager.sp.edit().putString("flash_engine", engine).apply()
+                PrefsManager.sp.edit().putBoolean("flash_enabled", true).apply()
+                dialog.dismiss()
+                // 加载本地 SWF
+                val swfProxyUrl = "https://flash.local/local.swf?t=${System.currentTimeMillis()}"
+                val playerUrl = NavHelper.playerUrl(swfProxyUrl, base = null, title = title)
+                webView.loadUrl(playerUrl)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     // ---------------- 虚拟手柄 ----------------
@@ -533,19 +551,22 @@ class GameActivity : AppCompatActivity() {
     private var systemDragOffsetY = 0f
     private var isSystemDragMode = false
     private fun setupSystemButtonsDrag() {
-        binding.systemButtons.setOnTouchListener { _, event ->
-            if (!isSystemDragMode) return@setOnTouchListener false
+        // 在 LinearLayout 和内部 Button 上都设置触摸监听
+        // Button 会消费触摸事件，所以必须在 Button 上也监听
+        val dragListener = android.view.View.OnTouchListener { _, event ->
+            if (!isSystemDragMode) return@OnTouchListener false
+            val container = binding.systemButtons
             when (event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> {
-                    systemDragOffsetX = event.rawX - binding.systemButtons.x
-                    systemDragOffsetY = event.rawY - binding.systemButtons.y
+                    systemDragOffsetX = event.rawX - container.x
+                    systemDragOffsetY = event.rawY - container.y
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
-                    val parent = binding.systemButtons.parent as View
-                    val newX = (event.rawX - systemDragOffsetX).coerceIn(0f, parent.width - binding.systemButtons.width.toFloat())
-                    val newY = (event.rawY - systemDragOffsetY).coerceIn(0f, parent.height - binding.systemButtons.height.toFloat())
-                    binding.systemButtons.x = newX
-                    binding.systemButtons.y = newY
+                    val parent = container.parent as View
+                    val newX = (event.rawX - systemDragOffsetX).coerceIn(0f, parent.width - container.width.toFloat())
+                    val newY = (event.rawY - systemDragOffsetY).coerceIn(0f, parent.height - container.height.toFloat())
+                    container.x = newX
+                    container.y = newY
                     PrefsManager.sp.edit()
                         .putFloat("system_pos_x", newX)
                         .putFloat("system_pos_y", newY)
@@ -554,6 +575,9 @@ class GameActivity : AppCompatActivity() {
             }
             true
         }
+        binding.systemButtons.setOnTouchListener(dragListener)
+        binding.btnStart.setOnTouchListener(dragListener)
+        binding.btnSelect.setOnTouchListener(dragListener)
     }
 
     /** 位置编辑模式开关：开启后所有虚拟按键可手动拖动到任意位置 */
