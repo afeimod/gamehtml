@@ -242,6 +242,9 @@ class GameActivity : AppCompatActivity() {
             webView.injectKey(KeyMapper.toKeyCode(PrefsManager.selectKey))
         }
 
+        // Start/Select 按钮拖拽支持（位置编辑模式）
+        setupSystemButtonsDrag()
+
         // 根据设置初始显示手柄
         if (PrefsManager.isGamepadEnabled) {
             gamepadVisible = true
@@ -272,6 +275,15 @@ class GameActivity : AppCompatActivity() {
         // Start/Select 根据可见性设置
         binding.systemButtons.visibility = if (show && PrefsManager.isSystemButtonsVisible) View.VISIBLE else View.GONE
         // 鼠标按钮独立控制，不受手柄开关影响
+        // 显示时恢复保存的位置
+        if (show) {
+            binding.systemButtons.post {
+                if (PrefsManager.systemPosX >= 0) {
+                    binding.systemButtons.x = PrefsManager.systemPosX
+                    binding.systemButtons.y = PrefsManager.systemPosY
+                }
+            }
+        }
     }
 
     private fun toggleGamepad() {
@@ -516,6 +528,34 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Start/Select 按钮拖拽支持 */
+    private var systemDragOffsetX = 0f
+    private var systemDragOffsetY = 0f
+    private var isSystemDragMode = false
+    private fun setupSystemButtonsDrag() {
+        binding.systemButtons.setOnTouchListener { _, event ->
+            if (!isSystemDragMode) return@setOnTouchListener false
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    systemDragOffsetX = event.rawX - binding.systemButtons.x
+                    systemDragOffsetY = event.rawY - binding.systemButtons.y
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val parent = binding.systemButtons.parent as View
+                    val newX = (event.rawX - systemDragOffsetX).coerceIn(0f, parent.width - binding.systemButtons.width.toFloat())
+                    val newY = (event.rawY - systemDragOffsetY).coerceIn(0f, parent.height - binding.systemButtons.height.toFloat())
+                    binding.systemButtons.x = newX
+                    binding.systemButtons.y = newY
+                    PrefsManager.sp.edit()
+                        .putFloat("system_pos_x", newX)
+                        .putFloat("system_pos_y", newY)
+                        .apply()
+                }
+            }
+            true
+        }
+    }
+
     /** 位置编辑模式开关：开启后所有虚拟按键可手动拖动到任意位置 */
     private var isPositionEditMode = false
     private fun togglePositionEditMode() {
@@ -523,10 +563,12 @@ class GameActivity : AppCompatActivity() {
         binding.dpad.isDragMode = isPositionEditMode
         binding.actionButtons.isDragMode = isPositionEditMode
         binding.mouseControl.isDragMode = isPositionEditMode
+        isSystemDragMode = isPositionEditMode
         // 编辑模式时显示所有按键（方便调整位置）
         if (isPositionEditMode) {
             binding.dpad.visibility = View.VISIBLE
             binding.actionButtons.visibility = View.VISIBLE
+            binding.systemButtons.visibility = View.VISIBLE
             if (PrefsManager.isMouseButtonsVisible) {
                 binding.mouseControl.visibility = View.VISIBLE
             }
@@ -550,6 +592,10 @@ class GameActivity : AppCompatActivity() {
             if (PrefsManager.actionPosX >= 0) {
                 binding.actionButtons.x = PrefsManager.actionPosX
                 binding.actionButtons.y = PrefsManager.actionPosY
+            }
+            if (PrefsManager.systemPosX >= 0) {
+                binding.systemButtons.x = PrefsManager.systemPosX
+                binding.systemButtons.y = PrefsManager.systemPosY
             }
             if (PrefsManager.mousePosX >= 0 && PrefsManager.isMouseButtonsVisible) {
                 binding.mouseControl.x = PrefsManager.mousePosX
@@ -711,6 +757,7 @@ class GameActivity : AppCompatActivity() {
             // 清除保存的绝对位置坐标，恢复默认布局
             .putFloat("dpad_pos_x", -1f).putFloat("dpad_pos_y", -1f)
             .putFloat("action_pos_x", -1f).putFloat("action_pos_y", -1f)
+            .putFloat("system_pos_x", -1f).putFloat("system_pos_y", -1f)
             .putFloat("mouse_pos_x", -1f).putFloat("mouse_pos_y", -1f)
             .putBoolean("gamepad_key_1_visible", true).putBoolean("gamepad_key_2_visible", true)
             .putBoolean("gamepad_key_3_visible", true).putBoolean("gamepad_key_4_visible", true)
