@@ -109,6 +109,7 @@ class WebFragment : Fragment() {
             return url.contains("4399.com") && (url.contains("/flash/") || url.contains(".swf"))
         }
         override fun getCachedSwfPath(): String? = null
+        override fun getLocalSwfUri(): String? = null
     }
 
     /**
