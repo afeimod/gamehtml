@@ -111,13 +111,25 @@ open class GameWebViewClient(
             return interceptHtml(view, url, request)
         }
 
+        // For HTTP URLs, make the request ourselves to bypass WebView cleartext restriction.
+        // WebView's internal network stack may block HTTP traffic even with network_security_config
+        // allowing it. HttpURLConnection respects the app's network security config.
+        if (url.startsWith("http://")) {
+            return fetchHttpUrl(url, request) ?: super.shouldInterceptRequest(view, request)
+        }
+
         return super.shouldInterceptRequest(view, request)
     }
 
     /** 拦截 HTML 页面，注入 Flash 伪造 + Ruffle 引擎到 <head> */
     private fun interceptHtml(view: WebView, url: String, request: WebResourceRequest): WebResourceResponse? {
         return try {
-            val response = super.shouldInterceptRequest(view, request) ?: return null
+            // For HTTP URLs, use our own HTTP client to bypass WebView cleartext restriction
+            val response = if (url.startsWith("http://")) {
+                fetchHttpUrl(url, request) ?: return null
+            } else {
+                super.shouldInterceptRequest(view, request) ?: return null
+            }
             // 检查 content-type
             val contentType = response.mimeType ?: ""
             // 如果响应实际上是 SWF 文件（URL 不含 .swf 但服务器返回了 SWF），按 SWF 处理
@@ -199,6 +211,54 @@ open class GameWebViewClient(
         }
     }
 
+    /** 使用 HttpURLConnection 获取 HTTP URL，绕过 WebView 明文限制 */
+    private fun fetchHttpUrl(url: String, request: WebResourceRequest): WebResourceResponse? {
+        return try {
+            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                if (this is javax.net.ssl.HttpsURLConnection) {
+                    sslSocketFactory = trustAllSslSocketFactory()
+                    hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                }
+                connectTimeout = 15000
+                readTimeout = 20000
+                requestMethod = request.method ?: "GET"
+                instanceFollowRedirects = true
+                request.requestHeaders?.forEach { (key, value) -> setRequestProperty(key, value) }
+            }
+            conn.connect()
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
+                val contentType = conn.contentType ?: ""
+                val (mime, charset) = parseContentType(contentType)
+                val data = conn.inputStream.readBytes()
+                val headers = mutableMapOf<String, String>()
+                conn.headerFields.forEach { (key, values) ->
+                    if (key != null && values.isNotEmpty()) headers[key] = values.joinToString(", ")
+                }
+                WebResourceResponse(mime, charset, responseCode, conn.responseMessage ?: "OK", headers, java.io.ByteArrayInputStream(data))
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("GameWebViewClient", "fetchHttpUrl 失败: ${e.message}")
+            null
+        }
+    }
+
+    /** 解析 Content-Type 字符串，返回 mimeType 和 charset */
+    private fun parseContentType(contentType: String): Pair<String, String?> {
+        if (contentType.isBlank()) return "text/html" to "UTF-8"
+        val parts = contentType.split(";").map { it.trim() }
+        val mime = parts[0]
+        var charset: String? = null
+        for (part in parts.drop(1)) {
+            if (part.startsWith("charset=", ignoreCase = true)) {
+                charset = part.substringAfter("charset=").trim().trim('"')
+            }
+        }
+        return mime to charset
+    }
+
     /** 构建 Flash 支持伪造 + Ruffle/WAFlash 注入脚本 */
     private fun buildFlashInjectScript(pageUrl: String): String {
         val isWaflash = PrefsManager.flashEngine == "waflash"
@@ -215,33 +275,38 @@ open class GameWebViewClient(
             fp.namedItem = function(n){ return (n === 'Shockwave Flash') ? fp : null; };
             fp.item = function(i){ return i === 0 ? fp : null; };
             fp.refresh = function(){};
-            var _plugins = navigator.plugins || {};
-            // 保持原有方法
-            if (_plugins.namedItem) { fp.namedItem = function(n){ return (n === 'Shockwave Flash') ? fp : _plugins.namedItem.call(_plugins, n); }; }
-            if (_plugins.item) { fp.item = function(i){ return i === 0 ? fp : _plugins.item.call(_plugins, i); }; }
-            Object.defineProperty(navigator,'plugins',{
-              get:function(){
-                try {
-                  if (!_plugins['Shockwave Flash']) {
-                    _plugins['Shockwave Flash'] = fp;
-                    _plugins[0] = fp;
-                  }
-                  _plugins.length = Math.max(_plugins.length || 0, 1);
-                } catch(e) {}
-                return _plugins;
-              },
-              configurable: true
-            });
+            // 创建伪造的 PluginArray（使用普通对象，避免原 PluginArray 只读限制）
+            var fakePA = {length:1, 0:fp, 'Shockwave Flash':fp};
+            fakePA.namedItem = function(n){ return fakePA[n] || null; };
+            fakePA.item = function(i){ return fakePA[i] || null; };
+            fakePA.refresh = function(){};
+            try {
+              var origP = navigator.plugins;
+              for (var pi = 0; pi < origP.length; pi++) {
+                var op = origP[pi];
+                if (op && op.name !== 'Shockwave Flash') {
+                  fakePA[fakePA.length] = op; fakePA[op.name] = op; fakePA.length++;
+                }
+              }
+            } catch(e) {}
+            Object.defineProperty(navigator,'plugins',{get:function(){return fakePA;},configurable:true});
             var fm = {type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash',enabledPlugin:fp};
-            var _mimes = navigator.mimeTypes || {};
-            Object.defineProperty(navigator,'mimeTypes',{
-              get:function(){
-                try { if (!_mimes['application/x-shockwave-flash']) _mimes['application/x-shockwave-flash'] = fm; } catch(e) {}
-                return _mimes;
-              },
-              configurable: true
-            });
+            var fakeMA = {length:1, 0:fm, 'application/x-shockwave-flash':fm};
+            fakeMA.namedItem = function(n){ return fakeMA[n] || null; };
+            fakeMA.item = function(i){ return fakeMA[i] || null; };
+            Object.defineProperty(navigator,'mimeTypes',{get:function(){return fakeMA;},configurable:true});
             window.ActiveXObject = function(n){if(n&&/ShockwaveFlash/i.test(n))return {SetVariable:function(){},Variable:function(){return ''}};throw new Error('x');};
+          } catch(e) {}
+
+          // === 1.5 伪造 navigator.userAgent（降级到 Chrome 87，让 4399 认为浏览器支持 Flash） ===
+          try {
+            var curUA = navigator.userAgent || '';
+            var chromeMatch = curUA.match(/Chrome\/(\d+)/);
+            if (chromeMatch && parseInt(chromeMatch[1]) >= 88) {
+              var newUA = curUA.replace(/Chrome\/[\d.]+/, 'Chrome/87.0.4280.141');
+              Object.defineProperty(navigator, 'userAgent', {get:function(){return newUA;}, configurable:true});
+              Object.defineProperty(navigator, 'appVersion', {get:function(){return newUA.replace('Mozilla/','');}, configurable:true});
+            }
           } catch(e) {}
 
           // === 2. 伪造 document.referrer ===
@@ -254,10 +319,19 @@ open class GameWebViewClient(
           (function(){
             var flashKeywords = ['不支持打开游戏', 'Flash官方插件', '兼容模式', '继续游戏',
               '不支持flash', '极速模式', 'QQ浏览器', '搜狗浏览器', '360浏览器',
-              'EDGE浏览器请按教程', '无需下载插件打开即玩', '为您提供以下方案'];
+              'EDGE浏览器请按教程', '无需下载插件打开即玩', '为您提供以下方案',
+              '当前浏览器或模式不支持', '下载官方Flash', '下载flash', 'flash插件',
+              'web新游专区', '4399游戏大厅', '请使用以下浏览器', 'PPAPI', 'NPAPI'];
+            // 已知 4399 弹窗 CSS 选择器
+            var popupSelectors = '.flash_tips,.flash-tips,#flash_tips,#flash-tips,.no_flash,.no-flash,#no_flash,#no-flash,.browser_tip,.browser-tip,#browser_tip,.unsupported,.unsupport,#unsupported,.game_tips,.game-tips,#game_tips,.alert_flash,.alert-flash,#alert_flash,#flashmsg,.flashmsg,#flash_msg,.pop_flash,.pop-flash,#pop_flash,.modal-flash,#modal-flash,.compatible_tip,.compatible-tip,.flash_prompt,.flash-prompt,#flash_prompt';
             function closeInDoc(doc) {
               if (!doc) return;
               try {
+                // 方式0：直接隐藏已知 4399 弹窗 CSS 选择器
+                doc.querySelectorAll(popupSelectors).forEach(function(el){
+                  el.style.display = 'none';
+                  try { el.remove(); } catch(e){}
+                });
                 // 方式1：点击所有可见的关闭按钮
                 var btns = doc.querySelectorAll('a, button, span, div, i, img');
                 for (var i = 0; i < btns.length; i++) {
@@ -281,7 +355,8 @@ open class GameWebViewClient(
                     if (text.indexOf(flashKeywords[k]) >= 0) matchCount++;
                   }
                   // 匹配2个以上关键词的元素 = 弹窗本身，移除它
-                  if (matchCount >= 2 && text.length < 800) {
+                  // 不限制 text.length，4399 页游弹窗内容可能很长
+                  if (matchCount >= 2) {
                     el.remove();
                     console.log('[Flash] 已移除不支持Flash弹窗 (匹配' + matchCount + '个关键词)');
                   }
@@ -584,7 +659,7 @@ open class GameWebViewClient(
                 conn.connectTimeout = 10000
                 conn.readTimeout = 20000
                 conn.requestMethod = "GET"
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36")
                 conn.setRequestProperty("Accept", "*/*")
                 if (swfUrl.contains("4399.com")) {
                     conn.setRequestProperty("Referer", "https://www.4399.com/")
@@ -824,29 +899,30 @@ open class GameWebViewClient(
                 fakePlugin.item = function(i) { return i === 0 ? fakePlugin : null; };
                 fakePlugin.refresh = function() {};
                 var plugins = navigator.plugins || {};
-                if (plugins.namedItem) { fakePlugin.namedItem = function(n) { return (n === 'Shockwave Flash') ? fakePlugin : plugins.namedItem.call(plugins, n); }; }
-                if (plugins.item) { fakePlugin.item = function(i) { return i === 0 ? fakePlugin : plugins.item.call(plugins, i); }; }
-                Object.defineProperty(navigator, 'plugins', {
-                  get: function() {
-                    var p = plugins;
-                    if (!p['Shockwave Flash']) {
-                      try { p['Shockwave Flash'] = fakePlugin; p[0] = fakePlugin; } catch(e) {}
+                // 创建伪造的 PluginArray（使用普通对象，避免原 PluginArray 只读限制）
+                var fakePA = {length:1, 0:fakePlugin, 'Shockwave Flash':fakePlugin};
+                fakePA.namedItem = function(n) { return fakePA[n] || null; };
+                fakePA.item = function(i) { return fakePA[i] || null; };
+                fakePA.refresh = function() {};
+                try {
+                  for (var pi = 0; pi < plugins.length; pi++) {
+                    var op = plugins[pi];
+                    if (op && op.name !== 'Shockwave Flash') {
+                      fakePA[fakePA.length] = op; fakePA[op.name] = op; fakePA.length++;
                     }
-                    p.length = Math.max(p.length || 0, 1);
-                    return p;
-                  },
+                  }
+                } catch(e) {}
+                Object.defineProperty(navigator, 'plugins', {
+                  get: function() { return fakePA; },
                   configurable: true
                 });
                 // 伪造 navigator.mimeTypes
                 var fakeMime = { type: 'application/x-shockwave-flash', suffixes: 'swf', description: 'Shockwave Flash', enabledPlugin: fakePlugin };
-                var mimes = navigator.mimeTypes || {};
+                var fakeMA = {length:1, 0:fakeMime, 'application/x-shockwave-flash':fakeMime};
+                fakeMA.namedItem = function(n) { return fakeMA[n] || null; };
+                fakeMA.item = function(i) { return fakeMA[i] || null; };
                 Object.defineProperty(navigator, 'mimeTypes', {
-                  get: function() {
-                    if (!mimes['application/x-shockwave-flash']) {
-                      try { mimes['application/x-shockwave-flash'] = fakeMime; } catch(e) {}
-                    }
-                    return mimes;
-                  },
+                  get: function() { return fakeMA; },
                   configurable: true
                 });
                 // 伪造 ActiveXObject（IE 方式检测 Flash）
@@ -854,6 +930,15 @@ open class GameWebViewClient(
                   if (name && /ShockwaveFlash/i.test(name)) return { SetVariable: function(){} };
                   throw new Error('Not supported');
                 };
+                // 降级 UA 到 Chrome 87（4399 检测 Chrome 88+ 不支持 Flash）
+                try {
+                  var cUA = navigator.userAgent || '';
+                  var cM = cUA.match(/Chrome\/(\d+)/);
+                  if (cM && parseInt(cM[1]) >= 88) {
+                    var nUA = cUA.replace(/Chrome\/[\d.]+/, 'Chrome/87.0.4280.141');
+                    Object.defineProperty(navigator, 'userAgent', {get:function(){return nUA;}, configurable:true});
+                  }
+                } catch(e) {}
                 console.log('[Flash] 已伪造 Flash 插件支持');
               } catch(e) { console.warn('[Flash] 伪造失败:', e); }
             })();
