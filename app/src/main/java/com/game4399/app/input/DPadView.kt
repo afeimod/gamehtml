@@ -15,17 +15,18 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * 虚拟方向键（十字 D-Pad）。
+ * 虚拟方向控制器，支持三种 UI 模式（[PrefsManager.dpadMode]）：
+ *  - "dpad"     : 十字方向键，注入 ↑↓←→ 方向键
+ *  - "wasd"     : 十字方向键，注入 W/A/S/D
+ *  - "joystick" : 摇杆（外环 + 跟手摇杆头），注入 8 方向 W/A/S/D（适合 3D 游戏）
  *
  * 触摸行为：
  *  - 按下/移动时根据触点相对中心的位置判断方向（上/下/左/右，支持对角线）
- *  - 对新进入的方向注入 KEYCODE_DPAD_* 的 down，对离开的方向注入 up
+ *  - 对新进入的方向注入 down，对离开的方向注入 up
  *  - 抬起时释放全部
  *
- * 同时支持多指：每个指针 ID 独立追踪其当前方向。
- *
- * 关键：方向键事件通过 [GameWebView.injectKeyDown] / [injectKeyUp] 注入，
- *       因此对只监听 keydown/keyup 的 Flash/H5 键盘游戏同样生效。
+ * 方向键事件通过 [GameWebView.injectKeyDown] / [injectKeyUp] 注入，
+ * 因此对只监听 keydown/keyup 的 Flash/H5 键盘游戏同样生效。
  */
 class DPadView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyle: Int = 0
@@ -58,6 +59,17 @@ class DPadView @JvmOverloads constructor(
         KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT
     )
 
+    // ---- 摇杆模式状态 ----
+    /** 摇杆头当前坐标（相对 View 中心偏移），未按下时为 (0,0) */
+    private var knobDx = 0f
+    private var knobDy = 0f
+    /** 摇杆是否处于按下态 */
+    private var joystickActive = false
+    /** 摇杆当前激活的指针 ID */
+    private var joystickPointerId = -1
+
+    private val isJoystick: Boolean get() = PrefsManager.dpadMode == "joystick"
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         // 应用位置偏移
@@ -67,6 +79,24 @@ class DPadView @JvmOverloads constructor(
         val scale = PrefsManager.dpadScale
         canvas.scale(scale, scale, width / 2f, height / 2f)
 
+        if (isJoystick) {
+            drawJoystick(canvas)
+        } else {
+            drawCross(canvas)
+        }
+
+        canvas.restore()
+        // 拖动模式边框提示
+        if (isDragMode) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 4f
+            paint.color = Color.argb(200, 255, 255, 0)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        }
+    }
+
+    /** 十字方向键绘制 */
+    private fun drawCross(canvas: Canvas) {
         val cx = width / 2f
         val cy = height / 2f
         val r = min(width, height) / 2f - 8f
@@ -81,27 +111,84 @@ class DPadView @JvmOverloads constructor(
         val armL = r * 0.95f
 
         paint.color = Color.argb(overlayAlpha, 255, 255, 255)
-        // 上
         drawArm(canvas, cx, cy, 0, armW, armL, KeyEvent.KEYCODE_DPAD_UP)
-        // 下
         drawArm(canvas, cx, cy, 1, armW, armL, KeyEvent.KEYCODE_DPAD_DOWN)
-        // 左
         drawArm(canvas, cx, cy, 2, armW, armL, KeyEvent.KEYCODE_DPAD_LEFT)
-        // 右
         drawArm(canvas, cx, cy, 3, armW, armL, KeyEvent.KEYCODE_DPAD_RIGHT)
 
         // 中心圆
         paint.color = Color.argb(overlayAlpha, 200, 200, 200)
         canvas.drawCircle(cx, cy, armW * 0.6f, paint)
+    }
 
-        canvas.restore()
-        // 拖动模式边框提示
-        if (isDragMode) {
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 4f
-            paint.color = Color.argb(200, 255, 255, 0)
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    /** 摇杆绘制：外环 + 可移动摇杆头 */
+    private fun drawJoystick(canvas: Canvas) {
+        val cx = width / 2f
+        val cy = height / 2f
+        val outerR = min(width, height) / 2f - 8f
+        val knobR = outerR * 0.42f
+
+        // 外环背景
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb((overlayAlpha * 0.30f).toInt(), 0, 0, 0)
+        canvas.drawCircle(cx, cy, outerR, paint)
+
+        // 外环边框
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = outerR * 0.06f
+        paint.color = Color.argb(overlayAlpha, 255, 255, 255)
+        canvas.drawCircle(cx, cy, outerR, paint)
+
+        // 内圈刻度环
+        paint.color = Color.argb((overlayAlpha * 0.5f).toInt(), 255, 255, 255)
+        paint.strokeWidth = outerR * 0.03f
+        canvas.drawCircle(cx, cy, outerR * 0.55f, paint)
+
+        // 方向指示三角（上下左右）
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb((overlayAlpha * 0.7f).toInt(), 255, 255, 255)
+        val tri = outerR * 0.12f
+        val triOff = outerR * 0.80f
+        drawTriangle(canvas, cx, cy - triOff, tri, 0)   // 上
+        drawTriangle(canvas, cx, cy + triOff, tri, 2)   // 下
+        drawTriangle(canvas, cx - triOff, cy, tri, 3)   // 左
+        drawTriangle(canvas, cx + triOff, cy, tri, 1)   // 右
+
+        // 摇杆头
+        val kx = cx + knobDx
+        val ky = cy + knobDy
+        paint.style = Paint.Style.FILL
+        paint.color = if (joystickActive) {
+            Color.argb(overlayAlpha, 0xFF, 0x6E, 0x40) // 激活橙
+        } else {
+            Color.argb(overlayAlpha, 0xFF, 0xC1, 0x07) // 待机黄
         }
+        canvas.drawCircle(kx, ky, knobR, paint)
+        // 摇杆头高光
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = knobR * 0.14f
+        paint.color = Color.argb((overlayAlpha * 0.6f).toInt(), 255, 255, 255)
+        canvas.drawCircle(kx, ky, knobR * 0.7f, paint)
+    }
+
+    private fun drawTriangle(canvas: Canvas, cx: Float, cy: Float, size: Float, dir: Int) {
+        val p = android.graphics.Path()
+        when (dir) {
+            0 -> { // 上
+                p.moveTo(cx, cy - size); p.lineTo(cx - size, cy + size); p.lineTo(cx + size, cy + size)
+            }
+            1 -> { // 右
+                p.moveTo(cx + size, cy); p.lineTo(cx - size, cy - size); p.lineTo(cx - size, cy + size)
+            }
+            2 -> { // 下
+                p.moveTo(cx, cy + size); p.lineTo(cx - size, cy - size); p.lineTo(cx + size, cy - size)
+            }
+            3 -> { // 左
+                p.moveTo(cx - size, cy); p.lineTo(cx + size, cy - size); p.lineTo(cx + size, cy + size)
+            }
+        }
+        p.close()
+        canvas.drawPath(p, paint)
     }
 
     private fun drawArm(
@@ -134,7 +221,6 @@ class DPadView @JvmOverloads constructor(
                     val newY = (event.rawY - dragOffsetY).coerceIn(0f, (parent as View).height - height.toFloat())
                     x = newX
                     y = newY
-                    // 保存位置
                     PrefsManager.sp.edit()
                         .putFloat("dpad_pos_x", newX)
                         .putFloat("dpad_pos_y", newY)
@@ -143,21 +229,28 @@ class DPadView @JvmOverloads constructor(
             }
             return true
         }
+        if (isJoystick) {
+            handleJoystickTouch(event)
+        } else {
+            handleCrossTouch(event)
+        }
+        return true
+    }
+
+    // ---------------- 十字方向键触摸 ----------------
+    private fun handleCrossTouch(event: MotionEvent) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN,
             MotionEvent.ACTION_MOVE -> {
-                // 重新计算所有活跃指针的方向
                 val active = HashSet<Int>()
                 for (i in 0 until event.pointerCount) {
                     val pid = event.getPointerId(i)
                     val x = event.getX(i)
                     val y = event.getY(i)
                     val dirs = computeDirections(x, y)
-                    // 记录该指针按下的方向
                     pointerDir[pid]?.let { old -> if (old != 0 && old !in dirs) active.add(old) }
                     dirs.forEach { d -> active.add(d) }
                 }
-                // 注入差异：新按下的 down，松开的 up
                 val toDown = active - pressed
                 val toUp = pressed - active
                 toDown.forEach { injectDown(it) }
@@ -176,7 +269,6 @@ class DPadView @JvmOverloads constructor(
                     pressed.clear()
                     pointerDir.clear()
                 } else {
-                    // 重新计算剩余指针
                     val active = HashSet<Int>()
                     for (i in 0 until event.pointerCount) {
                         if (i == event.actionIndex) continue
@@ -191,7 +283,6 @@ class DPadView @JvmOverloads constructor(
                 invalidate()
             }
         }
-        return true
     }
 
     /** 根据触点位置返回当前按下的方向集合 */
@@ -211,8 +302,93 @@ class DPadView @JvmOverloads constructor(
         return set
     }
 
+    // ---------------- 摇杆触摸 ----------------
+    private fun handleJoystickTouch(event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                if (joystickPointerId == -1) {
+                    val idx = event.actionIndex
+                    joystickPointerId = event.getPointerId(idx)
+                    joystickActive = true
+                    updateJoystick(event.getX(idx), event.getY(idx))
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (joystickPointerId != -1) {
+                    val i = event.findPointerIndex(joystickPointerId)
+                    if (i >= 0) updateJoystick(event.getX(i), event.getY(i))
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                resetJoystick()
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                val pid = event.getPointerId(event.actionIndex)
+                if (pid == joystickPointerId) resetJoystick()
+            }
+        }
+    }
+
+    /** 根据触点更新摇杆头位置与方向注入 */
+    private fun updateJoystick(x: Float, y: Float) {
+        val cx = width / 2f
+        val cy = height / 2f
+        val outerR = max(min(width, height) / 2f - 8f, 1f)
+        var dx = x - cx
+        var dy = y - cy
+        val dist = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+        // 摇杆头限制在外环内
+        val maxDist = outerR * 0.85f
+        if (dist > maxDist) {
+            val ratio = maxDist / dist
+            dx *= ratio
+            dy *= ratio
+        }
+        knobDx = dx
+        knobDy = dy
+        // 计算方向（8 方向）
+        val active = HashSet<Int>()
+        val norm = dist / outerR
+        if (norm > deadZoneRatio) {
+            val ax = abs(dx)
+            val ay = abs(dy)
+            // 对角线判定阈值：两轴都超过 35% 外环
+            val diagRatio = 0.35f
+            if (ax > outerR * diagRatio) {
+                active.add(if (dx > 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT)
+            }
+            if (ay > outerR * diagRatio) {
+                active.add(if (dy > 0) KeyEvent.KEYCODE_DPAD_DOWN else KeyEvent.KEYCODE_DPAD_UP)
+            }
+            // 若两轴都不足，按主轴方向
+            if (active.isEmpty()) {
+                if (ax > ay) {
+                    active.add(if (dx > 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT)
+                } else {
+                    active.add(if (dy > 0) KeyEvent.KEYCODE_DPAD_DOWN else KeyEvent.KEYCODE_DPAD_UP)
+                }
+            }
+        }
+        val toDown = active - pressed
+        val toUp = pressed - active
+        toDown.forEach { injectDown(it) }
+        toUp.forEach { injectUp(it) }
+        pressed.clear()
+        pressed.addAll(active)
+        invalidate()
+    }
+
+    private fun resetJoystick() {
+        joystickActive = false
+        joystickPointerId = -1
+        knobDx = 0f
+        knobDy = 0f
+        pressed.forEach { injectUp(it) }
+        pressed.clear()
+        invalidate()
+    }
+
     private fun injectDown(keyCode: Int) {
-        // 根据 dpadMode 设置映射方向键到 DPAD_* 或 WASD
         val mappedKey = mapDirectionKey(keyCode)
         targetWebView?.injectKeyDown(mappedKey)
         performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
@@ -223,9 +399,11 @@ class DPadView @JvmOverloads constructor(
         targetWebView?.injectKeyUp(mappedKey)
     }
 
-    /** 根据 dpadMode 将方向键映射为 DPAD_* 或 WASD */
+    /** 根据 dpadMode 将方向键映射为 DPAD_* 或 WASD。
+     *  joystick 模式使用 WASD（适合 3D 游戏移动）。 */
     private fun mapDirectionKey(keyCode: Int): Int {
-        if (PrefsManager.dpadMode != "wasd") return keyCode
+        if (PrefsManager.dpadMode == "dpad") return keyCode
+        // wasd 与 joystick 均映射到 WASD
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> KeyEvent.KEYCODE_W
             KeyEvent.KEYCODE_DPAD_DOWN -> KeyEvent.KEYCODE_S

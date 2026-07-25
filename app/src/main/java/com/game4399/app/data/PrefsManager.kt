@@ -28,6 +28,7 @@ object PrefsManager {
     // ---- Flash ----
     val isFlashEnabled: Boolean get() = sp.getBoolean("flash_enabled", true)
     val isFlashAutoplay: Boolean get() = sp.getBoolean("flash_autoplay", true)
+    /** CDN 来源：默认本地离线（local），可选 jsdelivr / unpkg */
     val flashCdn: String get() = sp.getString("flash_cdn", "local") ?: "local"
     val flashQuality: String get() = sp.getString("flash_quality", "high") ?: "high"
 
@@ -45,7 +46,7 @@ object PrefsManager {
     /** 方向键大小倍率 0.5~2.0，默认 1.0 */
     val dpadScale: Float
         get() = (sp.getInt("dpad_scale", 100) / 100f).coerceIn(0.5f, 2.0f)
-    /** 方向键映射模式：dpad / wasd */
+    /** 方向键映射模式：dpad / wasd / joystick */
     val dpadMode: String get() = sp.getString("dpad_mode", "dpad") ?: "dpad"
     /** 方向键水平偏移（像素），正值向右，默认 0 */
     val dpadOffsetX: Int get() = sp.getInt("dpad_offset_x", 0)
@@ -66,26 +67,31 @@ object PrefsManager {
     /** 动作按键绝对坐标 X（拖动模式保存的位置） */
     val actionPosX: Float get() = sp.getFloat("action_pos_x", -1f)
     val actionPosY: Float get() = sp.getFloat("action_pos_y", -1f)
-    /** 6 个动作按键映射，默认 J/K/L/U/I/O */
+    /** 动作按键数量（2~18），默认 6，可在按键设置中增删 */
+    val gamepadKeyCount: Int
+        get() = sp.getInt("gamepad_key_count", 6).coerceIn(2, 18)
+
+    /** 动作按键默认映射（超出原 6 个时依次使用） */
+    private val gamepadKeyDefaults = arrayOf(
+        "J", "K", "L", "U", "I", "O",
+        "1", "2", "3", "4", "5", "6",
+        "7", "8", "9", "Q", "E", "R"
+    )
+
+    /** 动作按键映射，数量由 [gamepadKeyCount] 决定 */
     val gamepadKeys: List<String>
-        get() = listOf(
-            sp.getString("gamepad_key_1", "J") ?: "J",
-            sp.getString("gamepad_key_2", "K") ?: "K",
-            sp.getString("gamepad_key_3", "L") ?: "L",
-            sp.getString("gamepad_key_4", "U") ?: "U",
-            sp.getString("gamepad_key_5", "I") ?: "I",
-            sp.getString("gamepad_key_6", "O") ?: "O"
-        )
-    /** 每个按键是否显示，默认全部显示 */
+        get() {
+            val count = gamepadKeyCount
+            return (0 until count).map { i ->
+                sp.getString("gamepad_key_${i + 1}", gamepadKeyDefaults.getOrElse(i) { "J" }) ?: "J"
+            }
+        }
+    /** 每个按键是否显示，数量由 [gamepadKeyCount] 决定，默认全部显示 */
     val gamepadKeyVisible: List<Boolean>
-        get() = listOf(
-            sp.getBoolean("gamepad_key_1_visible", true),
-            sp.getBoolean("gamepad_key_2_visible", true),
-            sp.getBoolean("gamepad_key_3_visible", true),
-            sp.getBoolean("gamepad_key_4_visible", true),
-            sp.getBoolean("gamepad_key_5_visible", true),
-            sp.getBoolean("gamepad_key_6_visible", true)
-        )
+        get() {
+            val count = gamepadKeyCount
+            return (0 until count).map { i -> sp.getBoolean("gamepad_key_${i + 1}_visible", true) }
+        }
     /** Select 键映射 */
     val selectKey: String get() = sp.getString("select_key", "TAB") ?: "TAB"
     /** Start 键映射 */
@@ -117,6 +123,10 @@ object PrefsManager {
     /** 兼容旧设置 */
     val gamepadAKey: String get() = sp.getString("gamepad_a_key", "SPACE") ?: "SPACE"
     val gamepadBKey: String get() = sp.getString("gamepad_b_key", "ENTER") ?: "ENTER"
+
+    // ---- 3D 视角旋转 ----
+    /** 视角旋转模式：开启后触摸拖动游戏区域会注入鼠标移动事件，用于 3D 游戏旋转视角 */
+    val isCameraRotationEnabled: Boolean get() = sp.getBoolean("camera_rotation_enabled", false)
 
     fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) =
         sp.registerOnSharedPreferenceChangeListener(listener)

@@ -30,8 +30,22 @@ open class GameWebView @JvmOverloads constructor(
     /** 是否拦截并屏蔽长按系统菜单（选中文字/复制） */
     var blockLongPressMenu: Boolean = true
 
+    /**
+     * 3D 视角旋转模式：开启后页面会注入触摸→鼠标事件脚本，此时
+     * 滑动手势不再注入方向键，避免拖动旋转视角时误触移动。
+     */
+    var cameraRotationEnabled: Boolean = false
+
     /** 保存原始移动版 UA，供切换时恢复 */
     private var mobileUa: String = ""
+
+    // ---- 3D 视角旋转触摸追踪 ----
+    /** 上一次触摸 X 坐标（用于计算移动增量） */
+    private var cameraLastX = 0f
+    /** 上一次触摸 Y 坐标（用于计算移动增量） */
+    private var cameraLastY = 0f
+    /** 是否正在拖动旋转视角 */
+    private var cameraDragging = false
 
     private val gestureDetector = GestureDetector(context, GestureListener())
 
@@ -105,10 +119,48 @@ open class GameWebView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         gestureDetector.onTouchEvent(event)
         if (event.action == MotionEvent.ACTION_DOWN) performClick()
+
+        // 3D 视角旋转模式：追踪拖动并分发 mousemove 事件
+        if (cameraRotationEnabled) {
+            handleCameraRotationTouch(event)
+        }
+
         return super.onTouchEvent(event)
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = false
+
+    /**
+     * 3D 视角旋转触摸处理：
+     * 追踪拖动距离，通过 JS 分发带 movementX/movementY 的 mousemove 事件。
+     * 不拦截事件（返回 void），让网页仍能接收 tap/click。
+     */
+    private fun handleCameraRotationTouch(event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                cameraLastX = event.x
+                cameraLastY = event.y
+                cameraDragging = false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - cameraLastX
+                val dy = event.y - cameraLastY
+                // 移动超过 2px 才算拖动旋转（避免误触）
+                if (abs(dx) > 2f || abs(dy) > 2f) {
+                    cameraDragging = true
+                    // 通过 JS 分发 mousemove 事件
+                    evaluateJavascript(
+                        "if(window.__cameraRotate){window.__cameraRotate($dx, $dy);}", null
+                    )
+                    cameraLastX = event.x
+                    cameraLastY = event.y
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                cameraDragging = false
+            }
+        }
+    }
 
     private inner class GestureListener : GestureDetector.SimpleOnGestureListener() {
         // 双击放大已移除，只保留双指缩放
@@ -116,6 +168,8 @@ open class GameWebView @JvmOverloads constructor(
         override fun onFling(
             e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float
         ): Boolean {
+            // 视角旋转模式下不注入方向键，避免拖动旋转时误触滚屏/移动
+            if (cameraRotationEnabled) return false
             // 滑动手势映射为方向键（部分页游用方向键滚屏）
             if (abs(vx) > abs(vy)) {
                 injectKey(if (vx > 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT)

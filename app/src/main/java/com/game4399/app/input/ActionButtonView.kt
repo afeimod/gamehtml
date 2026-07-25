@@ -12,17 +12,15 @@ import com.game4399.app.webview.GameWebView
 import kotlin.math.min
 
 /**
- * 动作按钮组：支持 2/4/6 个可配置按键。
+ * 动作按钮组：支持动态数量的可配置按键（2~18 个）。
  *
- * - 按键映射来自 [PrefsManager.gamepadKeys]（默认 J/K/L/U/I/O）
+ * - 按键映射来自 [PrefsManager.gamepadKeys]（数量由 [PrefsManager.gamepadKeyCount] 决定）
  * - 按键大小来自 [PrefsManager.gamepadScale]
  * - 支持多指同时按下不同按钮
  * - 按下注入 keydown，松开注入 keyup
  *
- * 布局：
- *  - 2 按键：左下 A、右上 B
- *  - 4 按键：菱形排列
- *  - 6 按键：两列三行
+ * 布局：自适应网格（≤2 个两列，其余三列），圆形按钮 + 鲜艳多色配色，
+ * 与参考图的“深蓝+青色圆角矩阵”刻意区分（颜色与布局均不同）。
  */
 class ActionButtonView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyle: Int = 0
@@ -41,89 +39,99 @@ class ActionButtonView @JvmOverloads constructor(
     private var dragOffsetY = 0f
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /** 鲜艳多色调色板（刻意区别于参考图的单色青蓝） */
     private val buttonColors = intArrayOf(
         Color.argb(255, 0xE5, 0x39, 0x35),  // 红
         Color.argb(255, 0x1E, 0x88, 0xE5),  // 蓝
         Color.argb(255, 0x43, 0xA0, 0x47),  // 绿
-        Color.argb(255, 0xFF, 0xC1, 0x07),  // 黄
+        Color.argb(255, 0xFF, 0xB3, 0x00),  // 琥珀
         Color.argb(255, 0x8E, 0x24, 0xAA),  // 紫
-        Color.argb(255, 0xFF, 0x57, 0x22)   // 橙
+        Color.argb(255, 0xFF, 0x6E, 0x40),  // 橙
+        Color.argb(255, 0x00, 0xBF, 0xC4),  // 青绿
+        Color.argb(255, 0xEC, 0x40, 0x7A),  // 粉
+        Color.argb(255, 0x7E, 0x57, 0xC2),  // 靛
+        Color.argb(255, 0x66, 0xBB, 0x6A),  // 浅绿
+        Color.argb(255, 0xFF, 0xA7, 0x26),  // 橙黄
+        Color.argb(255, 0x42, 0xA5, 0xF5),  // 浅蓝
+        Color.argb(255, 0xEF, 0x53, 0x50),  // 浅红
+        Color.argb(255, 0xAB, 0x47, 0xBC),  // 浅紫
+        Color.argb(255, 0x26, 0xC6, 0xDA),  // 青
+        Color.argb(255, 0x9C, 0xC6, 0x57),  // 黄绿
+        Color.argb(255, 0xFF, 0xCA, 0x28),  // 黄
+        Color.argb(255, 0xEF, 0x53, 0x50)   // 红
     )
     private val pressedColor = Color.argb(255, 0xFF, 0xFF, 0xFF)
 
     /** 每个按钮的按下状态：index → 是否按下 */
-    private val pressedState = BooleanArray(6) { false }
+    private val pressedState = HashMap<Int, Boolean>()
     /** 每个指针 ID → 按下的按钮 index（-1 表示未按下） */
     private val pointerButton = HashMap<Int, Int>()
 
-    /** 按钮标签（A/B/C/D/E/F 或实际映射的按键名） */
-    private val buttonLabels = arrayOf("A", "B", "C", "D", "E", "F")
+    /** 网格列数：≤2 个用 2 列，其余用 3 列 */
+    private fun columnsOf(count: Int): Int = if (count <= 2) 2 else 3
 
     private fun keyCodes(): List<Int> {
         return PrefsManager.gamepadKeys.map { KeyMapper.toKeyCode(it) }
     }
 
-    /** 计算每个按钮的圆心和半径 */
+    /** 计算每个按钮的圆心和半径（自适应网格） */
     private fun getButtonPositions(): List<Triple<Float, Float, Float>> {
         val w = width.toFloat()
         val h = height.toFloat()
-        val scale = PrefsManager.gamepadScale
-        val baseR = min(w, h) * 0.18f * scale
-        // 统计可见按键数量
-        val visible = PrefsManager.gamepadKeyVisible
-        val count = visible.count { it }.coerceIn(2, 6)
+        val count = PrefsManager.gamepadKeyCount
+        val columns = columnsOf(count)
+        val rows = (count + columns - 1) / columns
+        val cellW = w / columns
+        val cellH = h / rows
+        val r = min(cellW, cellH) * 0.40f
         val positions = mutableListOf<Triple<Float, Float, Float>>()
-
-        when (count) {
-            2 -> {
-                positions.add(Triple(w * 0.30f, h * 0.65f, baseR * 1.2f))
-                positions.add(Triple(w * 0.70f, h * 0.35f, baseR * 1.2f))
-            }
-            4 -> {
-                positions.add(Triple(w * 0.50f, h * 0.25f, baseR))
-                positions.add(Triple(w * 0.25f, h * 0.55f, baseR))
-                positions.add(Triple(w * 0.75f, h * 0.55f, baseR))
-                positions.add(Triple(w * 0.50f, h * 0.80f, baseR))
-            }
-            else -> { // 6
-                positions.add(Triple(w * 0.25f, h * 0.25f, baseR))
-                positions.add(Triple(w * 0.75f, h * 0.25f, baseR))
-                positions.add(Triple(w * 0.25f, h * 0.55f, baseR))
-                positions.add(Triple(w * 0.75f, h * 0.55f, baseR))
-                positions.add(Triple(w * 0.25f, h * 0.85f, baseR))
-                positions.add(Triple(w * 0.75f, h * 0.85f, baseR))
-            }
+        for (i in 0 until count) {
+            val col = i % columns
+            val row = i / columns
+            val cx = cellW * (col + 0.5f)
+            val cy = cellH * (row + 0.5f)
+            positions.add(Triple(cx, cy, r))
         }
         return positions
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        // 应用位置偏移
         canvas.save()
-        canvas.translate(PrefsManager.actionOffsetX.toFloat(), PrefsManager.actionOffsetY.toFloat())
 
         val positions = getButtonPositions()
-        val keys = keyCodes()
+        val keys = PrefsManager.gamepadKeys
         val visible = PrefsManager.gamepadKeyVisible
+        val count = PrefsManager.gamepadKeyCount
 
-        for (i in 0 until 6) {
-            if (i >= positions.size || i >= keys.size || !visible.getOrElse(i) { true }) continue
+        for (i in 0 until count) {
+            if (i >= positions.size) continue
+            if (!visible.getOrElse(i) { true }) continue
             val (cx, cy, r) = positions[i]
             val baseColor = buttonColors[i % buttonColors.size]
+            val pressed = pressedState[i] == true
             paint.style = Paint.Style.FILL
-            paint.color = if (pressedState[i]) {
+            paint.color = if (pressed) {
                 Color.argb(overlayAlpha, Color.red(pressedColor), Color.green(pressedColor), Color.blue(pressedColor))
             } else {
                 Color.argb(overlayAlpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
             }
             canvas.drawCircle(cx, cy, r, paint)
 
-            // 按钮标签
+            // 内圈高光，区别于参考图的纯色块
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = r * 0.12f
+            paint.color = Color.argb((overlayAlpha * 0.6f).toInt(), 255, 255, 255)
+            canvas.drawCircle(cx, cy, r * 0.82f, paint)
+
+            // 按钮标签：显示实际映射的按键名
+            val label = keys.getOrElse(i) { "" }
             paint.color = Color.WHITE
-            paint.textSize = r * 0.8f
+            paint.textSize = r * 0.72f
             paint.textAlign = Paint.Align.CENTER
-            canvas.drawText(buttonLabels[i], cx, cy + r * 0.28f, paint)
+            paint.style = Paint.Style.FILL
+            canvas.drawText(label, cx, cy + r * 0.26f, paint)
         }
 
         canvas.restore()
@@ -157,20 +165,18 @@ class ActionButtonView @JvmOverloads constructor(
             }
             return true
         }
-        // 应用位置偏移到触点
-        val offsetX = PrefsManager.actionOffsetX.toFloat()
-        val offsetY = PrefsManager.actionOffsetY.toFloat()
         val positions = getButtonPositions()
         val keys = keyCodes()
         val visible = PrefsManager.gamepadKeyVisible
+        val count = PrefsManager.gamepadKeyCount
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val idx = event.actionIndex
-                val x = event.getX(idx) - offsetX
-                val y = event.getY(idx) - offsetY
+                val x = event.getX(idx)
+                val y = event.getY(idx)
                 val pid = event.getPointerId(idx)
-                val btn = hitButton(x, y, positions, visible)
+                val btn = hitButton(x, y, positions, visible, count)
                 if (btn >= 0 && btn < keys.size && visible.getOrElse(btn) { true }) {
                     pressedState[btn] = true
                     pointerButton[pid] = btn
@@ -182,15 +188,15 @@ class ActionButtonView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 for (i in 0 until event.pointerCount) {
                     val pid = event.getPointerId(i)
-                    val x = event.getX(i) - offsetX
-                    val y = event.getY(i) - offsetY
+                    val x = event.getX(i)
+                    val y = event.getY(i)
                     val btn = pointerButton[pid]
                     if (btn != null && btn >= 0) {
-                        val currentBtn = hitButton(x, y, positions, visible)
+                        val currentBtn = hitButton(x, y, positions, visible, count)
                         if (currentBtn != btn) {
                             pressedState[btn] = false
                             pointerButton.remove(pid)
-                            targetWebView?.injectKeyUp(keys[btn])
+                            if (btn < keys.size) targetWebView?.injectKeyUp(keys[btn])
                         }
                     }
                 }
@@ -204,7 +210,7 @@ class ActionButtonView @JvmOverloads constructor(
                     }
                 }
                 pointerButton.clear()
-                pressedState.fill(false)
+                pressedState.clear()
                 invalidate()
             }
             MotionEvent.ACTION_POINTER_UP -> {
@@ -220,8 +226,13 @@ class ActionButtonView @JvmOverloads constructor(
         return true
     }
 
-    private fun hitButton(x: Float, y: Float, positions: List<Triple<Float, Float, Float>>, visible: List<Boolean>): Int {
-        for (i in 0 until minOf(positions.size, 6)) {
+    private fun hitButton(
+        x: Float, y: Float,
+        positions: List<Triple<Float, Float, Float>>,
+        visible: List<Boolean>,
+        count: Int
+    ): Int {
+        for (i in 0 until minOf(positions.size, count)) {
             if (!visible.getOrElse(i) { true }) continue
             val (cx, cy, r) = positions[i]
             val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble())

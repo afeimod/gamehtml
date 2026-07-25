@@ -59,7 +59,7 @@
             android:summary="@string/pref_flash_cdn_summary"
             android:entries="@array/flash_cdn_entries"
             android:entryValues="@array/flash_cdn_values"
-            android:defaultValue="jsdelivr"
+            android:defaultValue="local"
             android:dependency="flash_enabled"
             app:iconSpaceReserved="false" />
 

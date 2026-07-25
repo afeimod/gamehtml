@@ -12,16 +12,16 @@
         <item>auto</item>
     </string-array>
 
-    <!-- Ruffle CDN 选项 -->
+    <!-- Ruffle CDN 选项（本地离线为默认） -->
     <string-array name="flash_cdn_entries">
-        <item>jsDelivr (国内推荐)</item>
-        <item>unpkg</item>
-        <item>本地资源 (assets)</item>
+        <item>本地资源 (离线可用, 推荐)</item>
+        <item>jsDelivr (需联网)</item>
+        <item>unpkg (需联网)</item>
     </string-array>
     <string-array name="flash_cdn_values">
+        <item>local</item>
         <item>jsdelivr</item>
         <item>unpkg</item>
-        <item>local</item>
     </string-array>
 
     <!-- Flash 画质 -->

@@ -168,6 +168,10 @@ class GameActivity : AppCompatActivity() {
             if (isMouseEnabled) {
                 webView.evaluateJavascript(MOUSE_CURSOR_SCRIPT, null)
             }
+            // 如果视角旋转已开启，重新注入（页面导航后会丢失）
+            if (PrefsManager.isCameraRotationEnabled) {
+                webView.evaluateJavascript(CAMERA_ROTATION_SCRIPT, null)
+            }
         }
         override fun onProgress(progress: Int) = chromeCallback.onProgress(progress)
         override fun onError(url: String?, errorCode: Int, description: String?) {
@@ -253,6 +257,9 @@ class GameActivity : AppCompatActivity() {
         binding.mouseControl.targetWebView = webView
         binding.mouseControl.overlayAlpha = alpha
 
+        // 3D 视角旋转模式
+        webView.cameraRotationEnabled = PrefsManager.isCameraRotationEnabled
+
         binding.btnStart.setOnClickListener {
             webView.injectKey(KeyMapper.toKeyCode(PrefsManager.startKey))
         }
@@ -268,6 +275,8 @@ class GameActivity : AppCompatActivity() {
             gamepadVisible = true
             showGamepad(true)
         }
+        // 应用动作按键大小
+        binding.actionButtons.post { applyActionButtonsSize() }
         // 鼠标按钮
         if (PrefsManager.isMouseButtonsVisible) {
             binding.mouseControl.visibility = View.VISIBLE
@@ -386,15 +395,17 @@ class GameActivity : AppCompatActivity() {
     /** 按键映射设置对话框 */
     private fun openKeyMappingDialog() {
         val items = arrayOf(
-            "按键 A~F 映射",
+            "按键映射 (选择按键修改)",
+            "添加按键",
+            "删除按键",
             "Start/Select 映射",
-            "方向键模式 (DPAD/WASD)",
+            "方向键模式 (DPAD/WASD/摇杆)",
             "方向键大小",
             "动作按键大小",
             "显示/隐藏按键",
             "添加/隐藏鼠标按钮",
             "位置编辑模式 (拖动调整)",
-            "Flash 引擎 (Ruffle/swf2js)",
+            "视角旋转 (3D游戏)",
             "恢复默认"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -402,15 +413,17 @@ class GameActivity : AppCompatActivity() {
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> showActionButtonPicker()
-                    1 -> showSystemKeyPicker()
-                    2 -> toggleDpadMode()
-                    3 -> showDpadScalePicker()
-                    4 -> showActionScalePicker()
-                    5 -> showKeyVisibilityPicker()
-                    6 -> toggleMouseMode()
-                    7 -> togglePositionEditMode()
-                    8 -> showFlashEnginePicker()
-                    9 -> resetAllKeySettings()
+                    1 -> addButton()
+                    2 -> removeButton()
+                    3 -> showSystemKeyPicker()
+                    4 -> toggleDpadMode()
+                    5 -> showDpadScalePicker()
+                    6 -> showActionScalePicker()
+                    7 -> showKeyVisibilityPicker()
+                    8 -> toggleMouseMode()
+                    9 -> togglePositionEditMode()
+                    10 -> toggleCameraRotation()
+                    11 -> resetAllKeySettings()
                 }
             }
             .show()
@@ -494,7 +507,7 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Flash 引擎切换：Ruffle / swf2js */
+    /** Flash 引擎切换：Ruffle / WAFlash / 关闭 */
     private fun showFlashEnginePicker() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val engines = arrayOf(
@@ -638,13 +651,14 @@ class GameActivity : AppCompatActivity() {
         "UP","DOWN","LEFT","RIGHT"
     )
 
-    /** 按键 A~F 映射选择 */
+    /** 按键映射选择（动态数量） */
     private fun showActionButtonPicker() {
-        val labels = arrayOf("按键 A", "按键 B", "按键 C", "按键 D", "按键 E", "按键 F")
+        val keys = PrefsManager.gamepadKeys
+        val labels = keys.mapIndexed { i, k -> "按键 ${i + 1} ($k)" }.toTypedArray()
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("选择要设置的按键")
+            .setTitle("选择要设置的按键（共 ${keys.size} 个）")
             .setItems(labels) { _, which ->
-                showKeyListPicker(which, "gamepad_key_${which + 1}", labels[which])
+                showKeyListPicker("gamepad_key_${which + 1}", "按键 ${which + 1}", keys[which])
             }
             .show()
     }
@@ -653,18 +667,18 @@ class GameActivity : AppCompatActivity() {
     private fun showSystemKeyPicker() {
         val labels = arrayOf("Select 键", "Start 键")
         val prefKeys = arrayOf("select_key", "start_key")
+        val defaults = arrayOf(PrefsManager.selectKey, PrefsManager.startKey)
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("选择要设置的按键")
             .setItems(labels) { _, which ->
-                showKeyListPicker(-1, prefKeys[which], labels[which])
+                showKeyListPicker(prefKeys[which], labels[which], defaults[which])
             }
             .show()
     }
 
     /** 完整键盘列表选择对话框 */
-    private fun showKeyListPicker(buttonIndex: Int, prefKey: String, title: String) {
+    private fun showKeyListPicker(prefKey: String, title: String, current: String) {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val current = sp.getString(prefKey, "J") ?: "J"
         val displayList = fullKeyList.map { key ->
             val desc = when (key) {
                 "SPACE" -> "空格"
@@ -688,23 +702,93 @@ class GameActivity : AppCompatActivity() {
             .setTitle(title)
             .setSingleChoiceItems(displayList, checked) { dialog, which ->
                 sp.edit().putString(prefKey, fullKeyList[which]).apply()
-                // 刷新按键视图
+                // 刷新按键视图与尺寸
                 binding.actionButtons.invalidate()
+                applyActionButtonsSize()
                 Toast.makeText(this, "$title → ${fullKeyList[which]}", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
             }
             .show()
     }
 
-    /** 切换方向键模式 */
+    /** 切换方向键模式：dpad → wasd → joystick → dpad */
     private fun toggleDpadMode() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val current = PrefsManager.dpadMode
-        val newMode = if (current == "wasd") "dpad" else "wasd"
+        val newMode = when (current) {
+            "dpad" -> "wasd"
+            "wasd" -> "joystick"
+            else -> "dpad"
+        }
         sp.edit().putString("dpad_mode", newMode).apply()
         // 刷新方向键视图
         binding.dpad.invalidate()
-        Toast.makeText(this, "方向键已切换为 ${if (newMode == "wasd") "WASD" else "DPAD"}", Toast.LENGTH_SHORT).show()
+        val label = when (newMode) {
+            "wasd" -> "WASD 十字键"
+            "joystick" -> "摇杆 (WASD)"
+            else -> "方向键 (↑↓←→)"
+        }
+        Toast.makeText(this, "方向键已切换为 $label", Toast.LENGTH_SHORT).show()
+    }
+
+    /** 添加按键：增加动作按钮数量（最多 18 个） */
+    private fun addButton() {
+        val current = PrefsManager.gamepadKeyCount
+        if (current >= 18) {
+            Toast.makeText(this, "已达到最大按键数量 (18)", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val newCount = current + 1
+        PrefsManager.sp.edit().putInt("gamepad_key_count", newCount).apply()
+        applyActionButtonsSize()
+        binding.actionButtons.invalidate()
+        Toast.makeText(this, "已添加按键，当前共 $newCount 个", Toast.LENGTH_SHORT).show()
+    }
+
+    /** 删除按键：减少动作按钮数量（最少 2 个） */
+    private fun removeButton() {
+        val current = PrefsManager.gamepadKeyCount
+        if (current <= 2) {
+            Toast.makeText(this, "已达到最小按键数量 (2)", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val newCount = current - 1
+        PrefsManager.sp.edit().putInt("gamepad_key_count", newCount).apply()
+        applyActionButtonsSize()
+        binding.actionButtons.invalidate()
+        Toast.makeText(this, "已删除按键，当前共 $newCount 个", Toast.LENGTH_SHORT).show()
+    }
+
+    /** 切换 3D 视角旋转模式 */
+    private fun toggleCameraRotation() {
+        val enabled = !PrefsManager.isCameraRotationEnabled
+        PrefsManager.sp.edit().putBoolean("camera_rotation_enabled", enabled).apply()
+        webView.cameraRotationEnabled = enabled
+        if (enabled) {
+            // 立即注入视角旋转脚本
+            webView.evaluateJavascript(CAMERA_ROTATION_SCRIPT, null)
+            Toast.makeText(this, "视角旋转已开启，拖动屏幕旋转视角", Toast.LENGTH_LONG).show()
+        } else {
+            // 移除视角旋转脚本
+            webView.evaluateJavascript(
+                "(function(){window.__cameraRotation=false;var s=document.getElementById('__cameraRotateStyle');if(s)s.remove();})();", null)
+            Toast.makeText(this, "视角旋转已关闭", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 应用动作按键大小（根据缩放比例调整 View 尺寸） */
+    private fun applyActionButtonsSize() {
+        val scale = PrefsManager.gamepadScale
+        val baseSize = resources.getDimensionPixelSize(R.dimen.action_group_size)
+        // 按键数量多时自动放大容器，保证每个按钮有足够空间
+        val count = PrefsManager.gamepadKeyCount
+        val sizeMultiplier = if (count > 6) 1f + (count - 6) * 0.12f else 1f
+        val newSize = (baseSize * scale * sizeMultiplier).toInt()
+        binding.actionButtons.layoutParams.apply {
+            width = newSize
+            height = newSize
+        }
+        binding.actionButtons.requestLayout()
     }
 
     /** 方向键大小 */
@@ -718,6 +802,7 @@ class GameActivity : AppCompatActivity() {
             .setTitle("方向键大小")
             .setSingleChoiceItems(scales, checked) { dialog, which ->
                 sp.edit().putInt("dpad_scale", values[which]).apply()
+                binding.dpad.invalidate()
                 Toast.makeText(this, "方向键大小: ${scales[which]}", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
             }
@@ -735,27 +820,36 @@ class GameActivity : AppCompatActivity() {
             .setTitle("动作按键大小")
             .setSingleChoiceItems(scales, checked) { dialog, which ->
                 sp.edit().putInt("gamepad_scale", values[which]).apply()
+                applyActionButtonsSize()
                 Toast.makeText(this, "动作按键大小: ${scales[which]}", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
             }
             .show()
     }
 
-    /** 显示/隐藏按键 */
+    /** 显示/隐藏按键（动态数量） */
     private fun showKeyVisibilityPicker() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val labels = arrayOf("按键 A", "按键 B", "按键 C", "按键 D", "按键 E", "按键 F", "方向键", "Start/Select")
-        val prefKeys = arrayOf(
-            "gamepad_key_1_visible", "gamepad_key_2_visible", "gamepad_key_3_visible",
-            "gamepad_key_4_visible", "gamepad_key_5_visible", "gamepad_key_6_visible",
-            "dpad_visible", "system_buttons_visible"
-        )
-        val checked = BooleanArray(8) { i ->
+        val keyCount = PrefsManager.gamepadKeyCount
+        val keys = PrefsManager.gamepadKeys
+        // 构建动态标签：按键 1 (J) ... 按键 N (X) + 方向键 + Start/Select
+        val labels = ArrayList<String>()
+        val prefKeys = ArrayList<String>()
+        for (i in 0 until keyCount) {
+            labels.add("按键 ${i + 1} (${keys.getOrElse(i) { "" }})")
+            prefKeys.add("gamepad_key_${i + 1}_visible")
+        }
+        labels.add("方向键")
+        prefKeys.add("dpad_visible")
+        labels.add("Start/Select")
+        prefKeys.add("system_buttons_visible")
+
+        val checked = BooleanArray(labels.size) { i ->
             sp.getBoolean(prefKeys[i], true)
         }
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("显示/隐藏按键")
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+            .setTitle("显示/隐藏按键（共 $keyCount 个动作键）")
+            .setMultiChoiceItems(labels.toTypedArray(), checked) { _, which, isChecked ->
                 sp.edit().putBoolean(prefKeys[which], isChecked).apply()
             }
             .setPositiveButton("确定") { _, _ ->
@@ -772,10 +866,20 @@ class GameActivity : AppCompatActivity() {
     /** 恢复默认 */
     private fun resetAllKeySettings() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        sp.edit()
-            .putString("gamepad_key_1", "J").putString("gamepad_key_2", "K").putString("gamepad_key_3", "L")
-            .putString("gamepad_key_4", "U").putString("gamepad_key_5", "I").putString("gamepad_key_6", "O")
-            .putString("select_key", "TAB").putString("start_key", "ENTER")
+        val editor = sp.edit()
+        // 重置按键数量为默认 6
+        editor.putInt("gamepad_key_count", 6)
+        // 重置所有可能的按键映射（2~18）
+        val defaultKeys = arrayOf(
+            "J", "K", "L", "U", "I", "O",
+            "1", "2", "3", "4", "5", "6",
+            "7", "8", "9", "Q", "E", "R"
+        )
+        for (i in 0 until 18) {
+            editor.putString("gamepad_key_${i + 1}", defaultKeys.getOrElse(i) { "J" })
+            editor.putBoolean("gamepad_key_${i + 1}_visible", true)
+        }
+        editor.putString("select_key", "TAB").putString("start_key", "ENTER")
             .putString("dpad_mode", "dpad")
             .putInt("dpad_scale", 100).putInt("gamepad_scale", 100)
             // 清除保存的绝对位置坐标，恢复默认布局
@@ -783,15 +887,18 @@ class GameActivity : AppCompatActivity() {
             .putFloat("action_pos_x", -1f).putFloat("action_pos_y", -1f)
             .putFloat("system_pos_x", -1f).putFloat("system_pos_y", -1f)
             .putFloat("mouse_pos_x", -1f).putFloat("mouse_pos_y", -1f)
-            .putBoolean("gamepad_key_1_visible", true).putBoolean("gamepad_key_2_visible", true)
-            .putBoolean("gamepad_key_3_visible", true).putBoolean("gamepad_key_4_visible", true)
-            .putBoolean("gamepad_key_5_visible", true).putBoolean("gamepad_key_6_visible", true)
             .putBoolean("dpad_visible", true).putBoolean("system_buttons_visible", true)
             .putBoolean("mouse_buttons_visible", false)
+            .putBoolean("camera_rotation_enabled", false)
             .putBoolean("flash_enabled", true).putString("flash_engine", "ruffle")
             .apply()
+        // 关闭视角旋转
+        webView.cameraRotationEnabled = false
+        webView.evaluateJavascript(
+            "(function(){window.__cameraRotation=false;})();", null)
         binding.mouseControl.visibility = View.GONE
         // 刷新所有手柄视图
+        applyActionButtonsSize()
         binding.dpad.invalidate()
         binding.actionButtons.invalidate()
         binding.systemButtons.invalidate()
@@ -868,9 +975,12 @@ class GameActivity : AppCompatActivity() {
         webView.onResume()
         // 横竖屏切换或从后台返回后重新隐藏系统栏
         applyImmersiveFullscreen()
+        // 同步视角旋转状态（从设置页面返回后恢复最新配置）
+        webView.cameraRotationEnabled = PrefsManager.isCameraRotationEnabled
         // 刷新手柄视图（从设置页面返回后恢复最新配置）
         binding.dpad.invalidate()
         binding.actionButtons.invalidate()
+        applyActionButtonsSize()
         if (PrefsManager.isGamepadEnabled && !gamepadVisible) {
             gamepadVisible = true
             showGamepad(true)
@@ -928,6 +1038,80 @@ class GameActivity : AppCompatActivity() {
                   el.dispatchEvent(evt);
                 }
               }, {passive: true});
+            })();
+        """
+
+        /**
+         * 3D 视角旋转脚本：
+         * 1. Hook requestPointerLock → 模拟指针锁定成功（移动端不支持原生 Pointer Lock）
+         * 2. 提供 window.__cameraRotate(dx, dy) → 分发带 movementX/movementY 的 mousemove 事件
+         * 3. 阻止页面滚动/选择，确保拖动只用于旋转视角
+         */
+        private const val CAMERA_ROTATION_SCRIPT = """
+            (function(){
+              if (window.__cameraRotation) return; window.__cameraRotation = true;
+
+              // === 1. 模拟 Pointer Lock API ===
+              // 很多 3D 游戏通过 requestPointerLock 锁定鼠标，移动端不支持，需 hook
+              if (!window.__pointerLockHooked) {
+                window.__pointerLockHooked = true;
+                var _requestPointerLock = HTMLElement.prototype.requestPointerLock;
+                HTMLElement.prototype.requestPointerLock = function() {
+                  // 模拟锁定成功
+                  window.__pointerLocked = true;
+                  document.dispatchEvent(new Event('pointerlockchange'));
+                  document.pointerLockElement = this;
+                  return Promise.resolve();
+                };
+                // hook exitPointerLock
+                document.exitPointerLock = function() {
+                  window.__pointerLocked = false;
+                  document.pointerLockElement = null;
+                  document.dispatchEvent(new Event('pointerlockchange'));
+                };
+                // 让 document.pointerLockElement 可被游戏设置
+                try {
+                  Object.defineProperty(document, 'pointerLockElement', {
+                    get: function() { return window.__pointerLockElement || null; },
+                    set: function(v) { window.__pointerLockElement = v; },
+                    configurable: true
+                  });
+                } catch(e) {}
+              }
+
+              // === 2. 提供视角旋转函数 ===
+              window.__cameraRotate = function(dx, dy) {
+                // 找到游戏画布元素
+                var target = document.pointerLockElement;
+                if (!target) {
+                  target = document.querySelector('canvas') ||
+                           document.querySelector('[id*="game"]') ||
+                           document.querySelector('[id*="flash"]') ||
+                           document.body;
+                }
+                if (!target) return;
+                // 分发 mousemove 事件，带 movementX/movementY
+                var evt = new MouseEvent('mousemove', {
+                  bubbles: true,
+                  cancelable: true,
+                  view: window,
+                  clientX: window.innerWidth / 2,
+                  clientY: window.innerHeight / 2,
+                  movementX: Math.round(dx),
+                  movementY: Math.round(dy)
+                });
+                target.dispatchEvent(evt);
+                // 部分游戏监听 document 而非 canvas
+                document.dispatchEvent(evt);
+              };
+
+              // === 3. 阻止拖动时的页面滚动/选择 ===
+              var style = document.createElement('style');
+              style.id = '__cameraRotateStyle';
+              style.textContent = 'body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overflow:hidden !important;}canvas{touch-action:none !important;}';
+              document.head.appendChild(style);
+
+              console.log('[CameraRotation] 视角旋转模式已启用');
             })();
         """
 
