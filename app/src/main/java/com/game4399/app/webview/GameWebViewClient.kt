@@ -90,8 +90,9 @@ open class GameWebViewClient(
         //    适用于所有 Flash 游戏页面（不限 4399），如 mhhf.com 等
         //    evaluateJavascript 是异步的，页面 JS 可能先执行导致检测失败
         //    直接修改 HTML 保证脚本在页面 JS 之前运行
+        //    注意：只拦截主框架 GET 请求，不拦截 POST（登录表单）、AJAX 子请求、API 接口
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
-        if (isFlashPage) {
+        if (isFlashPage && request.method == "GET" && request.isForMainFrame) {
             return interceptHtml(view, url, request)
         }
 
