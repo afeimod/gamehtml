@@ -38,6 +38,7 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupQuickEntries()
+        setupWebGamePortals()
         setupLocalSwfList()
         setupCustomInput()
         binding.swipeRefresh.isEnabled = false
@@ -60,6 +61,29 @@ class HomeFragment : Fragment() {
             })
             card.setOnClickListener {
                 (requireActivity() as? MainActivity)?.openInGame(url, label, GameType.URL)
+            }
+            grid.addView(card)
+        }
+    }
+
+    private fun setupWebGamePortals() {
+        val grid = binding.webGameGrid
+        grid.removeAllViews()
+        val icons = intArrayOf(
+            R.drawable.ic_game, R.drawable.ic_star, R.drawable.ic_home,
+            R.drawable.ic_category, R.drawable.ic_game, R.drawable.ic_star,
+            R.drawable.ic_home, R.drawable.ic_category, R.drawable.ic_game,
+            R.drawable.ic_star, R.drawable.ic_home, R.drawable.ic_category
+        )
+        GameRepository.webGamePortals.forEachIndexed { index, entry ->
+            val card = layoutInflater.inflate(R.layout.item_web_game, grid, false) as
+                com.google.android.material.card.MaterialCardView
+            val tvLabel = card.findViewById<android.widget.TextView>(R.id.tvLabel)
+            val ivIcon = card.findViewById<android.widget.ImageView>(R.id.ivIcon)
+            tvLabel.text = entry.title
+            ivIcon.setImageResource(icons[index % icons.size])
+            card.setOnClickListener {
+                (requireActivity() as? MainActivity)?.openInGame(entry.url, entry.title, GameType.URL)
             }
             grid.addView(card)
         }

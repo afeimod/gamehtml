@@ -40,9 +40,31 @@ object GameRepository {
 
     /** 首页快捷入口（标题 → URL） */
     val quickUrls: List<Pair<String, String>> = listOf(
-        "4399 手机版" to "https://h.4399.com/",
+        "梦幻西游网页版" to "https://xyh5.163.com/game/?channel=netease",
         "4399 电脑版" to "https://www.4399.com/",
-        "热门小游戏" to "https://h.4399.com/wap/xyxRank.htm",
-        "全部分类"   to "https://h.4399.com/wap/allcategory.htm"
+        "云原神" to "https://ys.mihoyo.com/cloud/m/#/",
+        "小霸王其乐无穷" to "https://www.yikm.net/nes?tag=%E6%B1%89%E5%8C%96"
+    )
+
+    /** 网页游戏大全网格（标题 → URL） */
+    data class WebGameEntry(
+        val title: String,
+        val url: String,
+        val iconRes: Int = 0
+    )
+
+    val webGamePortals: List<WebGameEntry> = listOf(
+        WebGameEntry("4399游戏", "https://www.4399.com/"),
+        WebGameEntry("7k7k游戏", "https://www.7k7k.com/"),
+        WebGameEntry("37游戏", "https://www.37.com/"),
+        WebGameEntry("360游戏", "https://wan.360.cn/"),
+        WebGameEntry("2345游戏", "https://game.2345.com/"),
+        WebGameEntry("17173游戏", "https://www.17173.com/"),
+        WebGameEntry("4399网页游戏", "https://web.4399.com/"),
+        WebGameEntry("多玩游戏", "https://www.duowan.com/"),
+        WebGameEntry("游民星空", "https://www.gamersky.com/"),
+        WebGameEntry("3DM游戏", "https://www.3dmgame.com/"),
+        WebGameEntry("九游游戏", "https://www.9game.cn/"),
+        WebGameEntry("页游网", "https://www.yy.com/")
     )
 }

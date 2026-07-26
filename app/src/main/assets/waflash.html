@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>WAFlash 播放器</title>
+<link rel="stylesheet" href="https://flash.local/waflash/waflash-style.css" />
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -32,9 +33,11 @@
 </style>
 </head>
 <body>
-  <canvas class="waflashCanvas" id="canvas" tabindex="1"></canvas>
-  <div id="waflashStatus">Loading...</div>
-  <div id="hint">WAFlash · AS2/AS3</div>
+  <div id="waflashContainer">
+    <canvas class="waflashCanvas" id="canvas" tabindex="1"></canvas>
+    <div id="waflashStatus">Loading...</div>
+    <div id="hint">WAFlash · AS2/AS3</div>
+  </div>
 
   <script>
     var params = new URLSearchParams(location.search);
@@ -45,7 +48,48 @@
 
     var statusEl = document.getElementById('waflashStatus');
     var canvas = document.getElementById('canvas');
+
+    // === Canvas 交互处理（来自 WAFlash 官方源码） ===
+    // 1. 点击 canvas 获取焦点（键盘输入需要）
     canvas.addEventListener('click', function() { canvas.focus(); });
+
+    // 2. 阻止 canvas 上的默认键盘行为（避免页面滚动等）
+    canvas.addEventListener('keydown', function(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+
+    // 3. mousedown 焦点管理：点击 canvas 获取焦点，点击其他区域失去焦点
+    (function() {
+      var focused = false;
+      document.addEventListener('mousedown', function(ev) {
+        if (ev.target == canvas) {
+          if (!focused) {
+            canvas.focus();
+            focused = true;
+          }
+        } else {
+          focused = false;
+        }
+        return true;
+      });
+    })();
+
+    // 4. 移动端滚动适配
+    var is_mobile = /Mobi/i.test(window.navigator.userAgent);
+    if (is_mobile) {
+      function scrollToSubject() {
+        try {
+          window.scrollTo({ top: 100, left: 0, behavior: 'smooth' });
+        } catch(e) {}
+      }
+      scrollToSubject();
+      window.addEventListener('orientationchange', function() {
+        setTimeout(scrollToSubject, 100);
+      });
+    } else {
+      canvas.focus();
+    }
 
     // 判断是否为本地文件代理 URL（flash.local/local.swf），处理可能的时间戳参数
     var isLocalFile = SWF_URL.split('?')[0] === 'https://flash.local/local.swf';
@@ -92,7 +136,7 @@
           console.error('[WAF] ' + e.message);
         }
       }).catch(function(err) {
-        statusEl.textContent = '引擎加载失败';
+        statusEl.textContent = '引擎加载失败: ' + (err.message || err);
         console.error('[WAF] 引擎: ' + (err.message || err));
       });
     }
@@ -110,6 +154,14 @@
 
     document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
     document.addEventListener('selectstart', function(e) { e.preventDefault(); });
+
+    // WebGL 上下文丢失处理
+    canvas.addEventListener('webglcontextlost', function(e) {
+      console.warn('[WAF] WebGL context lost');
+      e.preventDefault();
+      statusEl.style.display = 'block';
+      statusEl.textContent = 'WebGL 上下文丢失，请刷新页面';
+    }, false);
   </script>
 </body>
 </html>

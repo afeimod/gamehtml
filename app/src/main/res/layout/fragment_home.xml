@@ -63,6 +63,23 @@
                 app:rowCount="2"
                 app:orientation="horizontal" />
 
+            <!-- 网页游戏大全 -->
+            <TextView
+                style="@style/TextAppearance.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="网页游戏大全" />
+
+            <androidx.gridlayout.widget.GridLayout
+                xmlns:app="http://schemas.android.com/apk/res-auto"
+                android:id="@+id/webGameGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                app:columnCount="3"
+                app:orientation="horizontal" />
+
             <!-- 本地 SWF -->
             <LinearLayout
                 xmlns:app="http://schemas.android.com/apk/res-auto"
