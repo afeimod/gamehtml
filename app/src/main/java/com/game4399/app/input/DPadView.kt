@@ -18,7 +18,7 @@ import kotlin.math.min
  * 虚拟方向控制器，支持三种 UI 模式（[PrefsManager.dpadMode]）：
  *  - "dpad"     : 十字方向键，注入 ↑↓←→ 方向键
  *  - "wasd"     : 十字方向键，注入 W/A/S/D
- *  - "joystick" : 摇杆（外环 + 跟手摇杆头），注入 8 方向 W/A/S/D（适合 3D 游戏）
+ *  - "joystick" : 摇杆（外环 + 跟手摇杆头），注入 8 方向 ↑↓←→（适合 2D/3D 游戏）
  *
  * 触摸行为：
  *  - 按下/移动时根据触点相对中心的位置判断方向（上/下/左/右，支持对角线）
@@ -426,10 +426,13 @@ class DPadView @JvmOverloads constructor(
     }
 
     /** 根据 dpadMode 将方向键映射为 DPAD_* 或 WASD。
-     *  joystick 模式使用 WASD（适合 3D 游戏移动）。 */
+     *  - dpad 模式：注入方向键 ↑↓←→
+     *  - wasd 模式：注入 W/A/S/D
+     *  - joystick 模式：注入方向键 ↑↓←→（摇杆 UI + 方向键映射） */
     private fun mapDirectionKey(keyCode: Int): Int {
-        if (PrefsManager.dpadMode == "dpad") return keyCode
-        // wasd 与 joystick 均映射到 WASD
+        val mode = PrefsManager.dpadMode
+        if (mode == "dpad" || mode == "joystick") return keyCode
+        // wasd 模式映射到 WASD
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> KeyEvent.KEYCODE_W
             KeyEvent.KEYCODE_DPAD_DOWN -> KeyEvent.KEYCODE_S
