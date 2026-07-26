@@ -199,7 +199,7 @@ class GameActivity : AppCompatActivity() {
         override fun onPageFinished(url: String?) {
             url?.let { FavoriteStore.addHistory(it, currentTitle, currentType) }
             updateFavoriteIcon()
-            // Flash 兜底注入：interceptHtml 可能因缓存/SPA 未触发，
+            // Flash 兜底注入：onPageStarted 的 evaluateJavascript 可能因时序问题未生效，
             // 在 onPageFinished 再注入一次（脚本内有 __flashPolyfilled 守卫，不会重复执行）
             if (PrefsManager.isFlashEnabled && url != null &&
                 !url.startsWith("file:///android_asset/") &&
