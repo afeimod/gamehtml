@@ -215,6 +215,16 @@ class GameActivity : AppCompatActivity() {
             if (url.startsWith("https://flash.local/waflash/")) return false
             if (url.startsWith("https://flash.local/ruffle/")) return false
             if (url.startsWith("https://flash.local/swf2js/")) return false
+            // 排除登录/账号/API 接口（避免拦截 POST 请求导致无法登录）
+            val lowerUrl = url.lowercase()
+            if (lowerUrl.contains("/login") || lowerUrl.contains("/signin") ||
+                lowerUrl.contains("/register") || lowerUrl.contains("/signup") ||
+                lowerUrl.contains("/api/") || lowerUrl.contains("/ajax/") ||
+                lowerUrl.contains("/account") || lowerUrl.contains("/user/") ||
+                lowerUrl.contains("/passport") || lowerUrl.contains("/auth") ||
+                lowerUrl.contains("/logout") || lowerUrl.contains("/sso")) {
+                return false
+            }
             // Flash 开启时，对所有网页注入 Flash 支持（不限 4399）
             // 适用于 mhhf.com 等其他 Flash 游戏网站
             return PrefsManager.isFlashEnabled
