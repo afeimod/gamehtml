@@ -134,12 +134,6 @@ class GameActivity : AppCompatActivity() {
                 visibility = if (progress in 1..99) View.VISIBLE else View.GONE
                 this.progress = progress
             }
-            // 进度到 80% 就隐藏加载遮罩，部分 Flash 页面因长轮询永远到不了 100%
-            if (progress >= 80) {
-                binding.loadingOverlay.visibility = View.GONE
-            } else if (progress in 1..79) {
-                binding.loadingOverlay.visibility = View.VISIBLE
-            }
         }
         override fun onTitle(title: String?) {
             currentTitle = title?.takeIf { it.isNotBlank() } ?: currentTitle
@@ -172,12 +166,9 @@ class GameActivity : AppCompatActivity() {
         override fun onPageStarted(url: String?) {
             // 页面导航时释放所有按键，防止旧页面的按键状态残留
             webView.releaseAllKeys()
-            binding.loadingOverlay.visibility = View.VISIBLE
-            binding.loadingText.text = getString(R.string.loading)
             binding.errorView.visibility = View.GONE
         }
         override fun onPageFinished(url: String?) {
-            binding.loadingOverlay.visibility = View.GONE
             url?.let { FavoriteStore.addHistory(it, currentTitle, currentType) }
             updateFavoriteIcon()
             // Flash 兜底注入：interceptHtml 可能因缓存/SPA 未触发，
@@ -208,7 +199,6 @@ class GameActivity : AppCompatActivity() {
             if (url != null && url.startsWith("file:///android_asset/")) return
             // 忽略被中止的请求（跳转过程中旧页面被取消）
             if (errorCode == -1) return
-            binding.loadingOverlay.visibility = View.GONE
             binding.errorView.visibility = View.VISIBLE
         }
         override fun onSwfIntercepted(swfUrl: String, pageUrl: String) {
