@@ -474,7 +474,7 @@ class GameActivity : AppCompatActivity() {
      * 用内置引擎（Ruffle/WAFlash）播放 SWF。
      */
     private fun playSwfWithEngine(swfUrl: String) {
-        val playerUrl = NavHelper.playerUrl(swfUrl, base = webView.url, title = currentTitle)
+        val playerUrl = NavHelper.playerUrl(swfUrl, base = currentUrl, title = currentTitle)
         webView.loadUrl(playerUrl)
         Toast.makeText(this, "正在用${PrefsManager.flashEngine}引擎加载...", Toast.LENGTH_SHORT).show()
     }
@@ -485,6 +485,8 @@ class GameActivity : AppCompatActivity() {
      */
     private fun downloadSwf(swfUrl: String) {
         Toast.makeText(this, "开始下载 SWF...", Toast.LENGTH_SHORT).show()
+        // 使用 currentUrl（已在主线程赋值），避免在后台线程访问 webView.url 触发线程违规
+        val pageUrl = currentUrl.ifEmpty { swfUrl }
         Thread {
             try {
                 val swfUrlHttps = if (swfUrl.startsWith("http://")) "https://" + swfUrl.substring(7) else swfUrl
@@ -502,8 +504,24 @@ class GameActivity : AppCompatActivity() {
                 }
                 conn.connectTimeout = 15000
                 conn.readTimeout = 30000
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                conn.setRequestProperty("Referer", webView.url ?: swfUrl)
+                conn.requestMethod = "GET"
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                conn.setRequestProperty("Accept", "*/*")
+                conn.setRequestProperty("Accept-Encoding", "identity")
+                // 转发 Cookie（防盗链/登录态）
+                try {
+                    val cookies = android.webkit.CookieManager.getInstance().getCookie(swfUrlHttps)
+                    if (cookies != null && cookies.isNotEmpty()) {
+                        conn.setRequestProperty("Cookie", cookies)
+                    }
+                } catch(e: Exception) {}
+                // 使用页面 URL 作为 Referer（防盗链），若无法获取则用 SWF 同源 origin
+                val referer = if (pageUrl.isNotEmpty() && pageUrl != swfUrl) pageUrl else {
+                    try { android.net.Uri.parse(swfUrlHttps).let { "${it.scheme}://${it.host}/" } } catch(e: Exception) { swfUrl }
+                }
+                conn.setRequestProperty("Referer", referer)
                 conn.connect()
 
                 if (conn.responseCode !in 200..299) {
