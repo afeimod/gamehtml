@@ -141,8 +141,8 @@ class GameActivity : AppCompatActivity() {
         override fun onConsole(level: String, msg: String, sourceId: String?, line: Int) {}
         override fun onShowFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
             // 网页全屏：隐藏 WebView，将全屏 View 添加到容器
+            // 手柄控件和悬浮菜单位于全屏容器之上（XML 层级），无需隐藏
             binding.gameWebView.visibility = View.GONE
-            binding.floatingMenu.visibility = View.GONE
             binding.fullscreenContainer.removeAllViews()
             binding.fullscreenContainer.addView(view)
             binding.fullscreenContainer.visibility = View.VISIBLE
@@ -152,7 +152,6 @@ class GameActivity : AppCompatActivity() {
             binding.fullscreenContainer.removeAllViews()
             binding.fullscreenContainer.visibility = View.GONE
             binding.gameWebView.visibility = View.VISIBLE
-            binding.floatingMenu.visibility = View.VISIBLE
         }
         override fun onFileChooser(callback: ValueCallback<Array<Uri>>, accept: String?): Boolean {
             filePathCallback?.onReceiveValue(null)
@@ -165,6 +164,8 @@ class GameActivity : AppCompatActivity() {
 
     private val viewClientCallback = object : GameWebViewClient.Callback {
         override fun onPageStarted(url: String?) {
+            // 页面导航时释放所有按键，防止旧页面的按键状态残留
+            webView.releaseAllKeys()
             binding.loadingOverlay.visibility = View.VISIBLE
             binding.loadingText.text = getString(R.string.loading)
             binding.errorView.visibility = View.GONE
@@ -311,6 +312,10 @@ class GameActivity : AppCompatActivity() {
         // Start/Select 根据可见性设置
         binding.systemButtons.visibility = if (show && PrefsManager.isSystemButtonsVisible) View.VISIBLE else View.GONE
         // 鼠标按钮独立控制，不受手柄开关影响
+        // 隐藏手柄时释放所有按键，防止角色持续移动
+        if (!show) {
+            webView.releaseAllKeys()
+        }
         // 显示时恢复保存的位置
         if (show) {
             binding.systemButtons.post {
@@ -972,6 +977,8 @@ class GameActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        // 释放所有虚拟手柄按下的按键，防止 Ruffle 角色持续移动
+        webView.releaseAllKeys()
         // 暂停 Flash/H5 游戏的 JS 定时器，省电
         runCatching { webView.evaluateJavascript(
             "(function(){try{if(window.RufflePlayer){var r=window.RufflePlayer.newest();}}catch(e){}})();", null

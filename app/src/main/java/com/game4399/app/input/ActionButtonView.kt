@@ -71,6 +71,35 @@ class ActionButtonView @JvmOverloads constructor(
     /** 网格列数：≤2 个用 2 列，其余用 3 列 */
     private fun columnsOf(count: Int): Int = if (count <= 2) 2 else 3
 
+    /**
+     * 当按钮组变为不可见时，释放所有已按下的按键，
+     * 防止 Ruffle 角色在隐藏手柄后仍持续移动。
+     */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (visibility != VISIBLE) {
+            releaseAllPressed()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        releaseAllPressed()
+    }
+
+    /** 释放所有当前按下的按钮对应的按键 */
+    private fun releaseAllPressed() {
+        val keys = keyCodes()
+        pointerButton.values.forEach { btn ->
+            if (btn >= 0 && btn < keys.size) {
+                targetWebView?.injectKeyUp(keys[btn])
+            }
+        }
+        pressedState.clear()
+        pointerButton.clear()
+        invalidate()
+    }
+
     private fun keyCodes(): List<Int> {
         return PrefsManager.gamepadKeys.map { KeyMapper.toKeyCode(it) }
     }

@@ -492,6 +492,9 @@ open class GameWebViewClient(
         super.onPageStarted(view, url, favicon)
         callback.onPageStarted(url)
 
+        // 注入按键安全钩子：页面失焦时自动释放所有按键（所有页面通用）
+        view?.evaluateJavascript(KEY_SAFETY_SCRIPT, null)
+
         // 4399 页面：伪造 document.referrer 绕过防盗链检测 + IE 兼容模式伪造
         if (url != null && url.contains("4399.com")) {
             view?.evaluateJavascript(REFERER_SPOOF_SCRIPT, null)
@@ -617,6 +620,61 @@ open class GameWebViewClient(
     }
 
     companion object {
+
+        /**
+         * 按键安全钩子：在页面失焦（blur/visibilitychange）时自动释放所有按键。
+         * 这是 Android 端 releaseAllKeys() 的补充保险——
+         * 即使 Android 侧漏调，网页侧也能自行清理，防止 Ruffle 角色持续移动。
+         */
+        private const val KEY_SAFETY_SCRIPT = """
+            (function(){
+              if (window.__keySafetyHook) return;
+              window.__keySafetyHook = true;
+              // 追踪所有 keydown 的 keyCode
+              var pressed = {};
+              window.addEventListener('keydown', function(e){
+                pressed[e.keyCode] = true;
+              }, true);
+              window.addEventListener('keyup', function(e){
+                delete pressed[e.keyCode];
+              }, true);
+              // 释放所有已记录的按键
+              function releaseAll() {
+                Object.keys(pressed).forEach(function(kc) {
+                  var code = parseInt(kc);
+                  var keyMap = {
+                    37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown',
+                    32:' ',13:'Enter',9:'Tab',27:'Escape',17:'Control',16:'Shift',18:'Alt',
+                    65:'a',66:'b',67:'c',68:'d',69:'e',70:'f',71:'g',72:'h',73:'i',74:'j',
+                    75:'k',76:'l',77:'m',78:'n',79:'o',80:'p',81:'q',82:'r',83:'s',84:'t',
+                    85:'u',86:'v',87:'w',88:'x',89:'y',90:'z',
+                    48:'0',49:'1',50:'2',51:'3',52:'4',53:'5',54:'6',55:'7',56:'8',57:'9'
+                  };
+                  var keyVal = keyMap[code] || '';
+                  var codeMap = {
+                    37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown',
+                    32:'Space',13:'Enter',9:'Tab',27:'Escape',
+                    65:'KeyA',68:'KeyD',69:'KeyE',70:'KeyF',81:'KeyQ',82:'KeyR',
+                    83:'KeyS',87:'KeyW',88:'KeyX',90:'KeyZ'
+                  };
+                  var codeVal = codeMap[code] || '';
+                  try {
+                    var evt = new KeyboardEvent('keyup', {
+                      key: keyVal, code: codeVal, bubbles: true, cancelable: true
+                    });
+                    Object.defineProperty(evt, 'keyCode', {get: function(){return code;}});
+                    Object.defineProperty(evt, 'which', {get: function(){return code;}});
+                    document.dispatchEvent(evt);
+                  } catch(e) {}
+                  delete pressed[kc];
+                });
+              }
+              window.addEventListener('blur', releaseAll);
+              document.addEventListener('visibilitychange', function() {
+                if (document.hidden) releaseAll();
+              });
+            })();
+        """
 
         /**
          * 伪造 Flash 插件支持：让 4399 等页面检测到浏览器"有 Flash 插件"。

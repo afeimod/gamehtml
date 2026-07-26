@@ -43,7 +43,7 @@ object GameRepository {
         "梦幻西游网页版" to "https://xyh5.163.com/game/?channel=netease",
         "4399 电脑版" to "https://www.4399.com/",
         "云原神" to "https://ys.mihoyo.com/cloud/m/#/",
-        "小霸王其乐无穷" to "https://www.yikm.net/nes?tag=%E6%B1%89%E5%8C%96"
+        "瑾龙游戏" to "https://www.jlgames.cn/game/"
     )
 
     /** 网页游戏大全网格（标题 → URL） */

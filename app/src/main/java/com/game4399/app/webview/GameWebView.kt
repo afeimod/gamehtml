@@ -2,6 +2,7 @@ package com.game4399.app.webview
 
 import android.content.Context
 import android.util.AttributeSet
+import android.util.Log
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -10,6 +11,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
+import java.util.Collections
 import kotlin.math.abs
 
 /**
@@ -46,6 +48,13 @@ open class GameWebView @JvmOverloads constructor(
     private var cameraLastY = 0f
     /** 是否正在拖动旋转视角 */
     private var cameraDragging = false
+
+    /**
+     * 当前通过虚拟手柄按下的按键集合（Android KeyCode）。
+     * 用于在页面导航、Activity 暂停、手柄隐藏时统一释放，
+     * 防止 Ruffle/Flash 引擎因漏收 keyup 导致角色持续移动。
+     */
+    private val pressedKeys = Collections.synchronizedSet(HashSet<Int>())
 
     private val gestureDetector = GestureDetector(context, GestureListener())
 
@@ -191,31 +200,160 @@ open class GameWebView @JvmOverloads constructor(
         return super.dispatchKeyEvent(event)
     }
 
-    /** 注入一次按键 down+up（供虚拟手柄调用） */
+    /**
+     * 注入一次按键 down+up（供虚拟手柄调用）。
+     * 使用 JavaScript KeyboardEvent 直接分发，比 Android dispatchKeyEvent 更可靠，
+     * 避免 WebView 失焦时 keyup 丢失导致 Ruffle 角色持续移动。
+     */
     fun injectKey(keyCode: Int, repeat: Int = 0) {
-        val now = android.os.SystemClock.uptimeMillis()
-        val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, repeat, 0, -1, 0,
-            KeyEvent.FLAG_FROM_SYSTEM or KeyEvent.FLAG_SOFT_KEYBOARD)
-        val up = KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, 0, -1, 0,
-            KeyEvent.FLAG_FROM_SYSTEM or KeyEvent.FLAG_SOFT_KEYBOARD)
-        dispatchKeyEvent(down)
-        dispatchKeyEvent(up)
+        injectKeyDown(keyCode)
+        injectKeyUp(keyCode)
     }
 
-    /** 按住状态：只发 down（不自动 up） */
+    /**
+     * 按住状态：只发 keydown（不自动 keyup）。
+     * 通过 JS 按键状态管理器在 window/document/activeElement 三个目标上分发，
+     * 确保 Ruffle（监听在 window 上）必定收到事件。
+     */
     fun injectKeyDown(keyCode: Int) {
-        val now = android.os.SystemClock.uptimeMillis()
-        val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, 0, -1, 0,
-            KeyEvent.FLAG_FROM_SYSTEM or KeyEvent.FLAG_SOFT_KEYBOARD)
-        dispatchKeyEvent(down)
+        pressedKeys.add(keyCode)
+        val info = androidKeyToJsInfo(keyCode)
+        val js = """
+            $KEY_MANAGER_INIT
+            window.__gameKeys.down(${info.keyCode},"${info.key}","${info.code}");
+        """.trimIndent()
+        evaluateJavascript(js, null)
     }
 
-    /** 松开：发 up */
+    /**
+     * 松开：发 keyup。
+     * 通过 JS 按键状态管理器分发，并在 50ms/150ms 后冗余重发 keyup，
+     * 确保即使第一次分发丢失，Ruffle 也能收到释放事件。
+     */
     fun injectKeyUp(keyCode: Int) {
-        val now = android.os.SystemClock.uptimeMillis()
-        val up = KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, 0, -1, 0,
-            KeyEvent.FLAG_FROM_SYSTEM or KeyEvent.FLAG_SOFT_KEYBOARD)
-        dispatchKeyEvent(up)
+        pressedKeys.remove(keyCode)
+        val info = androidKeyToJsInfo(keyCode)
+        val js = """
+            $KEY_MANAGER_INIT
+            window.__gameKeys.up(${info.keyCode},"${info.key}","${info.code}");
+        """.trimIndent()
+        evaluateJavascript(js, null)
+    }
+
+    /**
+     * 释放所有当前按下的按键。
+     * 在页面导航、Activity 暂停、手柄隐藏时调用，
+     * 防止 Ruffle/Flash 引擎因漏收 keyup 导致角色持续移动。
+     */
+    fun releaseAllKeys() {
+        val keys = synchronized(pressedKeys) {
+            val copy = pressedKeys.toSet()
+            pressedKeys.clear()
+            copy
+        }
+        Log.d("GameWebView", "releaseAllKeys: ${keys.size} keys")
+        // 调用 JS 管理器释放所有按键（即使 keys 为空也要调用，清理 JS 端残留状态）
+        val js = """
+            $KEY_MANAGER_INIT
+            window.__gameKeys.releaseAll();
+        """.trimIndent()
+        evaluateJavascript(js, null)
+    }
+
+    // ---------------- 按键状态心跳同步 ----------------
+    /** 心跳 Handler：定期同步 Android 与 JS 的按键状态，释放"卡住"的按键 */
+    private val heartbeatHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            syncPressedKeys()
+            heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL)
+        }
+    }
+
+    /**
+     * 同步 Android 按下的按键状态到 JS。
+     * JS 端会释放所有"Android 认为未按下但 JS 认为已按下"的按键，
+     * 并对最近释放的按键冗余重发 keyup，彻底防止方向键卡住。
+     */
+    private fun syncPressedKeys() {
+        val keys = synchronized(pressedKeys) { pressedKeys.toIntArray() }
+        val keysStr = keys.joinToString(",")
+        evaluateJavascript("""
+            $KEY_MANAGER_INIT
+            window.__gameKeys.sync([$keysStr]);
+        """.trimIndent(), null)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        heartbeatHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
+    }
+
+    // ---- Android KeyCode → JavaScript KeyboardEvent 映射 ----
+
+    private data class JsKeyInfo(val key: String, val code: String, val keyCode: Int)
+
+    /** 将 Android KeyEvent.KEYCODE_* 映射为 JavaScript KeyboardEvent 所需的 key/code/keyCode */
+    private fun androidKeyToJsInfo(keyCode: Int): JsKeyInfo = when (keyCode) {
+        KeyEvent.KEYCODE_DPAD_UP    -> JsKeyInfo("ArrowUp",    "ArrowUp",    38)
+        KeyEvent.KEYCODE_DPAD_DOWN  -> JsKeyInfo("ArrowDown",  "ArrowDown",  40)
+        KeyEvent.KEYCODE_DPAD_LEFT  -> JsKeyInfo("ArrowLeft",  "ArrowLeft",  37)
+        KeyEvent.KEYCODE_DPAD_RIGHT -> JsKeyInfo("ArrowRight", "ArrowRight", 39)
+        KeyEvent.KEYCODE_DPAD_CENTER-> JsKeyInfo("Enter",      "Enter",      13)
+        KeyEvent.KEYCODE_SPACE      -> JsKeyInfo(" ",          "Space",      32)
+        KeyEvent.KEYCODE_ENTER      -> JsKeyInfo("Enter",      "Enter",      13)
+        KeyEvent.KEYCODE_TAB        -> JsKeyInfo("Tab",        "Tab",         9)
+        KeyEvent.KEYCODE_ESCAPE     -> JsKeyInfo("Escape",     "Escape",     27)
+        KeyEvent.KEYCODE_CTRL_LEFT  -> JsKeyInfo("Control",    "ControlLeft",17)
+        KeyEvent.KEYCODE_CTRL_RIGHT -> JsKeyInfo("Control",    "ControlRight",17)
+        KeyEvent.KEYCODE_SHIFT_LEFT -> JsKeyInfo("Shift",      "ShiftLeft",  16)
+        KeyEvent.KEYCODE_SHIFT_RIGHT-> JsKeyInfo("Shift",      "ShiftRight", 16)
+        KeyEvent.KEYCODE_ALT_LEFT   -> JsKeyInfo("Alt",        "AltLeft",    18)
+        KeyEvent.KEYCODE_ALT_RIGHT  -> JsKeyInfo("Alt",        "AltRight",   18)
+        // WASD + 功能字母
+        KeyEvent.KEYCODE_A -> JsKeyInfo("a","KeyA",65)
+        KeyEvent.KEYCODE_B -> JsKeyInfo("b","KeyB",66)
+        KeyEvent.KEYCODE_C -> JsKeyInfo("c","KeyC",67)
+        KeyEvent.KEYCODE_D -> JsKeyInfo("d","KeyD",68)
+        KeyEvent.KEYCODE_E -> JsKeyInfo("e","KeyE",69)
+        KeyEvent.KEYCODE_F -> JsKeyInfo("f","KeyF",70)
+        KeyEvent.KEYCODE_G -> JsKeyInfo("g","KeyG",71)
+        KeyEvent.KEYCODE_H -> JsKeyInfo("h","KeyH",72)
+        KeyEvent.KEYCODE_I -> JsKeyInfo("i","KeyI",73)
+        KeyEvent.KEYCODE_J -> JsKeyInfo("j","KeyJ",74)
+        KeyEvent.KEYCODE_K -> JsKeyInfo("k","KeyK",75)
+        KeyEvent.KEYCODE_L -> JsKeyInfo("l","KeyL",76)
+        KeyEvent.KEYCODE_M -> JsKeyInfo("m","KeyM",77)
+        KeyEvent.KEYCODE_N -> JsKeyInfo("n","KeyN",78)
+        KeyEvent.KEYCODE_O -> JsKeyInfo("o","KeyO",79)
+        KeyEvent.KEYCODE_P -> JsKeyInfo("p","KeyP",80)
+        KeyEvent.KEYCODE_Q -> JsKeyInfo("q","KeyQ",81)
+        KeyEvent.KEYCODE_R -> JsKeyInfo("r","KeyR",82)
+        KeyEvent.KEYCODE_S -> JsKeyInfo("s","KeyS",83)
+        KeyEvent.KEYCODE_T -> JsKeyInfo("t","KeyT",84)
+        KeyEvent.KEYCODE_U -> JsKeyInfo("u","KeyU",85)
+        KeyEvent.KEYCODE_V -> JsKeyInfo("v","KeyV",86)
+        KeyEvent.KEYCODE_W -> JsKeyInfo("w","KeyW",87)
+        KeyEvent.KEYCODE_X -> JsKeyInfo("x","KeyX",88)
+        KeyEvent.KEYCODE_Y -> JsKeyInfo("y","KeyY",89)
+        KeyEvent.KEYCODE_Z -> JsKeyInfo("z","KeyZ",90)
+        // 数字
+        KeyEvent.KEYCODE_0 -> JsKeyInfo("0","Digit0",48)
+        KeyEvent.KEYCODE_1 -> JsKeyInfo("1","Digit1",49)
+        KeyEvent.KEYCODE_2 -> JsKeyInfo("2","Digit2",50)
+        KeyEvent.KEYCODE_3 -> JsKeyInfo("3","Digit3",51)
+        KeyEvent.KEYCODE_4 -> JsKeyInfo("4","Digit4",52)
+        KeyEvent.KEYCODE_5 -> JsKeyInfo("5","Digit5",53)
+        KeyEvent.KEYCODE_6 -> JsKeyInfo("6","Digit6",54)
+        KeyEvent.KEYCODE_7 -> JsKeyInfo("7","Digit7",55)
+        KeyEvent.KEYCODE_8 -> JsKeyInfo("8","Digit8",56)
+        KeyEvent.KEYCODE_9 -> JsKeyInfo("9","Digit9",57)
+        else -> JsKeyInfo("", "Unidentified", keyCode)
     }
 
     // ---------------- 鼠标事件注入 ----------------
@@ -306,6 +444,89 @@ open class GameWebView @JvmOverloads constructor(
     }
 
     companion object {
+        /** 心跳同步间隔（ms）：定期检查并释放"卡住"的按键 */
+        private const val HEARTBEAT_INTERVAL = 300L
+
+        /**
+         * JavaScript 按键状态管理器初始化脚本（自初始化：仅在 window.__gameKeys 不存在时创建）。
+         *
+         * 核心机制：
+         * 1. 在 window / document / activeElement 三个目标上分发 KeyboardEvent，
+         *    确保 Ruffle（监听在 window 上）必定收到 keydown/keyup
+         * 2. 维护 pressed 字典（keyCode → {key, code}），跟踪已按下按键
+         * 3. up() 时在 0ms / 50ms / 150ms 冗余重发 keyup，防止首次分发丢失
+         * 4. sync(androidKeys) 与 Android 端对账：释放 Android 认为未按下但 JS 认为已按下的按键，
+         *    并对最近 500ms 内释放的按键冗余重发 keyup
+         * 5. 页面 blur / visibilitychange 时自动释放所有按键
+         */
+        private val KEY_MANAGER_INIT = """
+            if(!window.__gameKeys){
+              window.__gameKeys=(function(){
+                var pressed={};
+                var recentlyReleased={};
+                function mkEv(type,kc,kv,cv){
+                  var e=new KeyboardEvent(type,{key:kv,code:cv,bubbles:true,cancelable:true,composed:true});
+                  Object.defineProperty(e,'keyCode',{get:function(){return kc;}});
+                  Object.defineProperty(e,'which',{get:function(){return kc;}});
+                  Object.defineProperty(e,'charCode',{get:function(){return 0;}});
+                  return e;
+                }
+                function dispatch(type,kc,kv,cv){
+                  var ae=document.activeElement||document.body||document.documentElement;
+                  try{ae.dispatchEvent(mkEv(type,kc,kv,cv));}catch(e){}
+                  try{if(ae!==document)document.dispatchEvent(mkEv(type,kc,kv,cv));}catch(e){}
+                  try{window.dispatchEvent(mkEv(type,kc,kv,cv));}catch(e){}
+                }
+                function down(kc,kv,cv){
+                  pressed[kc]={key:kv,code:cv};
+                  delete recentlyReleased[kc];
+                  dispatch('keydown',kc,kv,cv);
+                }
+                function up(kc,kv,cv){
+                  var info=pressed[kc];
+                  var akv=kv||(info?info.key:'');
+                  var acv=cv||(info?info.code:'Unidentified');
+                  delete pressed[kc];
+                  recentlyReleased[kc]={key:akv,code:acv,time:Date.now()};
+                  dispatch('keyup',kc,akv,acv);
+                  setTimeout(function(){if(!pressed[kc])dispatch('keyup',kc,akv,acv);},50);
+                  setTimeout(function(){if(!pressed[kc])dispatch('keyup',kc,akv,acv);},150);
+                }
+                function releaseAll(){
+                  for(var kc in pressed){
+                    var info=pressed[kc];
+                    dispatch('keyup',parseInt(kc),info.key,info.code);
+                    recentlyReleased[kc]={key:info.key,code:info.code,time:Date.now()};
+                  }
+                  pressed={};
+                }
+                function sync(androidKeys){
+                  var aSet={};
+                  if(androidKeys){for(var i=0;i<androidKeys.length;i++)aSet[androidKeys[i]]=true;}
+                  var now=Date.now();
+                  for(var kc in pressed){
+                    if(!aSet[kc]){
+                      var info=pressed[kc];
+                      dispatch('keyup',parseInt(kc),info.key,info.code);
+                      recentlyReleased[kc]={key:info.key,code:info.code,time:now};
+                      delete pressed[kc];
+                    }
+                  }
+                  for(var kc in recentlyReleased){
+                    if(!aSet[kc]&&!pressed[kc]){
+                      var info=recentlyReleased[kc];
+                      if(now-info.time<500){dispatch('keyup',parseInt(kc),info.key,info.code);}
+                      else{delete recentlyReleased[kc];}
+                    }else{delete recentlyReleased[kc];}
+                  }
+                }
+                window.addEventListener('blur',function(){releaseAll();});
+                document.addEventListener('visibilitychange',function(){if(document.hidden)releaseAll();});
+                return{down:down,up:up,releaseAll:releaseAll,sync:sync};
+              })();
+            }
+        """.trimIndent()
+
         /** 桌面版 Chrome UA（Windows），不含 Mobile/Android，4399 据此返回 PC 版页面 */
         const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 

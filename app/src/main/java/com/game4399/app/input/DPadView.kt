@@ -70,6 +70,32 @@ class DPadView @JvmOverloads constructor(
 
     private val isJoystick: Boolean get() = PrefsManager.dpadMode == "joystick"
 
+    /**
+     * 当 DPad 变为不可见时，释放所有已按下的方向键，
+     * 防止 Ruffle 角色在隐藏手柄后仍持续移动。
+     */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (visibility != VISIBLE && pressed.isNotEmpty()) {
+            pressed.forEach { injectUp(it) }
+            pressed.clear()
+            pointerDir.clear()
+            // 重置摇杆状态
+            joystickActive = false
+            joystickPointerId = -1
+            knobDx = 0f
+            knobDy = 0f
+            invalidate()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        // View 被移除时也释放所有按键
+        pressed.forEach { injectUp(it) }
+        pressed.clear()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         // 应用位置偏移

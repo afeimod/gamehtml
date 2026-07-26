@@ -2,9 +2,9 @@
 <!--
     游戏界面：FrameLayout 分层
     底层 WebView（游戏画面）
-    顶层 1：顶部工具栏（返回/前进/刷新/手柄开关/收藏/分享）
-    顶层 2：进度条
-    顶层 3：虚拟手柄（左下方向键 + 右下 A/B + 中下 Start/Select）
+    顶层 1：进度条
+    顶层 2：网页全屏容器（Flash/视频全屏时显示，在控件之下）
+    顶层 3：虚拟手柄（左下方向键 + 右下 A/B + 中下 Start/Select）+ 悬浮菜单
     顶层 4：加载遮罩 / 错误页
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -28,6 +28,14 @@
         android:layout_gravity="top"
         android:max="100"
         android:progressDrawable="@drawable/progress_game"
+        android:visibility="gone" />
+
+    <!-- 网页全屏容器（Flash/视频全屏时显示，在手柄控件之下） -->
+    <FrameLayout
+        android:id="@+id/fullscreenContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
         android:visibility="gone" />
 
     <!-- 可拖动悬浮菜单（横竖屏通用，默认右上角） -->
@@ -153,13 +161,5 @@
             android:layout_marginTop="@dimen/spacing_lg"
             android:text="@string/refresh" />
     </LinearLayout>
-
-    <!-- 网页全屏容器（Flash/视频全屏时显示） -->
-    <FrameLayout
-        android:id="@+id/fullscreenContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@android:color/black"
-        android:visibility="gone" />
 
 </FrameLayout>
