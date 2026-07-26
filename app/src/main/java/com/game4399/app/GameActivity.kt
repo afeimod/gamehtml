@@ -1005,21 +1005,21 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
-    /** 切换方向键模式：dpad → wasd → joystick → dpad */
+    /** 切换方向键模式：joystick → dpad → wasd → joystick */
     private fun toggleDpadMode() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val current = PrefsManager.dpadMode
         val newMode = when (current) {
+            "joystick" -> "dpad"
             "dpad" -> "wasd"
-            "wasd" -> "joystick"
-            else -> "dpad"
+            else -> "joystick"
         }
         sp.edit().putString("dpad_mode", newMode).apply()
         // 刷新方向键视图
         binding.dpad.invalidate()
         val label = when (newMode) {
             "wasd" -> "WASD 十字键"
-            "joystick" -> "摇杆 (WASD)"
+            "joystick" -> "摇杆 (↑↓←→)"
             else -> "方向键 (↑↓←→)"
         }
         Toast.makeText(this, "方向键已切换为 $label", Toast.LENGTH_SHORT).show()
@@ -1174,14 +1174,14 @@ class GameActivity : AppCompatActivity() {
             editor.putBoolean("gamepad_key_${i + 1}_visible", true)
         }
         editor.putString("select_key", "TAB").putString("start_key", "ENTER")
-            .putString("dpad_mode", "dpad")
+            .putString("dpad_mode", "joystick")
             .putInt("dpad_scale", 100).putInt("gamepad_scale", 100)
             // 清除保存的绝对位置坐标，恢复默认布局
             .putFloat("dpad_pos_x", -1f).putFloat("dpad_pos_y", -1f)
             .putFloat("action_pos_x", -1f).putFloat("action_pos_y", -1f)
             .putFloat("system_pos_x", -1f).putFloat("system_pos_y", -1f)
             .putFloat("mouse_pos_x", -1f).putFloat("mouse_pos_y", -1f)
-            .putBoolean("dpad_visible", true).putBoolean("system_buttons_visible", true)
+            .putBoolean("dpad_visible", true).putBoolean("system_buttons_visible", false)
             .putBoolean("mouse_buttons_visible", false)
             .putBoolean("camera_rotation_enabled", false)
             .putBoolean("flash_enabled", true).putString("flash_engine", "ruffle")
