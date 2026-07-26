@@ -79,6 +79,8 @@ open class GameWebViewClient(
         }
 
         // 5. 拦截远程 SWF 文件请求
+        //    Ruffle/WAFlash 加载 SWF 时需要原生下载（添加 CORS 头 + Cookie 转发）
+        //    只拦截真正的 SWF 资源请求，不影响普通网页浏览
         val isSwfRequest = url.endsWith(".swf", ignoreCase = true) ||
             url.contains(".swf?", ignoreCase = true) ||
             (url.contains("4399.com") && (url.contains("/dw-") || url.contains("flash_tm3") || url.contains("flash20")))
@@ -86,198 +88,15 @@ open class GameWebViewClient(
             return interceptSwf(url, request)
         }
 
-        // 6. 拦截 HTML 页面：注入 Flash 支持伪造脚本到 <head>
-        //    适用于所有 Flash 游戏页面（不限 4399），如 mhhf.com 等
-        //    evaluateJavascript 是异步的，页面 JS 可能先执行导致检测失败
-        //    直接修改 HTML 保证脚本在页面 JS 之前运行
-        //    注意：只拦截主框架 GET 请求，不拦截 POST（登录表单）、AJAX 子请求、API 接口
-        val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
-        if (isFlashPage && request.method == "GET" && request.isForMainFrame) {
-            return interceptHtml(view, url, request)
-        }
+        // 不再拦截 HTML 页面！
+        // 之前 interceptHtml 会自己发 HTTP 请求获取 HTML 并修改，导致：
+        // - 编码处理不当→乱码（GBK 网站用错误 charset 解码）
+        // - 丢失 WebView 原生 cookie/session 管理→登录失败
+        // - 破坏缓存、重定向、条件请求机制
+        // 现在 Flash 注入完全通过 onPageStarted/onPageFinished 的 evaluateJavascript 异步完成
+        // SWF 提取功能仅在用户点击"提取 SWF"时通过 JS 嗅探器扫描页面
 
         return super.shouldInterceptRequest(view, request)
-    }
-
-    /** 拦截 HTML 页面，注入 Flash 伪造 + Ruffle 引擎到 <head> */
-    private fun interceptHtml(view: WebView, url: String, request: WebResourceRequest): WebResourceResponse? {
-        return try {
-            // 自己发起 HTTP 请求获取 HTML（super.shouldInterceptRequest 默认返回 null，无法获取响应）
-            // 这样能在 HTML 被解析之前注入 Flash 伪造脚本，确保页面 JS 检测到"有 Flash 插件"
-            val html = fetchHtmlContent(view, url, request) ?: return null
-
-            // 构建注入脚本
-            val injectScript = buildFlashInjectScript(url)
-
-            // 在 <head> 或 <html> 后注入（避免正则替换问题）
-            val modifiedHtml: String
-            val headIdx = html.indexOf("<head", ignoreCase = true)
-            if (headIdx >= 0) {
-                val tagEnd = html.indexOf(">", headIdx)
-                modifiedHtml = if (tagEnd >= 0) {
-                    html.substring(0, tagEnd + 1) + injectScript + html.substring(tagEnd + 1)
-                } else { injectScript + html }
-            } else {
-                val htmlIdx = html.indexOf("<html", ignoreCase = true)
-                modifiedHtml = if (htmlIdx >= 0) {
-                    val tagEnd = html.indexOf(">", htmlIdx)
-                    if (tagEnd >= 0) html.substring(0, tagEnd + 1) + injectScript + html.substring(tagEnd + 1)
-                    else injectScript + html
-                } else {
-                    injectScript + html
-                }
-            }
-
-            // 将原始 meta charset 替换为 UTF-8，因为我们以 UTF-8 返回内容
-            // 不替换的话浏览器会按原始编码（如 GBK）解码 UTF-8 字节，导致乱码
-            val finalHtml = modifiedHtml
-                .replace(
-                    Regex("""(<meta[^>]+charset\s*=\s*["']?)\s*[a-zA-Z0-9\-_]+""", RegexOption.IGNORE_CASE),
-                    "$1UTF-8"
-                )
-
-            android.util.Log.d("GameWebViewClient", "HTML 注入成功: $url (${finalHtml.length} chars)")
-
-            WebResourceResponse(
-                "text/html", "UTF-8", 200, "OK",
-                mapOf("Access-Control-Allow-Origin" to "*"),
-                java.io.ByteArrayInputStream(finalHtml.toByteArray(Charsets.UTF_8))
-            )
-        } catch (e: Exception) {
-            android.util.Log.w("GameWebViewClient", "HTML 注入失败: ${e.message}")
-            null
-        }
-    }
-
-    /** 自己发起 HTTP 请求获取 HTML 内容，转发 Cookie 和请求头模拟浏览器行为 */
-    private fun fetchHtmlContent(view: WebView, url: String, request: WebResourceRequest): String? {
-        android.util.Log.d("GameWebViewClient", "获取 HTML 内容: $url")
-        // HTTP 自动升级为 HTTPS，失败后回退 HTTP（兼容仅支持 http 的老站）
-        val fetchUrl = if (url.startsWith("http://")) "https://" + url.substring(7) else url
-        val result = doFetchHtml(fetchUrl, url, request)
-        if (result != null) return result
-        // HTTPS 失败，回退到原始 HTTP
-        if (fetchUrl != url) {
-            android.util.Log.d("GameWebViewClient", "HTTPS 失败，回退 HTTP: $url")
-            return doFetchHtml(url, url, request)
-        }
-        return null
-    }
-
-    /** 实际发起 HTTP 请求获取 HTML */
-    private fun doFetchHtml(fetchUrl: String, originalUrl: String, request: WebResourceRequest): String? {
-        return try {
-            val conn = java.net.URL(fetchUrl).openConnection() as java.net.HttpURLConnection
-            if (conn is javax.net.ssl.HttpsURLConnection) {
-                conn.sslSocketFactory = trustAllSslSocketFactory()
-                conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
-            }
-            conn.connectTimeout = 10000
-            conn.readTimeout = 15000
-            conn.requestMethod = "GET"
-            conn.instanceFollowRedirects = true
-
-            // 转发原始请求头（排除需自行设置的 header 和条件请求 header）
-            request.requestHeaders?.forEach { (key, value) ->
-                val lk = key.lowercase()
-                if (lk !in setOf("cookie", "referer", "range", "if-modified-since", "if-none-match", "accept-encoding")) {
-                    conn.setRequestProperty(key, value)
-                }
-            }
-            // 确保 User-Agent
-            if (request.requestHeaders?.none { it.key.equals("User-Agent", true) } != false) {
-                conn.setRequestProperty("User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            }
-            // 不请求 gzip，直接获取明文
-            conn.setRequestProperty("Accept-Encoding", "identity")
-
-            // 转发 Cookie（从 CookieManager 获取，保持登录态/会话）
-            try {
-                val cookies = android.webkit.CookieManager.getInstance().getCookie(originalUrl)
-                if (cookies != null && cookies.isNotEmpty()) {
-                    conn.setRequestProperty("Cookie", cookies)
-                }
-            } catch(e: Exception) {}
-
-            // 设置 Referer（同源 origin）
-            try {
-                val uri = android.net.Uri.parse(originalUrl)
-                conn.setRequestProperty("Referer", "${uri.scheme}://${uri.host}/")
-            } catch(e: Exception) {}
-
-            conn.connect()
-            if (conn.responseCode !in 200..299) {
-                android.util.Log.w("GameWebViewClient", "获取 HTML 失败: HTTP ${conn.responseCode}")
-                return null
-            }
-            // 检查 Content-Type 是否为 HTML
-            val contentType = conn.contentType ?: ""
-            if (!contentType.contains("text/html") && !contentType.contains("application/xhtml")) {
-                android.util.Log.d("GameWebViewClient", "非 HTML 内容，跳过注入: $contentType")
-                return null
-            }
-
-            // 编码检测：优先 HTTP Content-Type，其次 HTML meta 标签，默认 UTF-8
-            // 4399 等中文网站常用 GBK/GB2312，错误编码会导致乱码
-            val rawBytes = conn.inputStream.readBytes()
-            val charset = detectCharset(contentType, rawBytes)
-            val html = String(rawBytes, charset(charset))
-            android.util.Log.d("GameWebViewClient", "获取 HTML 成功: ${html.length} chars, charset=$charset, URL=$fetchUrl")
-            html
-        } catch (e: Exception) {
-            android.util.Log.w("GameWebViewClient", "获取 HTML 失败: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * 检测 HTML 内容的字符编码。
-     * 检测顺序：HTTP Content-Type → HTML meta charset → HTML meta http-equiv → 默认 UTF-8
-     * 支持 GBK/GB2312/GB18030（4399 等中文站点常用）和 UTF-8。
-     */
-    private fun detectCharset(contentType: String, htmlBytes: ByteArray): String {
-        // 1. HTTP Content-Type 中的 charset
-        val ctCharset = parseCharsetFromContentType(contentType)
-        if (ctCharset != null) return ctCharset
-
-        // 2. 只读前 2KB 检测 meta 标签（编码声明通常在 <head> 开头）
-        val headStr = String(htmlBytes, 0, minOf(htmlBytes.size, 2048), Charsets.ISO_8859_1)
-        // <meta charset="gbk">
-        val metaCharsetRegex = Regex("""<meta[^>]+charset\s*=\s*["']?\s*([a-zA-Z0-9\-_]+)""", RegexOption.IGNORE_CASE)
-        metaCharsetRegex.find(headStr)?.let { return normalizeCharset(it.groupValues[1]) }
-
-        // 3. <meta http-equiv="Content-Type" content="text/html; charset=gbk">
-        val httpEquivRegex = Regex(
-            """<meta[^>]+http-equiv\s*=\s*["']?content-type["']?[^>]+content\s*=\s*["'][^"']*charset=([a-zA-Z0-9\-_]+)""",
-            RegexOption.IGNORE_CASE
-        )
-        httpEquivRegex.find(headStr)?.let { return normalizeCharset(it.groupValues[1]) }
-
-        // 4. 默认 UTF-8
-        return "UTF-8"
-    }
-
-    /** 从 HTTP Content-Type 头解析 charset，如 "text/html; charset=gbk" → "GBK" */
-    private fun parseCharsetFromContentType(contentType: String): String? {
-        val idx = contentType.indexOf("charset=", ignoreCase = true)
-        if (idx < 0) return null
-        val start = idx + 8
-        val end = contentType.indexOfAny(charArrayOf(';', ' ', '"', '\''), start)
-        val raw = if (end < 0) contentType.substring(start) else contentType.substring(start, end)
-        return normalizeCharset(raw.trim())
-    }
-
-    /** 规范化编码名：gb2312/gbk/gb18030 → gbk（JVM 支持最好的别名），大写统一 */
-    private fun normalizeCharset(name: String): String {
-        val lower = name.lowercase().trim()
-        return when (lower) {
-            "gb2312", "gbk", "gb18030" -> "GBK"
-            "utf-8", "utf8" -> "UTF-8"
-            "big5" -> "Big5"
-            "latin1", "iso-8859-1" -> "ISO-8859-1"
-            else -> if (lower.isNotEmpty()) name.trim() else "UTF-8"
-        }
     }
 
     /** 构建 Flash 支持伪造 + Ruffle/WAFlash 注入脚本（公开供 GameActivity 在 onPageFinished 兜底使用） */
