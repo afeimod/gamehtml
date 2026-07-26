@@ -46,6 +46,10 @@ class GameActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGameBinding
     private lateinit var webView: GameWebView
+    /** 注入到 WebView 的 JS 接口引用（用于设置 SWF 提取回调） */
+    private lateinit var webAppInterface: WebAppInterface
+    /** WebView 客户端引用（用于 onPageFinished 兜底注入 Flash 脚本） */
+    private lateinit var gameWebViewClient: GameWebViewClient
 
     private var currentUrl: String = ""
     private var currentTitle: String = ""
@@ -104,10 +108,12 @@ class GameActivity : AppCompatActivity() {
 
     // ---------------- WebView ----------------
     private fun setupWebView() {
+        webAppInterface = WebAppInterface(this)
+        gameWebViewClient = object : GameWebViewClient(viewClientCallback) {}
         webView.apply {
-            addJavascriptInterface(WebAppInterface(this@GameActivity), "Android")
+            addJavascriptInterface(webAppInterface, "Android")
             webChromeClient = object : GameWebChromeClient(chromeCallback) {}
-            webViewClient = object : GameWebViewClient(viewClientCallback) {}
+            webViewClient = gameWebViewClient
 
             // UA 模式：优先使用用户设置，否则根据页面类型自动选择
             val uaMode = PrefsManager.uaMode
@@ -174,6 +180,19 @@ class GameActivity : AppCompatActivity() {
             binding.loadingOverlay.visibility = View.GONE
             url?.let { FavoriteStore.addHistory(it, currentTitle, currentType) }
             updateFavoriteIcon()
+            // Flash 兜底注入：interceptHtml 可能因缓存/SPA 未触发，
+            // 在 onPageFinished 再注入一次（脚本内有 __flashPolyfilled 守卫，不会重复执行）
+            if (PrefsManager.isFlashEnabled && url != null &&
+                !url.startsWith("file:///android_asset/") &&
+                !url.startsWith("https://flash.local/")) {
+                val script = gameWebViewClient.buildFlashInjectScript(url)
+                // 去掉 <script> 标签包装，直接执行 JS
+                val js = script
+                    .replace("<script>", "")
+                    .replace("</script>", "")
+                    .trim()
+                webView.evaluateJavascript(js, null)
+            }
             // 如果鼠标光标已开启，重新注入（页面导航后会丢失）
             if (isMouseEnabled) {
                 webView.evaluateJavascript(MOUSE_CURSOR_SCRIPT, null)
@@ -199,15 +218,16 @@ class GameActivity : AppCompatActivity() {
         }
         override fun shouldInjectRuffle(url: String?): Boolean {
             if (url == null) return false
-            if (url.startsWith("file:///android_asset/player.html")) return false
+            // 不注入内置播放器页面（避免循环注入）
             if (url.startsWith("file:///android_asset/player.html")) return false
             if (url.startsWith("https://flash.local/player.html")) return false
             if (url.startsWith("https://flash.local/waflash.html")) return false
             if (url.startsWith("https://flash.local/waflash/")) return false
             if (url.startsWith("https://flash.local/ruffle/")) return false
             if (url.startsWith("https://flash.local/swf2js/")) return false
-            // 4399 Flash 游戏页 + 4399 自己的 Flash 播放器页面
-            return (url.contains("4399.com") && (url.contains("/flash/") || url.contains("flash.local.4399.com") || url.contains("flash_tm3")))
+            // Flash 开启时，对所有网页注入 Flash 支持（不限 4399）
+            // 适用于 mhhf.com 等其他 Flash 游戏网站
+            return PrefsManager.isFlashEnabled
         }
         override fun getCachedSwfPath(): String? = null
         override fun getLocalSwfUri(): String? = localSwfUri
@@ -361,6 +381,7 @@ class GameActivity : AppCompatActivity() {
             override fun onRefresh() { webView.reload() }
             override fun onBack() { if (webView.canGoBack()) webView.goBack() else finish() }
             override fun onClose() { finish() }
+            override fun onExtractSwf() { extractSwfFromPage() }
         })
     }
 
@@ -369,6 +390,166 @@ class GameActivity : AppCompatActivity() {
         isFullscreen = !isFullscreen
         applyImmersiveFullscreen()
         floatingMenu.isFullscreen = isFullscreen
+    }
+
+    // ---------------- SWF 提取 ----------------
+
+    /**
+     * 从当前网页提取 SWF 文件。
+     * 注入 JS 嗅探器扫描页面中的 SWF URL（DOM 元素、iframe、Performance API、网络请求），
+     * 发现后通过 [WebAppInterface.onSwfFound] 回调到原生，弹出选择对话框。
+     */
+    private fun extractSwfFromPage() {
+        Toast.makeText(this, "正在扫描页面中的 SWF...", Toast.LENGTH_SHORT).show()
+
+        // 设置回调：JS 嗅探器通过 window.Android.onSwfFound(json) 回调到原生
+        webAppInterface.swfExtractCallback = { json ->
+            showSwfExtractDialog(json)
+        }
+
+        webView.evaluateJavascript(SWF_SNIFFER_SCRIPT, null)
+    }
+
+    /**
+     * 显示 SWF 提取结果对话框，供用户选择下载或播放。
+     */
+    private fun showSwfExtractDialog(json: String) {
+        try {
+            val arr = org.json.JSONArray(json)
+            if (arr.length() == 0) {
+                Toast.makeText(this, "未在页面中发现 SWF 文件", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val items = mutableListOf<String>()
+            val swfUrls = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val url = obj.optString("url", "")
+                val title = obj.optString("title", "")
+                val size = obj.optString("size", "")
+                if (url.isNotEmpty()) {
+                    val display = if (title.isNotEmpty()) "$title\n$url" else url
+                    items.add(if (size.isNotEmpty()) "$display ($size)" else display)
+                    swfUrls.add(url)
+                }
+            }
+
+            if (items.isEmpty()) {
+                Toast.makeText(this, "未在页面中发现 SWF 文件", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val labels = items.toTypedArray()
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("发现 ${items.size} 个 SWF 文件")
+                .setItems(labels) { _, which ->
+                    val swfUrl = swfUrls[which]
+                    showSwfActionDialog(swfUrl)
+                }
+                .setNegativeButton("关闭", null)
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "解析 SWF 列表失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * SWF 操作对话框：下载到本地 / 用内置引擎播放
+     */
+    private fun showSwfActionDialog(swfUrl: String) {
+        val items = arrayOf("用内置引擎播放", "下载到本地")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("SWF 操作")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> playSwfWithEngine(swfUrl)
+                    1 -> downloadSwf(swfUrl)
+                }
+            }
+            .show()
+    }
+
+    /**
+     * 用内置引擎（Ruffle/WAFlash）播放 SWF。
+     */
+    private fun playSwfWithEngine(swfUrl: String) {
+        val playerUrl = NavHelper.playerUrl(swfUrl, base = webView.url, title = currentTitle)
+        webView.loadUrl(playerUrl)
+        Toast.makeText(this, "正在用${PrefsManager.flashEngine}引擎加载...", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * 下载 SWF 文件到本地存储。
+     * 下载完成后可选择用内置引擎播放。
+     */
+    private fun downloadSwf(swfUrl: String) {
+        Toast.makeText(this, "开始下载 SWF...", Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val swfUrlHttps = if (swfUrl.startsWith("http://")) "https://" + swfUrl.substring(7) else swfUrl
+                val conn = java.net.URL(swfUrlHttps).openConnection() as java.net.HttpURLConnection
+                if (conn is javax.net.ssl.HttpsURLConnection) {
+                    val tm = object : javax.net.ssl.X509TrustManager {
+                        override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                        override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                        override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+                    }
+                    val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
+                    ctx.init(null, arrayOf(tm), java.security.SecureRandom())
+                    conn.sslSocketFactory = ctx.socketFactory
+                    conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                }
+                conn.connectTimeout = 15000
+                conn.readTimeout = 30000
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                conn.setRequestProperty("Referer", webView.url ?: swfUrl)
+                conn.connect()
+
+                if (conn.responseCode !in 200..299) {
+                    runOnUiThread {
+                        Toast.makeText(this, "下载失败: HTTP ${conn.responseCode}", Toast.LENGTH_LONG).show()
+                    }
+                    return@Thread
+                }
+
+                val data = conn.inputStream.readBytes()
+                val filename = swfUrl.substringAfterLast("/").substringBefore("?").let {
+                    if (it.endsWith(".swf", ignoreCase = true)) it else "$it.swf"
+                }.ifBlank { "game.swf" }
+
+                // 保存到 app 外部存储
+                val dir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS
+                )
+                val swfDir = java.io.File(dir, "GameHTML")
+                if (!swfDir.exists()) swfDir.mkdirs()
+                val file = java.io.File(swfDir, filename)
+                file.writeBytes(data)
+
+                runOnUiThread {
+                    Toast.makeText(this, "已下载: ${file.absolutePath} (${data.size / 1024}KB)", Toast.LENGTH_LONG).show()
+                    // 提示是否播放
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("下载完成")
+                        .setMessage("已保存到: ${file.absolutePath}\n\n是否用内置引擎播放？")
+                        .setPositiveButton("播放") { _, _ ->
+                            val playerUrl = NavHelper.playerUrl(
+                                "https://flash.local/local.swf?t=${System.currentTimeMillis()}",
+                                base = null, title = filename
+                            )
+                            localSwfUri = android.net.Uri.fromFile(file).toString()
+                            webView.loadUrl(playerUrl)
+                        }
+                        .setNegativeButton("关闭", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     /** 横竖屏切换 */
@@ -1139,5 +1320,168 @@ class GameActivity : AppCompatActivity() {
                 putExtra(EXTRA_TYPE, type.name)
             })
         }
+
+        /**
+         * SWF 嗅探器脚本：深度扫描网页中的 SWF 文件。
+         *
+         * 扫描来源：
+         * 1. DOM 元素：<object data>、<embed src>、<param name="movie" value>
+         * 2. iframe src 属性
+         * 3. 所有元素的 data/src/href 属性（含 .swf）
+         * 4. Performance API 资源时间线（getEntriesByType('resource')）
+         * 5. 内联脚本中的 .swf URL（正则匹配）
+         * 6. hook XMLHttpRequest/fetch 捕获动态加载的 SWF
+         * 7. MutationObserver 监听动态插入的 Flash 元素
+         *
+         * 发现后通过 window.Android.onSwfFound(json) 回调到原生。
+         */
+        private const val SWF_SNIFFER_SCRIPT = """
+            (function(){
+              var found = {};
+              function addUrl(url, title){
+                if(!url) return;
+                try { url = new URL(url, location.href).href; } catch(e) { return; }
+                if(!/\.swf([?#]|$)/i.test(url) && !/application\/x-shockwave-flash/i.test(url)){
+                  // 不是 SWF URL，跳过（除非是 data URI 的 flash）
+                  if(!/^data:application\/x-shockwave-flash/i.test(url)) return;
+                }
+                if(found[url]) return;
+                var t = title || '';
+                if(!t){
+                  try { t = decodeURIComponent(url.split('/').pop().split('?')[0].replace(/\.swf$/i,'')); } catch(e){}
+                }
+                found[url] = {url:url, title:t, size:''};
+              }
+
+              // 1. 扫描 DOM 元素
+              function scanDOM(){
+                // object/embed 标签
+                var objs = document.querySelectorAll('object[data], embed[src]');
+                objs.forEach(function(el){
+                  var u = el.getAttribute('data') || el.getAttribute('src') || '';
+                  var t = el.getAttribute('title') || el.getAttribute('name') || '';
+                  if(u) addUrl(u, t);
+                });
+                // param name="movie"
+                var params = document.querySelectorAll('param[name="movie"], param[name="src"]');
+                params.forEach(function(p){
+                  var v = p.getAttribute('value') || '';
+                  if(v) addUrl(v, '');
+                });
+                // iframe src
+                var iframes = document.querySelectorAll('iframe[src]');
+                iframes.forEach(function(f){
+                  var s = f.getAttribute('src') || '';
+                  if(/\.swf/i.test(s)) addUrl(s, '');
+                });
+                // 所有带 .swf 的属性
+                var all = document.querySelectorAll('[data*=".swf"], [src*=".swf"], [href*=".swf"]');
+                all.forEach(function(el){
+                  ['data','src','href'].forEach(function(attr){
+                    var v = el.getAttribute(attr);
+                    if(v && /\.swf/i.test(v)) addUrl(v, el.getAttribute('title') || '');
+                  });
+                });
+              }
+
+              // 2. Performance API 资源时间线
+              function scanPerformance(){
+                try {
+                  var entries = performance.getEntriesByType('resource');
+                  entries.forEach(function(e){
+                    if(/\.swf([?#]|$)/i.test(e.name)) addUrl(e.name, '');
+                  });
+                } catch(e) {}
+              }
+
+              // 3. 扫描内联脚本中的 SWF URL
+              function scanScripts(){
+                var scripts = document.querySelectorAll('script:not([src])');
+                var re = /(?:https?:)?[^\s'"<>]+\.swf[^\s'"<>]*/gi;
+                scripts.forEach(function(s){
+                  var text = s.textContent || '';
+                  var m;
+                  while((m = re.exec(text)) !== null){
+                    addUrl(m[0], '');
+                  }
+                });
+                // 也扫描外部脚本变量的可能值
+                var extScripts = document.querySelectorAll('script[src]');
+                extScripts.forEach(function(s){
+                  var src = s.getAttribute('src') || '';
+                  if(/\.swf/i.test(src)) addUrl(src, '');
+                });
+              }
+
+              // 4. hook XHR/fetch（捕获未来动态加载的 SWF）
+              if(!window.__swfSniffHooked){
+                window.__swfSniffHooked = true;
+                var origOpen = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function(method, url){
+                  if(url && /\.swf([?#]|$)/i.test(url)) addUrl(url, '');
+                  return origOpen.apply(this, arguments);
+                };
+                var origFetch = window.fetch;
+                if(origFetch){
+                  window.fetch = function(input){
+                    var u = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+                    if(u && /\.swf([?#]|$)/i.test(u)) addUrl(u, '');
+                    return origFetch.apply(this, arguments);
+                  };
+                }
+              }
+
+              // 5. 立即扫描
+              scanDOM();
+              scanPerformance();
+              scanScripts();
+
+              // 6. MutationObserver 监听动态插入的元素（持续 5 秒）
+              if(window.MutationObserver){
+                var mo = new MutationObserver(function(muts){
+                  muts.forEach(function(m){
+                    m.addedNodes.forEach(function(n){
+                      if(n.nodeType === 1){
+                        var u = n.getAttribute && (n.getAttribute('data') || n.getAttribute('src') || n.getAttribute('href') || '');
+                        if(u && /\.swf/i.test(u)) addUrl(u, n.getAttribute('title') || '');
+                        if(n.querySelectorAll){
+                          var inner = n.querySelectorAll('[data*=".swf"], [src*=".swf"], [href*=".swf"], param[name="movie"]');
+                          inner.forEach(function(el){
+                            var v = el.getAttribute('data') || el.getAttribute('src') || el.getAttribute('href') || el.getAttribute('value') || '';
+                            if(v && /\.swf/i.test(v)) addUrl(v, '');
+                          });
+                        }
+                      }
+                    });
+                  });
+                });
+                mo.observe(document.documentElement || document.body || document, {childList:true, subtree:true});
+                setTimeout(function(){ mo.disconnect(); }, 5000);
+              }
+
+              // 7. 延迟再次扫描（等页面 JS 执行完）并回调
+              setTimeout(function(){
+                scanDOM();
+                scanPerformance();
+                scanScripts();
+                var arr = [];
+                for(var u in found) arr.push(found[u]);
+                if(window.Android && window.Android.onSwfFound){
+                  window.Android.onSwfFound(JSON.stringify(arr));
+                } else {
+                  console.log('[SWF Sniffer] 未找到 window.Android 接口');
+                }
+              }, 1500);
+
+              // 立即也回调一次（快速发现）
+              setTimeout(function(){
+                var arr = [];
+                for(var u in found) arr.push(found[u]);
+                if(arr.length > 0 && window.Android && window.Android.onSwfFound){
+                  window.Android.onSwfFound(JSON.stringify(arr));
+                }
+              }, 500);
+            })();
+        """
     }
 }

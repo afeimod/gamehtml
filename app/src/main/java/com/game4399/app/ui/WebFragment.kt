@@ -118,7 +118,8 @@ class WebFragment : Fragment() {
             if (url == null) return false
             if (url.startsWith("file:///android_asset/")) return false
             if (url.startsWith("https://flash.local/")) return false
-            return url.contains("4399.com") && (url.contains("/flash/") || url.contains(".swf"))
+            // Flash 开启时，对所有网页注入 Flash 支持（不限 4399）
+            return PrefsManager.isFlashEnabled
         }
         override fun getCachedSwfPath(): String? = null
         override fun getLocalSwfUri(): String? = null

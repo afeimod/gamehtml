@@ -50,6 +50,7 @@ class FloatingMenuView @JvmOverloads constructor(
         fun onRefresh()
         fun onBack()
         fun onClose()
+        fun onExtractSwf()
     }
 
     private val triggerBtn: ImageButton
@@ -175,6 +176,7 @@ class FloatingMenuView @JvmOverloads constructor(
             MenuItem("Flash 引擎", R.drawable.ic_key) { callbacks?.onOpenFlashSettings() },
             MenuItem("页面缩放", R.drawable.ic_key) { callbacks?.onOpenPageZoom() },
             MenuItem("兼容模式", R.drawable.ic_key) { callbacks?.onOpenUaMode() },
+            MenuItem("提取SWF", R.drawable.ic_key) { callbacks?.onExtractSwf() },
             MenuItem(context.getString(R.string.refresh), R.drawable.ic_refresh) { callbacks?.onRefresh() },
             MenuItem(context.getString(R.string.back), R.drawable.ic_back) { callbacks?.onBack() },
             MenuItem(context.getString(R.string.close), R.drawable.ic_close) { callbacks?.onClose() }

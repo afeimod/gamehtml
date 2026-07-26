@@ -86,11 +86,12 @@ open class GameWebViewClient(
             return interceptSwf(url)
         }
 
-        // 5. 拦截 4399 HTML 页面：注入 Flash 支持伪造脚本到 <head>
+        // 6. 拦截 HTML 页面：注入 Flash 支持伪造脚本到 <head>
+        //    适用于所有 Flash 游戏页面（不限 4399），如 mhhf.com 等
         //    evaluateJavascript 是异步的，页面 JS 可能先执行导致检测失败
         //    直接修改 HTML 保证脚本在页面 JS 之前运行
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
-        if (isFlashPage && (url.contains("4399.com") || url.contains("flash.local.4399.com"))) {
+        if (isFlashPage) {
             return interceptHtml(view, url, request)
         }
 
@@ -145,12 +146,13 @@ open class GameWebViewClient(
         }
     }
 
-    /** 构建 Flash 支持伪造 + Ruffle/WAFlash 注入脚本 */
-    private fun buildFlashInjectScript(pageUrl: String): String {
+    /** 构建 Flash 支持伪造 + Ruffle/WAFlash 注入脚本（公开供 GameActivity 在 onPageFinished 兜底使用） */
+    fun buildFlashInjectScript(pageUrl: String): String {
         val isWaflash = PrefsManager.flashEngine == "waflash"
         return """
         <script>
         (function(){
+          if(window.__flashPolyfilled)return;window.__flashPolyfilled=true;
           // === 1. 伪造 Flash 插件支持（必须在页面 JS 之前） ===
           try {
             var fp = {name:'Shockwave Flash',filename:'libflashplayer.so',description:'Shockwave Flash 32.0 r0',length:1,
@@ -189,7 +191,7 @@ open class GameWebViewClient(
 
           // === 2. 伪造 document.referrer ===
           try {
-            Object.defineProperty(document,'referrer',{get:function(){return 'https://www.4399.com/';},configurable:true});
+            Object.defineProperty(document,'referrer',{get:function(){return '$pageUrl';},configurable:true});
           } catch(e) {}
 
           // === 2.5 自动关闭 4399 "不支持 Flash" 弹窗 ===

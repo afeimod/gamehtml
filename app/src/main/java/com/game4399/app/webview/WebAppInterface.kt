@@ -17,6 +17,10 @@ class WebAppInterface(private val context: Context) {
 
     private val handler = Handler(Looper.getMainLooper())
 
+    /** SWF 提取结果回调（由 GameActivity 设置） */
+    @Volatile
+    var swfExtractCallback: ((String) -> Unit)? = null
+
     @JavascriptInterface
     fun toast(msg: String?) {
         handler.post { Toast.makeText(context, msg ?: "", Toast.LENGTH_SHORT).show() }
@@ -61,6 +65,19 @@ class WebAppInterface(private val context: Context) {
     @JavascriptInterface
     fun finish() {
         if (context is Activity) handler.post { context.finish() }
+    }
+
+    /**
+     * JS 嗅探器回调：报告在页面中发现的 SWF URL 列表。
+     * @param json JSON 数组字符串，如 [{"url":"...","title":"...","size":"12MB"}]
+     */
+    @JavascriptInterface
+    fun onSwfFound(json: String?) {
+        if (json.isNullOrEmpty()) return
+        Log.d("WebApp:SwfExtract", "发现 SWF: $json")
+        swfExtractCallback?.let { cb ->
+            handler.post { cb(json) }
+        }
     }
 
     /**
