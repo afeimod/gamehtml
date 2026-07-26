@@ -274,10 +274,17 @@ open class GameWebView @JvmOverloads constructor(
      * 同步 Android 按下的按键状态到 JS。
      * JS 端会释放所有"Android 认为未按下但 JS 认为已按下"的按键，
      * 并对最近释放的按键冗余重发 keyup，彻底防止方向键卡住。
+     *
+     * 注意：必须把 Android KeyCode 转成 JS keyCode 再传，
+     * 因为 JS 端 pressed 字典的 key 是 JS keyCode（如 39），
+     * 而 pressedKeys 存的是 Android KeyCode（如 22），两者不匹配会导致
+     * 心跳同步误判为"按键已松开"从而错误释放正在长按的按键。
      */
     private fun syncPressedKeys() {
-        val keys = synchronized(pressedKeys) { pressedKeys.toIntArray() }
-        val keysStr = keys.joinToString(",")
+        val jsKeyCodes = synchronized(pressedKeys) {
+            pressedKeys.map { androidKeyToJsInfo(it).keyCode }.toIntArray()
+        }
+        val keysStr = jsKeyCodes.joinToString(",")
         evaluateJavascript("""
             $KEY_MANAGER_INIT
             window.__gameKeys.sync([$keysStr]);
