@@ -104,6 +104,7 @@ class MainActivity : AppCompatActivity() {
                 binding.floatingMenu.visibility = View.GONE
             }
             override fun onClose() { finish() }
+            override fun onExtractSwf() {} // 主界面不支持 SWF 提取
         })
 
         binding.bottomNav.setOnItemSelectedListener(BottomNavigationView.OnNavigationItemSelectedListener {
