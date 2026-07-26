@@ -43,7 +43,7 @@ object GameRepository {
         "梦幻西游网页版" to "https://xyh5.163.com/game/?channel=netease",
         "4399 电脑版" to "https://www.4399.com/",
         "云原神" to "https://ys.mihoyo.com/cloud/m/#/",
-        "瑾龙游戏" to "https://www.jlgames.cn/game/"
+        "灵动游戏" to "https://www.mhhf.com/"
     )
 
     /** 网页游戏大全网格（标题 → URL） */
@@ -54,13 +54,13 @@ object GameRepository {
     )
 
     val webGamePortals: List<WebGameEntry> = listOf(
-        WebGameEntry("4399游戏", "https://www.4399.com/"),
+        WebGameEntry("瑾龙游戏", "https://www.jlgames.cn/"),
         WebGameEntry("7k7k游戏", "https://www.7k7k.com/"),
-        WebGameEntry("37游戏", "https://www.37.com/"),
-        WebGameEntry("360游戏", "https://wan.360.cn/"),
+        WebGameEntry("37游戏", "https://www.wgame80.com/"),
+        WebGameEntry("80在线游戏", "https://wan.360.cn/"),
         WebGameEntry("2345游戏", "https://game.2345.com/"),
-        WebGameEntry("17173游戏", "https://www.17173.com/"),
-        WebGameEntry("4399网页游戏", "https://web.4399.com/"),
+        WebGameEntry("y8游戏", "https://zh.y8.com/"),
+        WebGameEntry("flash小游戏", "http://www.flashgame.com.cn/"),
         WebGameEntry("多玩游戏", "https://www.duowan.com/"),
         WebGameEntry("游民星空", "https://www.gamersky.com/"),
         WebGameEntry("3DM游戏", "https://www.3dmgame.com/"),
