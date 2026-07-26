@@ -4,8 +4,8 @@
     底层 WebView（游戏画面）
     顶层 1：进度条
     顶层 2：网页全屏容器（Flash/视频全屏时显示，在控件之下）
-    顶层 3：虚拟手柄（左下方向键 + 右下 A/B + 中下 Start/Select）+ 悬浮菜单
-    顶层 4：加载遮罩 / 错误页
+    顶层 3：加载遮罩 / 错误页（在手柄之下，不挡按键）
+    顶层 4：虚拟手柄（左下方向键 + 右下 A/B + 中下 Start/Select）+ 悬浮菜单
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -37,6 +37,37 @@
         android:layout_height="match_parent"
         android:background="@android:color/black"
         android:visibility="gone" />
+
+    <!-- 加载遮罩（在手柄之下，加载时仍可操作手柄按键） -->
+    <FrameLayout
+        android:id="@+id/loadingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/overlay"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminateTint="@color/brand_orange" />
+
+            <TextView
+                android:id="@+id/loadingText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/loading"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/text_body" />
+        </LinearLayout>
+    </FrameLayout>
 
     <!-- 可拖动悬浮菜单（横竖屏通用，默认右上角） -->
     <com.game4399.app.widget.FloatingMenuView
@@ -101,39 +132,6 @@
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="@dimen/gamepad_margin"
         android:visibility="gone" />
-
-    <!-- 加载遮罩 -->
-    <FrameLayout
-        android:id="@+id/loadingOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/overlay"
-        android:clickable="true"
-        android:focusable="true"
-        android:visibility="gone">
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <ProgressBar
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:indeterminateTint="@color/brand_orange" />
-
-            <TextView
-                android:id="@+id/loadingText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_md"
-                android:text="@string/loading"
-                android:textColor="@android:color/white"
-                android:textSize="@dimen/text_body" />
-        </LinearLayout>
-    </FrameLayout>
 
     <!-- 错误页 -->
     <LinearLayout

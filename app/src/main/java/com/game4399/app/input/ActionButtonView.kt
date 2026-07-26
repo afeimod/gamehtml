@@ -220,12 +220,33 @@ class ActionButtonView @JvmOverloads constructor(
                     val x = event.getX(i)
                     val y = event.getY(i)
                     val btn = pointerButton[pid]
-                    if (btn != null && btn >= 0) {
-                        val currentBtn = hitButton(x, y, positions, visible, count)
-                        if (currentBtn != btn) {
-                            pressedState[btn] = false
-                            pointerButton.remove(pid)
-                            if (btn < keys.size) targetWebView?.injectKeyUp(keys[btn])
+                    if (btn != null && btn >= 0 && btn < positions.size) {
+                        // 手指已在某按钮上：使用扩展半径(1.3x)检测是否仍在该按钮范围
+                        // 滞后机制：手指需明显移出按钮范围才释放，避免边界抖动导致按键串联
+                        val (cx, cy, r) = positions[btn]
+                        val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble())
+                        if (dist < r * 1.3f) {
+                            // 仍在当前按钮扩展范围内，保持按下（不切换）
+                            continue
+                        }
+                        // 手指已移出当前按钮范围 → 释放
+                        pressedState[btn] = false
+                        pointerButton.remove(pid)
+                        if (btn < keys.size) targetWebView?.injectKeyUp(keys[btn])
+                        // 检查是否滑入新按钮的核心区域(0.7x)，排除原按钮
+                        val newBtn = hitButtonWithRadius(x, y, positions, visible, count, 0.7f, btn)
+                        if (newBtn >= 0 && newBtn < keys.size) {
+                            pressedState[newBtn] = true
+                            pointerButton[pid] = newBtn
+                            targetWebView?.injectKeyDown(keys[newBtn])
+                        }
+                    } else {
+                        // 手指不在任何按钮上：检查是否滑入按钮核心区域(0.7x)
+                        val newBtn = hitButtonWithRadius(x, y, positions, visible, count, 0.7f)
+                        if (newBtn >= 0 && newBtn < keys.size) {
+                            pressedState[newBtn] = true
+                            pointerButton[pid] = newBtn
+                            targetWebView?.injectKeyDown(keys[newBtn])
                         }
                     }
                 }
@@ -266,6 +287,29 @@ class ActionButtonView @JvmOverloads constructor(
             val (cx, cy, r) = positions[i]
             val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble())
             if (dist < r) return i
+        }
+        return -1
+    }
+
+    /**
+     * 带半径倍率的按钮命中检测（用于 ACTION_MOVE 滞后机制）。
+     * - radiusMultiplier > 1.0：扩展检测范围（判断手指是否仍在当前按钮范围）
+     * - radiusMultiplier < 1.0：收缩检测范围（判断手指是否进入新按钮核心区域）
+     */
+    private fun hitButtonWithRadius(
+        x: Float, y: Float,
+        positions: List<Triple<Float, Float, Float>>,
+        visible: List<Boolean>,
+        count: Int,
+        radiusMultiplier: Float,
+        excludeBtn: Int = -1
+    ): Int {
+        for (i in 0 until minOf(positions.size, count)) {
+            if (i == excludeBtn) continue
+            if (!visible.getOrElse(i) { true }) continue
+            val (cx, cy, r) = positions[i]
+            val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble())
+            if (dist < r * radiusMultiplier) return i
         }
         return -1
     }

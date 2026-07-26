@@ -555,6 +555,12 @@ open class GameWebView @JvmOverloads constructor(
             // 功能字母
             KeyEvent.KEYCODE_Q, KeyEvent.KEYCODE_E, KeyEvent.KEYCODE_R, KeyEvent.KEYCODE_F,
             KeyEvent.KEYCODE_Z, KeyEvent.KEYCODE_X, KeyEvent.KEYCODE_C, KeyEvent.KEYCODE_V,
+            // 动作按键常用字母（J/K/L/U/I/O/H/G/B/N/P/M/T/Y）
+            KeyEvent.KEYCODE_J, KeyEvent.KEYCODE_K, KeyEvent.KEYCODE_L,
+            KeyEvent.KEYCODE_U, KeyEvent.KEYCODE_I, KeyEvent.KEYCODE_O,
+            KeyEvent.KEYCODE_H, KeyEvent.KEYCODE_G, KeyEvent.KEYCODE_B,
+            KeyEvent.KEYCODE_N, KeyEvent.KEYCODE_P, KeyEvent.KEYCODE_M,
+            KeyEvent.KEYCODE_T, KeyEvent.KEYCODE_Y,
             // 数字
             KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_3,
             KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_7,

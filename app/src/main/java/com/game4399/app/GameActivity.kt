@@ -496,14 +496,12 @@ class GameActivity : AppCompatActivity() {
             max = 100
             progress = 0
             setCancelable(true)
-            setOnCancelListener {
-                android.util.Log.d("GameActivity", "用户取消下载")
-            }
         }
         progressDialog.show()
 
         Thread {
             var conn: java.net.HttpURLConnection? = null
+            var fileStream: java.io.FileOutputStream? = null
             try {
                 val swfUrlHttps = if (swfUrl.startsWith("http://")) "https://" + swfUrl.substring(7) else swfUrl
                 conn = java.net.URL(swfUrlHttps).openConnection() as java.net.HttpURLConnection
@@ -533,7 +531,7 @@ class GameActivity : AppCompatActivity() {
                         conn.setRequestProperty("Cookie", cookies)
                     }
                 } catch(e: Exception) {}
-                // 使用页面 URL 作为 Referer（防盗链），若无法获取则用 SWF 同源 origin
+                // 使用页面 URL 作为 Referer（防盗链）
                 val referer = if (pageUrl.isNotEmpty() && pageUrl != swfUrl) pageUrl else {
                     try { android.net.Uri.parse(swfUrlHttps).let { "${it.scheme}://${it.host}/" } } catch(e: Exception) { swfUrl }
                 }
@@ -548,11 +546,20 @@ class GameActivity : AppCompatActivity() {
                     return@Thread
                 }
 
-                // 获取文件大小用于计算进度
                 val totalBytes = conn.contentLength  // -1 if unknown
                 val filename = swfUrl.substringAfterLast("/").substringBefore("?").let {
                     if (it.endsWith(".swf", ignoreCase = true)) it else "$it.swf"
                 }.ifBlank { "game.swf" }
+
+                // 准备目标文件
+                val dir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS
+                )
+                val swfDir = java.io.File(dir, "GameHTML")
+                if (!swfDir.exists()) swfDir.mkdirs()
+                val file = java.io.File(swfDir, filename)
+                // 使用 .tmp 临时文件，下载完成后再重命名
+                val tmpFile = java.io.File(swfDir, "$filename.tmp")
 
                 // 更新对话框：显示文件大小
                 runOnUiThread {
@@ -564,18 +571,24 @@ class GameActivity : AppCompatActivity() {
                     }
                 }
 
-                // 分块读取，实时更新进度
+                // 直接写入文件，不缓存在内存中（避免大文件 OOM）
+                fileStream = java.io.FileOutputStream(tmpFile)
                 val input = conn.inputStream
-                val buffer = java.io.ByteArrayOutputStream()
                 val chunk = ByteArray(8192)
                 var bytesRead: Int
                 var totalRead = 0
                 var lastUpdatePercent = -1
                 while (true) {
-                    if (Thread.currentThread().isInterrupted) break
+                    if (Thread.currentThread().isInterrupted) {
+                        input.close()
+                        fileStream.close()
+                        tmpFile.delete()
+                        return@Thread
+                    }
                     bytesRead = input.read(chunk)
                     if (bytesRead == -1) break
-                    buffer.write(chunk, 0, bytesRead)
+                    // 直接写入文件，不在内存中累积
+                    fileStream.write(chunk, 0, bytesRead)
                     totalRead += bytesRead
 
                     // 更新进度（避免过于频繁更新 UI）
@@ -591,9 +604,12 @@ class GameActivity : AppCompatActivity() {
                     }
                 }
                 input.close()
-                val data = buffer.toByteArray()
+                fileStream.flush()
+                fileStream.close()
+                fileStream = null
 
-                if (data.isEmpty()) {
+                if (totalRead == 0) {
+                    tmpFile.delete()
                     runOnUiThread {
                         progressDialog.dismiss()
                         Toast.makeText(this, "下载失败: 文件为空", Toast.LENGTH_LONG).show()
@@ -601,18 +617,13 @@ class GameActivity : AppCompatActivity() {
                     return@Thread
                 }
 
-                // 保存到 app 外部存储
-                val dir = android.os.Environment.getExternalStoragePublicDirectory(
-                    android.os.Environment.DIRECTORY_DOWNLOADS
-                )
-                val swfDir = java.io.File(dir, "GameHTML")
-                if (!swfDir.exists()) swfDir.mkdirs()
-                val file = java.io.File(swfDir, filename)
-                file.writeBytes(data)
+                // 下载完成：重命名临时文件
+                tmpFile.renameTo(file)
 
+                val fileSizeKB = totalRead / 1024
                 runOnUiThread {
                     progressDialog.dismiss()
-                    Toast.makeText(this, "已下载: ${file.absolutePath} (${data.size / 1024}KB)", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "已下载: ${file.absolutePath} (${fileSizeKB}KB)", Toast.LENGTH_LONG).show()
                     // 提示是否播放
                     androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("下载完成")
@@ -629,6 +640,7 @@ class GameActivity : AppCompatActivity() {
                         .show()
                 }
             } catch (e: Exception) {
+                try { fileStream?.close() } catch(ignored: Exception) {}
                 runOnUiThread {
                     progressDialog.dismiss()
                     Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_LONG).show()

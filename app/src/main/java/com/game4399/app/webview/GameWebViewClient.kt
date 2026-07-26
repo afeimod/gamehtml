@@ -127,12 +127,20 @@ open class GameWebViewClient(
                 }
             }
 
-            android.util.Log.d("GameWebViewClient", "HTML 注入成功: $url (${modifiedHtml.length} chars)")
+            // 将原始 meta charset 替换为 UTF-8，因为我们以 UTF-8 返回内容
+            // 不替换的话浏览器会按原始编码（如 GBK）解码 UTF-8 字节，导致乱码
+            val finalHtml = modifiedHtml
+                .replace(
+                    Regex("""(<meta[^>]+charset\s*=\s*["']?)\s*[a-zA-Z0-9\-_]+""", RegexOption.IGNORE_CASE),
+                    "$1UTF-8"
+                )
+
+            android.util.Log.d("GameWebViewClient", "HTML 注入成功: $url (${finalHtml.length} chars)")
 
             WebResourceResponse(
                 "text/html", "UTF-8", 200, "OK",
                 mapOf("Access-Control-Allow-Origin" to "*"),
-                java.io.ByteArrayInputStream(modifiedHtml.toByteArray(Charsets.UTF_8))
+                java.io.ByteArrayInputStream(finalHtml.toByteArray(Charsets.UTF_8))
             )
         } catch (e: Exception) {
             android.util.Log.w("GameWebViewClient", "HTML 注入失败: ${e.message}")
@@ -194,12 +202,66 @@ open class GameWebViewClient(
                 android.util.Log.d("GameWebViewClient", "非 HTML 内容，跳过注入: $contentType")
                 return null
             }
-            val html = conn.inputStream.bufferedReader().readText()
-            android.util.Log.d("GameWebViewClient", "获取 HTML 成功: ${html.length} chars, URL=$url")
+
+            // 编码检测：优先 HTTP Content-Type，其次 HTML meta 标签，默认 UTF-8
+            // 4399 等中文网站常用 GBK/GB2312，错误编码会导致乱码
+            val rawBytes = conn.inputStream.readBytes()
+            val charset = detectCharset(contentType, rawBytes)
+            val html = String(rawBytes, charset(charset))
+            android.util.Log.d("GameWebViewClient", "获取 HTML 成功: ${html.length} chars, charset=$charset, URL=$url")
             html
         } catch (e: Exception) {
             android.util.Log.w("GameWebViewClient", "获取 HTML 失败: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * 检测 HTML 内容的字符编码。
+     * 检测顺序：HTTP Content-Type → HTML meta charset → HTML meta http-equiv → 默认 UTF-8
+     * 支持 GBK/GB2312/GB18030（4399 等中文站点常用）和 UTF-8。
+     */
+    private fun detectCharset(contentType: String, htmlBytes: ByteArray): String {
+        // 1. HTTP Content-Type 中的 charset
+        val ctCharset = parseCharsetFromContentType(contentType)
+        if (ctCharset != null) return ctCharset
+
+        // 2. 只读前 2KB 检测 meta 标签（编码声明通常在 <head> 开头）
+        val headStr = String(htmlBytes, 0, minOf(htmlBytes.size, 2048), Charsets.ISO_8859_1)
+        // <meta charset="gbk">
+        val metaCharsetRegex = Regex("""<meta[^>]+charset\s*=\s*["']?\s*([a-zA-Z0-9\-_]+)""", RegexOption.IGNORE_CASE)
+        metaCharsetRegex.find(headStr)?.let { return normalizeCharset(it.groupValues[1]) }
+
+        // 3. <meta http-equiv="Content-Type" content="text/html; charset=gbk">
+        val httpEquivRegex = Regex(
+            """<meta[^>]+http-equiv\s*=\s*["']?content-type["']?[^>]+content\s*=\s*["'][^"']*charset=([a-zA-Z0-9\-_]+)""",
+            RegexOption.IGNORE_CASE
+        )
+        httpEquivRegex.find(headStr)?.let { return normalizeCharset(it.groupValues[1]) }
+
+        // 4. 默认 UTF-8
+        return "UTF-8"
+    }
+
+    /** 从 HTTP Content-Type 头解析 charset，如 "text/html; charset=gbk" → "GBK" */
+    private fun parseCharsetFromContentType(contentType: String): String? {
+        val idx = contentType.indexOf("charset=", ignoreCase = true)
+        if (idx < 0) return null
+        val start = idx + 8
+        val end = contentType.indexOfAny(charArrayOf(';', ' ', '"', '\''), start)
+        val raw = if (end < 0) contentType.substring(start) else contentType.substring(start, end)
+        return normalizeCharset(raw.trim())
+    }
+
+    /** 规范化编码名：gb2312/gbk/gb18030 → gbk（JVM 支持最好的别名），大写统一 */
+    private fun normalizeCharset(name: String): String {
+        val lower = name.lowercase().trim()
+        return when (lower) {
+            "gb2312", "gbk", "gb18030" -> "GBK"
+            "utf-8", "utf8" -> "UTF-8"
+            "big5" -> "Big5"
+            "latin1", "iso-8859-1" -> "ISO-8859-1"
+            else -> if (lower.isNotEmpty()) name.trim() else "UTF-8"
         }
     }
 
