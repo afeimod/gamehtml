@@ -54,5 +54,13 @@
                 android:layout_marginTop="@dimen/spacing_lg"
                 android:text="@string/refresh" />
         </LinearLayout>
+
+        <!-- 网页全屏容器（Flash/视频全屏时显示） -->
+        <FrameLayout
+            android:id="@+id/fullscreenContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/black"
+            android:visibility="gone" />
     </FrameLayout>
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

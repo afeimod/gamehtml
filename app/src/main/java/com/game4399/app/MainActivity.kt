@@ -18,6 +18,7 @@ import com.game4399.app.data.GameType
 import com.game4399.app.databinding.ActivityMainBinding
 import com.game4399.app.ui.HomeFragment
 import com.game4399.app.ui.MeFragment
+import com.game4399.app.ui.CategoryFragment
 import com.game4399.app.ui.WebFragment
 import com.game4399.app.webview.NavHelper
 import com.game4399.app.widget.FloatingMenuView
@@ -39,7 +40,7 @@ class MainActivity : AppCompatActivity() {
 
     private val homeFragment by lazy { HomeFragment() }
     private val gameFragment by lazy { WebFragment.newInstance(NavHelper.URL_4399_MOBILE) }
-    private val categoryFragment by lazy { WebFragment.newInstance(NavHelper.URL_4399_CATEGORY) }
+    private val categoryFragment by lazy { CategoryFragment() }
     private val meFragment by lazy { MeFragment() }
 
     private var currentTabId = R.id.nav_home
@@ -256,7 +257,6 @@ class MainActivity : AppCompatActivity() {
     private fun currentWebFragment(): WebFragment? {
         val tag = when (currentTabId) {
             R.id.nav_game -> TAG_GAME
-            R.id.nav_category -> TAG_CATEGORY
             else -> return null
         }
         return supportFragmentManager.findFragmentByTag(tag) as? WebFragment

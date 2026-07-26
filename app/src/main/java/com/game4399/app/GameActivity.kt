@@ -140,10 +140,19 @@ class GameActivity : AppCompatActivity() {
         }
         override fun onConsole(level: String, msg: String, sourceId: String?, line: Int) {}
         override fun onShowFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
-            // Flash 全屏：直接铺满（topBar 已移除，无需操作）
+            // 网页全屏：隐藏 WebView，将全屏 View 添加到容器
+            binding.gameWebView.visibility = View.GONE
+            binding.floatingMenu.visibility = View.GONE
+            binding.fullscreenContainer.removeAllViews()
+            binding.fullscreenContainer.addView(view)
+            binding.fullscreenContainer.visibility = View.VISIBLE
         }
         override fun onHideFullscreen() {
-            // topBar 已移除，无需操作
+            // 退出全屏：移除全屏 View，恢复 WebView
+            binding.fullscreenContainer.removeAllViews()
+            binding.fullscreenContainer.visibility = View.GONE
+            binding.gameWebView.visibility = View.VISIBLE
+            binding.floatingMenu.visibility = View.VISIBLE
         }
         override fun onFileChooser(callback: ValueCallback<Array<Uri>>, accept: String?): Boolean {
             filePathCallback?.onReceiveValue(null)

@@ -76,8 +76,20 @@ class WebFragment : Fragment() {
         }
         override fun onTitle(title: String?) {}
         override fun onConsole(level: String, msg: String, sourceId: String?, line: Int) {}
-        override fun onShowFullscreen(view: View, callback: android.webkit.WebChromeClient.CustomViewCallback) {}
-        override fun onHideFullscreen() {}
+        override fun onShowFullscreen(view: View, callback: android.webkit.WebChromeClient.CustomViewCallback) {
+            // 网页全屏：隐藏 WebView，将全屏 View 添加到容器
+            binding.webView.visibility = View.GONE
+            binding.progressBar.visibility = View.GONE
+            binding.fullscreenContainer.removeAllViews()
+            binding.fullscreenContainer.addView(view)
+            binding.fullscreenContainer.visibility = View.VISIBLE
+        }
+        override fun onHideFullscreen() {
+            // 退出全屏：移除全屏 View，恢复 WebView
+            binding.fullscreenContainer.removeAllViews()
+            binding.fullscreenContainer.visibility = View.GONE
+            binding.webView.visibility = View.VISIBLE
+        }
         override fun onFileChooser(
             cb: android.webkit.ValueCallback<Array<android.net.Uri>>, accept: String?
         ): Boolean { cb.onReceiveValue(null); return true }
