@@ -56,15 +56,15 @@ object GameRepository {
     val webGamePortals: List<WebGameEntry> = listOf(
         WebGameEntry("瑾龙游戏", "https://www.jlgames.cn/"),
         WebGameEntry("7k7k游戏", "https://www.7k7k.com/"),
-        WebGameEntry("37游戏", "https://www.wgame80.com/"),
-        WebGameEntry("80在线游戏", "https://wan.360.cn/"),
+        WebGameEntry("37游戏", "https://www.37.com/"),
+        WebGameEntry("80在线游戏", "https://www.wgame80.com/"),
         WebGameEntry("2345游戏", "https://game.2345.com/"),
         WebGameEntry("y8游戏", "https://zh.y8.com/"),
         WebGameEntry("flash小游戏", "http://www.flashgame.com.cn/"),
         WebGameEntry("多玩游戏", "https://www.duowan.com/"),
-        WebGameEntry("游民星空", "https://www.gamersky.com/"),
-        WebGameEntry("3DM游戏", "https://www.3dmgame.com/"),
-        WebGameEntry("九游游戏", "https://www.9game.cn/"),
-        WebGameEntry("页游网", "https://www.yy.com/")
+        WebGameEntry("小霸王其乐无穷", "https://www.yikm.net/"),
+        WebGameEntry("fc在线", "https://www.playfc.cn/"),
+        WebGameEntry("宝玩poki游戏", "https://poki.com/zh"),
+        WebGameEntry("233乐园", "https://www.233leyuan.com/game-detail-h5")
     )
 }
