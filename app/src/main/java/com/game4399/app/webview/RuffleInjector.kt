@@ -61,6 +61,36 @@ object RuffleInjector {
             })();
         """.trimIndent()
         "waflash" -> ""  // WAFlash 使用独立播放器页面，不需要页面注入
+        "ruffle_mhhf" -> """
+            (function(){
+              window.RufflePlayer = window.RufflePlayer || {};
+              window.RufflePlayer.config = {
+                "publicPath": "${publicPath()}",
+                "polyfills": true,
+                "autoplay": "${if (PrefsManager.isFlashAutoplay) "on" else "off"}",
+                "unmuteOverlay": "visible",
+                "letterbox": "fullscreen",
+                "upgradeToHttps": true,
+                "allowScriptAccess": true,
+                "scale": "showAll",
+                "quality": "${quality()}",
+                "allowFullscreen": false,
+                "splashScreen": true,
+                "preloader": true,
+                "logLevel": "warn",
+                "maxExecutionDuration": {"secs": 15, "nanos": 0},
+                "fontSources": ["${LOCAL_BASE}ruffle_mhhf/simhei.ttf"],
+                "defaultFonts": {
+                  "sans": ["SimHei"],
+                  "serif": ["SimHei"],
+                  "typewriter": ["SimHei"],
+                  "japaneseGothic": ["SimHei"],
+                  "japaneseGothicMono": ["SimHei"],
+                  "japaneseMincho": ["SimHei"]
+                }
+              };
+            })();
+        """.trimIndent()
         else -> """
             (function(){
               window.RufflePlayer = window.RufflePlayer || {};

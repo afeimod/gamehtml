@@ -119,13 +119,33 @@ class GameActivity : AppCompatActivity() {
             val uaMode = PrefsManager.uaMode
             if (uaMode == "ie_compat") {
                 webView.useUaMode("ie_compat")
+            } else if (uaMode == "mobile") {
+                webView.useUaMode("mobile")
             } else {
-                val isPcPage = currentUrl.contains("www.4399.com") ||
-                    currentType == GameType.FLASH ||
-                    currentUrl.contains("/flash/")
-                useDesktopMode(isPcPage)
+                // desktop（默认）：横屏下所有网页使用桌面 UA，竖屏下仅 Flash/4399 用桌面
+                applyDesktopUaForUrl(currentUrl)
             }
         }
+    }
+
+    /**
+     * 根据当前 URL 和屏幕方向应用桌面/移动 UA。
+     * - 内置播放器页面（flash.local / file:///android_asset）：保持当前 UA 不变
+     * - 横屏模式：所有网页使用桌面 UA（桌面 Chrome）
+     * - 竖屏模式：仅 Flash 游戏 / 4399 使用桌面 UA，其他用移动 UA
+     */
+    private fun applyDesktopUaForUrl(url: String) {
+        // 内置播放器页面不需要切换 UA
+        if (url.startsWith("https://flash.local/") || url.startsWith("file:///android_asset/")) return
+        val isLandscape = requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE ||
+            PrefsManager.orientation == "landscape"
+        val isPcPage = url.contains("4399.com") ||
+            url.contains("/flash/") ||
+            url.endsWith(".swf", ignoreCase = true) ||
+            NavHelper.isSwf(url)
+        // 横屏 → 所有页面桌面模式；竖屏 → 仅 PC 页面桌面模式
+        val useDesktop = isLandscape || isPcPage
+        webView.useDesktopMode(useDesktop)
     }
 
     private val chromeCallback = object : GameWebChromeClient.Callback {
@@ -167,6 +187,14 @@ class GameActivity : AppCompatActivity() {
             // 页面导航时释放所有按键，防止旧页面的按键状态残留
             webView.releaseAllKeys()
             binding.errorView.visibility = View.GONE
+            // 导航到新页面时根据 URL 重新应用 UA（横屏默认桌面模式）
+            if (url != null) {
+                currentUrl = url
+                val uaMode = PrefsManager.uaMode
+                if (uaMode == "desktop") {
+                    applyDesktopUaForUrl(url)
+                }
+            }
         }
         override fun onPageFinished(url: String?) {
             url?.let { FavoriteStore.addHistory(it, currentTitle, currentType) }
@@ -662,6 +690,12 @@ class GameActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.landscape_mode, Toast.LENGTH_SHORT).show()
         }
         floatingMenu.isLandscape = !isCurrentlyLandscape
+        // 切换方向后重新应用 UA（横屏→桌面模式，竖屏→可能切换为移动模式）
+        val url = webView.url ?: currentUrl
+        if (PrefsManager.uaMode == "desktop") {
+            applyDesktopUaForUrl(url)
+            webView.reload()
+        }
     }
 
     /** 应用设置中的屏幕方向 */
@@ -793,7 +827,12 @@ class GameActivity : AppCompatActivity() {
             .setSingleChoiceItems(modes.map { it.second }.toTypedArray(), checked) { dialog, which ->
                 val mode = modes[which].first
                 sp.edit().putString("ua_mode", mode).apply()
-                webView.useUaMode(mode)
+                // desktop 模式使用智能逻辑（横屏全桌面，竖屏仅 Flash/4399 桌面）
+                if (mode == "desktop") {
+                    applyDesktopUaForUrl(webView.url ?: currentUrl)
+                } else {
+                    webView.useUaMode(mode)
+                }
                 dialog.dismiss()
                 webView.reload()
             }

@@ -70,7 +70,7 @@
 
     // 1) 预置 Ruffle 配置（必须早于 ruffle.js）
     window.RufflePlayer = window.RufflePlayer || {};
-    window.RufflePlayer.config = {
+    var ruffleConfig = {
       "publicPath": rufflePath,
       "polyfills": true,
       "autoplay": AUTOPLAY,
@@ -86,6 +86,20 @@
       "logLevel": "warn",
       "maxExecutionDuration": 30
     };
+    // MHHF 引擎：加载 simhei.ttf 字体解决中文显示问题
+    if (ENGINE === 'ruffle_mhhf') {
+      ruffleConfig.maxExecutionDuration = {"secs": 15, "nanos": 0};
+      ruffleConfig.fontSources = [rufflePath + 'simhei.ttf'];
+      ruffleConfig.defaultFonts = {
+        "sans": ["SimHei"],
+        "serif": ["SimHei"],
+        "typewriter": ["SimHei"],
+        "japaneseGothic": ["SimHei"],
+        "japaneseGothicMono": ["SimHei"],
+        "japaneseMincho": ["SimHei"]
+      };
+    }
+    window.RufflePlayer.config = ruffleConfig;
 
     // 2) 动态加载 Ruffle
     var s = document.createElement('script');

@@ -675,6 +675,10 @@ open class GameWebViewClient(
                 assetPath.endsWith(".js") -> "application/javascript" to "UTF-8"
                 assetPath.endsWith(".html") -> "text/html" to "UTF-8"
                 assetPath.endsWith(".css") -> "text/css" to "UTF-8"
+                assetPath.endsWith(".ttf") -> "font/ttf" to null
+                assetPath.endsWith(".woff") -> "font/woff" to null
+                assetPath.endsWith(".woff2") -> "font/woff2" to null
+                assetPath.endsWith(".otf") -> "font/otf" to null
                 assetPath.endsWith(".data") -> "application/octet-stream" to null
                 else -> "application/octet-stream" to null
             }
