@@ -484,13 +484,29 @@ class GameActivity : AppCompatActivity() {
      * 下载完成后可选择用内置引擎播放。
      */
     private fun downloadSwf(swfUrl: String) {
-        Toast.makeText(this, "开始下载 SWF...", Toast.LENGTH_SHORT).show()
         // 使用 currentUrl（已在主线程赋值），避免在后台线程访问 webView.url 触发线程违规
         val pageUrl = currentUrl.ifEmpty { swfUrl }
+
+        // 创建进度对话框
+        val progressDialog = android.app.ProgressDialog(this).apply {
+            setTitle("下载 SWF")
+            setMessage("正在连接服务器...")
+            setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+            isIndeterminate = false
+            max = 100
+            progress = 0
+            setCancelable(true)
+            setOnCancelListener {
+                android.util.Log.d("GameActivity", "用户取消下载")
+            }
+        }
+        progressDialog.show()
+
         Thread {
+            var conn: java.net.HttpURLConnection? = null
             try {
                 val swfUrlHttps = if (swfUrl.startsWith("http://")) "https://" + swfUrl.substring(7) else swfUrl
-                val conn = java.net.URL(swfUrlHttps).openConnection() as java.net.HttpURLConnection
+                conn = java.net.URL(swfUrlHttps).openConnection() as java.net.HttpURLConnection
                 if (conn is javax.net.ssl.HttpsURLConnection) {
                     val tm = object : javax.net.ssl.X509TrustManager {
                         override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
@@ -526,15 +542,64 @@ class GameActivity : AppCompatActivity() {
 
                 if (conn.responseCode !in 200..299) {
                     runOnUiThread {
+                        progressDialog.dismiss()
                         Toast.makeText(this, "下载失败: HTTP ${conn.responseCode}", Toast.LENGTH_LONG).show()
                     }
                     return@Thread
                 }
 
-                val data = conn.inputStream.readBytes()
+                // 获取文件大小用于计算进度
+                val totalBytes = conn.contentLength  // -1 if unknown
                 val filename = swfUrl.substringAfterLast("/").substringBefore("?").let {
                     if (it.endsWith(".swf", ignoreCase = true)) it else "$it.swf"
                 }.ifBlank { "game.swf" }
+
+                // 更新对话框：显示文件大小
+                runOnUiThread {
+                    if (totalBytes > 0) {
+                        progressDialog.setMessage("下载中: $filename (${totalBytes / 1024}KB)")
+                    } else {
+                        progressDialog.setMessage("下载中: $filename (大小未知)")
+                        progressDialog.isIndeterminate = true
+                    }
+                }
+
+                // 分块读取，实时更新进度
+                val input = conn.inputStream
+                val buffer = java.io.ByteArrayOutputStream()
+                val chunk = ByteArray(8192)
+                var bytesRead: Int
+                var totalRead = 0
+                var lastUpdatePercent = -1
+                while (true) {
+                    if (Thread.currentThread().isInterrupted) break
+                    bytesRead = input.read(chunk)
+                    if (bytesRead == -1) break
+                    buffer.write(chunk, 0, bytesRead)
+                    totalRead += bytesRead
+
+                    // 更新进度（避免过于频繁更新 UI）
+                    if (totalBytes > 0) {
+                        val percent = (totalRead * 100 / totalBytes)
+                        if (percent != lastUpdatePercent) {
+                            lastUpdatePercent = percent
+                            runOnUiThread {
+                                if (!progressDialog.isShowing) return@runOnUiThread
+                                progressDialog.progress = percent
+                            }
+                        }
+                    }
+                }
+                input.close()
+                val data = buffer.toByteArray()
+
+                if (data.isEmpty()) {
+                    runOnUiThread {
+                        progressDialog.dismiss()
+                        Toast.makeText(this, "下载失败: 文件为空", Toast.LENGTH_LONG).show()
+                    }
+                    return@Thread
+                }
 
                 // 保存到 app 外部存储
                 val dir = android.os.Environment.getExternalStoragePublicDirectory(
@@ -546,6 +611,7 @@ class GameActivity : AppCompatActivity() {
                 file.writeBytes(data)
 
                 runOnUiThread {
+                    progressDialog.dismiss()
                     Toast.makeText(this, "已下载: ${file.absolutePath} (${data.size / 1024}KB)", Toast.LENGTH_LONG).show()
                     // 提示是否播放
                     androidx.appcompat.app.AlertDialog.Builder(this)
@@ -564,8 +630,11 @@ class GameActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 runOnUiThread {
+                    progressDialog.dismiss()
                     Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_LONG).show()
                 }
+            } finally {
+                conn?.disconnect()
             }
         }.start()
     }
