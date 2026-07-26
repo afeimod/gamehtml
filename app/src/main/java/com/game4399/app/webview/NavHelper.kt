@@ -52,9 +52,9 @@ object NavHelper {
             .appendQueryParameter("swf", swfUrl)
             .appendQueryParameter("engine", PrefsManager.flashEngine)
             .appendQueryParameter("autoplay", if (PrefsManager.isFlashAutoplay) "on" else "off")
-        // Ruffle / Ruffle(mhhf版) 模式传递 CDN/本地路径
+        // Ruffle 模式传递 CDN/本地路径
         // WAFlash 使用独立播放器页面，不需要传递 cdn/path
-        if (PrefsManager.flashEngine == "ruffle" || PrefsManager.flashEngine == "ruffle_mhhf") {
+        if (PrefsManager.flashEngine != "waflash" && PrefsManager.flashEngine != "swf2js") {
             u.appendQueryParameter("cdn", RuffleInjector.scriptUrl())
             u.appendQueryParameter("path", RuffleInjector.publicPath())
         }

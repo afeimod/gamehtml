@@ -286,9 +286,9 @@ class GameActivity : AppCompatActivity() {
 
     /** 本地 SWF 引擎选择对话框 */
     private fun showLocalSwfEnginePicker(url: String, title: String) {
-        val engines = arrayOf("WAFlash (推荐)", "Ruffle 最新版", "MHHF Ruffle (中文优化)")
-        val values = arrayOf("waflash", "ruffle", "ruffle_mhhf")
-        val currentEngine = PrefsManager.flashEngine
+        val engines = arrayOf("WAFlash (推荐)", "Ruffle 最新版 (内置中文字体)")
+        val values = arrayOf("waflash", "ruffle")
+        val currentEngine = if (PrefsManager.flashEngine == "ruffle_mhhf") "ruffle" else PrefsManager.flashEngine
         val checked = values.indexOf(currentEngine).coerceAtLeast(0)
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("选择播放引擎")
@@ -840,23 +840,24 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Flash 引擎切换：Ruffle / Ruffle(mhhf版) / WAFlash / 关闭 */
+    /** Flash 引擎切换：Ruffle / WAFlash / 关闭 */
     private fun showFlashEnginePicker() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val engines = arrayOf(
-            "Ruffle 最新版 (推荐, AS1/2/3 全面支持)",
-            "MHHF Ruffle (0.2.0版, 中文显示优化)",
+            "Ruffle 最新版 (推荐, AS1/2/3 全面支持, 内置中文字体)",
             "WAFlash (AS2/AS3 完整支持, Canvas渲染)",
             "关闭 Flash"
         )
-        val values = arrayOf("ruffle", "ruffle_mhhf", "waflash", "off")
+        val values = arrayOf("ruffle", "waflash", "off")
         val current = if (PrefsManager.isFlashEnabled) PrefsManager.flashEngine else "off"
-        val checked = values.indexOf(current).coerceAtLeast(0)
+        // 兼容旧版 mhhf 设置，自动迁移为 ruffle
+        val migratedCurrent = if (current == "ruffle_mhhf") "ruffle" else current
+        val checked = values.indexOf(migratedCurrent).coerceAtLeast(0)
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Flash 引擎")
             .setSingleChoiceItems(engines, checked) { dialog, which ->
-                if (which == 3) {
-                    // "关闭 Flash" 是索引 3
+                if (which == 2) {
+                    // "关闭 Flash" 是索引 2
                     sp.edit().putBoolean("flash_enabled", false).apply()
                     Toast.makeText(this, "Flash 已关闭", Toast.LENGTH_SHORT).show()
                 } else {

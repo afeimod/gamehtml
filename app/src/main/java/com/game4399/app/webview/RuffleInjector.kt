@@ -3,17 +3,17 @@ package com.game4399.app.webview
 import com.game4399.app.data.PrefsManager
 
 /**
- * Flash 引擎注入器（三引擎：Ruffle + Ruffle(mhhf版) + WAFlash）。
+ * Flash 引擎注入器（双引擎：Ruffle + WAFlash）。
  *
  * 核心原理：
- * 本地引擎文件（ruffle.js / .wasm）放在 assets 目录中。
+ * 本地引擎文件（ruffle.js / .wasm / simhei.ttf）放在 assets 目录中。
  * 从 https 页面直接用 <script src="file:///android_asset/..."> 加载会被跨域策略阻止。
  * 解决方案：使用虚拟 URL https://flash.local/ 作为脚本地址，
  * GameWebViewClient.shouldInterceptRequest 会拦截 flash.local 的请求并从 assets 返回内容。
  *
  * 引擎选择：
  * - "ruffle"：Ruffle 最新版 0.3.0 (Rust + WebAssembly)，AS1/2 支持率 95%，AS3 约 60%
- * - "ruffle_mhhf"：Ruffle 0.2.0-nightly.2026.2.24 (mhhf.com 版本)，中文显示兼容性更好
+ *   本地模式下自带 simhei.ttf 字体，中文显示正常
  * - "waflash"：WAFlash (AS2/AS3 完整支持, Canvas渲染)
  */
 object RuffleInjector {
@@ -23,7 +23,6 @@ object RuffleInjector {
 
     /** 根据引擎返回脚本地址（shouldInterceptRequest 会拦截并从 assets 返回） */
     fun scriptUrl(): String = when (PrefsManager.flashEngine) {
-        "ruffle_mhhf" -> "${LOCAL_BASE}ruffle_mhhf/ruffle.js"
         "waflash" -> "${LOCAL_BASE}waflash/waflash.min.js"
         "swf2js" -> "${LOCAL_BASE}swf2js/swf2js.js"
         else -> when (PrefsManager.flashCdn) {
@@ -35,7 +34,6 @@ object RuffleInjector {
 
     /** ruffle.js 的 publicPath（Ruffle 用此路径加载 core.ruffle.*.js 和 .wasm） */
     fun publicPath(): String = when (PrefsManager.flashEngine) {
-        "ruffle_mhhf" -> "${LOCAL_BASE}ruffle_mhhf/"
         "waflash" -> "${LOCAL_BASE}waflash/"
         else -> when (PrefsManager.flashCdn) {
             "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle/"
@@ -52,6 +50,30 @@ object RuffleInjector {
         else     -> "high"
     }
 
+    /** 是否使用本地引擎（本地模式下有 simhei.ttf 字体文件可用） */
+    private fun isLocalRuffle(): Boolean =
+        PrefsManager.flashEngine != "waflash" &&
+        PrefsManager.flashEngine != "swf2js" &&
+        PrefsManager.flashCdn == "local"
+
+    /**
+     * 生成 fontSources / defaultFonts 配置片段。
+     * 仅本地 Ruffle 模式下注入 simhei.ttf 字体，解决 Flash 游戏中文显示问题。
+     * CDN 模式下无本地字体文件，跳过字体配置。
+     */
+    private fun fontConfigScript(): String =
+        if (isLocalRuffle()) """
+                ,"fontSources": ["${LOCAL_BASE}ruffle/simhei.ttf"]
+                ,"defaultFonts": {
+                  "sans": ["SimHei"],
+                  "serif": ["SimHei"],
+                  "typewriter": ["SimHei"],
+                  "japaneseGothic": ["SimHei"],
+                  "japaneseGothicMono": ["SimHei"],
+                  "japaneseMincho": ["SimHei"]
+                }""".trimIndent()
+        else ""
+
     /** 引擎配置脚本（在引擎 JS 之前执行）。
      *  WAFlash 不需要 polyfill 配置（使用独立播放器页面）。 */
     fun configScript(): String = when (PrefsManager.flashEngine) {
@@ -61,36 +83,6 @@ object RuffleInjector {
             })();
         """.trimIndent()
         "waflash" -> ""  // WAFlash 使用独立播放器页面，不需要页面注入
-        "ruffle_mhhf" -> """
-            (function(){
-              window.RufflePlayer = window.RufflePlayer || {};
-              window.RufflePlayer.config = {
-                "publicPath": "${publicPath()}",
-                "polyfills": true,
-                "autoplay": "${if (PrefsManager.isFlashAutoplay) "on" else "off"}",
-                "unmuteOverlay": "visible",
-                "letterbox": "fullscreen",
-                "upgradeToHttps": true,
-                "allowScriptAccess": true,
-                "scale": "showAll",
-                "quality": "${quality()}",
-                "allowFullscreen": false,
-                "splashScreen": true,
-                "preloader": true,
-                "logLevel": "warn",
-                "maxExecutionDuration": {"secs": 15, "nanos": 0},
-                "fontSources": ["${LOCAL_BASE}ruffle_mhhf/simhei.ttf"],
-                "defaultFonts": {
-                  "sans": ["SimHei"],
-                  "serif": ["SimHei"],
-                  "typewriter": ["SimHei"],
-                  "japaneseGothic": ["SimHei"],
-                  "japaneseGothicMono": ["SimHei"],
-                  "japaneseMincho": ["SimHei"]
-                }
-              };
-            })();
-        """.trimIndent()
         else -> """
             (function(){
               window.RufflePlayer = window.RufflePlayer || {};
@@ -108,7 +100,7 @@ object RuffleInjector {
                 "splashScreen": true,
                 "preloader": true,
                 "logLevel": "warn",
-                "maxExecutionDuration": 30
+                "maxExecutionDuration": {"secs": 15, "nanos": 0}${fontConfigScript()}
               };
             })();
         """.trimIndent()

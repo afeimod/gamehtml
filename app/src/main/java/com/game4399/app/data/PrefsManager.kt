@@ -47,7 +47,7 @@ object PrefsManager {
     val dpadScale: Float
         get() = (sp.getInt("dpad_scale", 100) / 100f).coerceIn(0.5f, 2.0f)
     /** 方向键映射模式：dpad / wasd / joystick */
-    val dpadMode: String get() = sp.getString("dpad_mode", "dpad") ?: "dpad"
+    val dpadMode: String get() = sp.getString("dpad_mode", "joystick") ?: "joystick"
     /** 方向键水平偏移（像素），正值向右，默认 0 */
     val dpadOffsetX: Int get() = sp.getInt("dpad_offset_x", 0)
     /** 方向键垂直偏移（像素），正值向下，默认 0 */
@@ -97,7 +97,7 @@ object PrefsManager {
     /** Start 键映射 */
     val startKey: String get() = sp.getString("start_key", "ENTER") ?: "ENTER"
     /** Select/Start 是否显示 */
-    val isSystemButtonsVisible: Boolean get() = sp.getBoolean("system_buttons_visible", true)
+    val isSystemButtonsVisible: Boolean get() = sp.getBoolean("system_buttons_visible", false)
     /** 方向键是否显示 */
     val isDpadVisible: Boolean get() = sp.getBoolean("dpad_visible", true)
     /** 鼠标模式是否启用 */
@@ -116,8 +116,11 @@ object PrefsManager {
     val systemPosY: Float get() = sp.getFloat("system_pos_y", -1f)
 
     // ---- Flash 引擎 ----
-    /** Flash 引擎：ruffle / swf2js / waflash */
-    val flashEngine: String get() = sp.getString("flash_engine", "ruffle") ?: "ruffle"
+    /** Flash 引擎：ruffle / swf2js / waflash（旧版 ruffle_mhhf 自动迁移为 ruffle） */
+    val flashEngine: String get() {
+        val v = sp.getString("flash_engine", "ruffle") ?: "ruffle"
+        return if (v == "ruffle_mhhf") "ruffle" else v
+    }
     /** UA 模式：desktop / ie_compat / mobile */
     val uaMode: String get() = sp.getString("ua_mode", "desktop") ?: "desktop"
     /** 兼容旧设置 */

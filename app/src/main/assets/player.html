@@ -84,11 +84,11 @@
       "splashScreen": true,
       "preloader": true,
       "logLevel": "warn",
-      "maxExecutionDuration": 30
+      "maxExecutionDuration": {"secs": 15, "nanos": 0}
     };
-    // MHHF 引擎：加载 simhei.ttf 字体解决中文显示问题
-    if (ENGINE === 'ruffle_mhhf') {
-      ruffleConfig.maxExecutionDuration = {"secs": 15, "nanos": 0};
+    // 本地引擎模式：加载 simhei.ttf 字体解决中文显示问题
+    // CDN 模式下无本地字体文件，跳过
+    if (rufflePath.indexOf('flash.local') >= 0) {
       ruffleConfig.fontSources = [rufflePath + 'simhei.ttf'];
       ruffleConfig.defaultFonts = {
         "sans": ["SimHei"],
