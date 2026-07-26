@@ -151,9 +151,23 @@ open class GameWebViewClient(
 
     /** 自己发起 HTTP 请求获取 HTML 内容，转发 Cookie 和请求头模拟浏览器行为 */
     private fun fetchHtmlContent(view: WebView, url: String, request: WebResourceRequest): String? {
+        android.util.Log.d("GameWebViewClient", "获取 HTML 内容: $url")
+        // HTTP 自动升级为 HTTPS，失败后回退 HTTP（兼容仅支持 http 的老站）
+        val fetchUrl = if (url.startsWith("http://")) "https://" + url.substring(7) else url
+        val result = doFetchHtml(fetchUrl, url, request)
+        if (result != null) return result
+        // HTTPS 失败，回退到原始 HTTP
+        if (fetchUrl != url) {
+            android.util.Log.d("GameWebViewClient", "HTTPS 失败，回退 HTTP: $url")
+            return doFetchHtml(url, url, request)
+        }
+        return null
+    }
+
+    /** 实际发起 HTTP 请求获取 HTML */
+    private fun doFetchHtml(fetchUrl: String, originalUrl: String, request: WebResourceRequest): String? {
         return try {
-            android.util.Log.d("GameWebViewClient", "获取 HTML 内容: $url")
-            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            val conn = java.net.URL(fetchUrl).openConnection() as java.net.HttpURLConnection
             if (conn is javax.net.ssl.HttpsURLConnection) {
                 conn.sslSocketFactory = trustAllSslSocketFactory()
                 conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
@@ -180,7 +194,7 @@ open class GameWebViewClient(
 
             // 转发 Cookie（从 CookieManager 获取，保持登录态/会话）
             try {
-                val cookies = android.webkit.CookieManager.getInstance().getCookie(url)
+                val cookies = android.webkit.CookieManager.getInstance().getCookie(originalUrl)
                 if (cookies != null && cookies.isNotEmpty()) {
                     conn.setRequestProperty("Cookie", cookies)
                 }
@@ -188,7 +202,7 @@ open class GameWebViewClient(
 
             // 设置 Referer（同源 origin）
             try {
-                val uri = android.net.Uri.parse(url)
+                val uri = android.net.Uri.parse(originalUrl)
                 conn.setRequestProperty("Referer", "${uri.scheme}://${uri.host}/")
             } catch(e: Exception) {}
 
@@ -209,7 +223,7 @@ open class GameWebViewClient(
             val rawBytes = conn.inputStream.readBytes()
             val charset = detectCharset(contentType, rawBytes)
             val html = String(rawBytes, charset(charset))
-            android.util.Log.d("GameWebViewClient", "获取 HTML 成功: ${html.length} chars, charset=$charset, URL=$url")
+            android.util.Log.d("GameWebViewClient", "获取 HTML 成功: ${html.length} chars, charset=$charset, URL=$fetchUrl")
             html
         } catch (e: Exception) {
             android.util.Log.w("GameWebViewClient", "获取 HTML 失败: ${e.message}")
