@@ -644,8 +644,8 @@ open class GameWebViewClient(
             view?.evaluateJavascript(IFRAME_INJECT_SCRIPT, null)
         }
 
-        // 4399 页面注入 viewport 调整
-        if (url != null && url.contains("4399.com")) {
+        // 所有网页注入 viewport 缩放支持（不限 4399）
+        if (url != null && !url.startsWith("file:///android_asset/") && !url.startsWith("https://flash.local/")) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
     }
@@ -660,7 +660,7 @@ open class GameWebViewClient(
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
             }
         }
-        if (url != null && url.contains("4399.com")) {
+        if (url != null && !url.startsWith("file:///android_asset/") && !url.startsWith("https://flash.local/")) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
     }
@@ -677,7 +677,7 @@ open class GameWebViewClient(
         if (isFlashPage) {
             view?.evaluateJavascript(CSS_INJECTION, null)
         }
-        if (url != null && url.contains("4399.com")) {
+        if (url != null && !url.startsWith("file:///android_asset/") && !url.startsWith("https://flash.local/")) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
         callback.onPageFinished(url)
@@ -726,7 +726,8 @@ open class GameWebViewClient(
               var meta = document.querySelector('meta[name="viewport"]');
               if (!meta) { meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }
               var s = $scale;
-              meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=' + s + ', maximum-scale=5.0, user-scalable=yes';
+              // 不限制缩放范围：minimum-scale=0.01 允许无限缩小，maximum-scale=1000 允许无限放大
+              meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=0.01, maximum-scale=1000.0, user-scalable=yes';
             })();
             """.trimIndent()
         } else {
@@ -737,7 +738,8 @@ open class GameWebViewClient(
               var sw = window.screen.width || 360;
               var scale = Math.min(1, sw / 1200);
               scale = Math.max(0.25, scale);
-              meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=5.0, user-scalable=yes';
+              // 不限制缩放范围：minimum-scale=0.01 允许无限缩小，maximum-scale=1000 允许无限放大
+              meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=0.01, maximum-scale=1000.0, user-scalable=yes';
             })();
             """.trimIndent()
         }
