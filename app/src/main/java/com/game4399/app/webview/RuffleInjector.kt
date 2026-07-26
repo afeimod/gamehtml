@@ -3,17 +3,18 @@ package com.game4399.app.webview
 import com.game4399.app.data.PrefsManager
 
 /**
- * Flash 引擎注入器（双引擎：Ruffle + swf2js）。
+ * Flash 引擎注入器（三引擎：Ruffle + Ruffle(mhhf版) + WAFlash）。
  *
  * 核心原理：
- * 本地引擎文件（ruffle.js / swf2js.js / .wasm）放在 assets 目录中。
+ * 本地引擎文件（ruffle.js / .wasm）放在 assets 目录中。
  * 从 https 页面直接用 <script src="file:///android_asset/..."> 加载会被跨域策略阻止。
  * 解决方案：使用虚拟 URL https://flash.local/ 作为脚本地址，
  * GameWebViewClient.shouldInterceptRequest 会拦截 flash.local 的请求并从 assets 返回内容。
  *
  * 引擎选择：
- * - "ruffle"：Ruffle (Rust + WebAssembly)，AS1/2 支持率 95%，AS3 约 60%
- * - "swf2js"：swf2js (纯 JavaScript)，AS1/2 完整支持
+ * - "ruffle"：Ruffle 最新版 0.3.0 (Rust + WebAssembly)，AS1/2 支持率 95%，AS3 约 60%
+ * - "ruffle_mhhf"：Ruffle 0.2.0-nightly.2026.2.24 (mhhf.com 版本)，中文显示兼容性更好
+ * - "waflash"：WAFlash (AS2/AS3 完整支持, Canvas渲染)
  */
 object RuffleInjector {
 
@@ -22,8 +23,9 @@ object RuffleInjector {
 
     /** 根据引擎返回脚本地址（shouldInterceptRequest 会拦截并从 assets 返回） */
     fun scriptUrl(): String = when (PrefsManager.flashEngine) {
-        "swf2js" -> "${LOCAL_BASE}swf2js/swf2js.js"
+        "ruffle_mhhf" -> "${LOCAL_BASE}ruffle_mhhf/ruffle.js"
         "waflash" -> "${LOCAL_BASE}waflash/waflash.min.js"
+        "swf2js" -> "${LOCAL_BASE}swf2js/swf2js.js"
         else -> when (PrefsManager.flashCdn) {
             "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle"
             "local"  -> "${LOCAL_BASE}ruffle/ruffle.js"
@@ -32,10 +34,14 @@ object RuffleInjector {
     }
 
     /** ruffle.js 的 publicPath（Ruffle 用此路径加载 core.ruffle.*.js 和 .wasm） */
-    fun publicPath(): String = when (PrefsManager.flashCdn) {
-        "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle/"
-        "local"  -> "${LOCAL_BASE}ruffle/"
-        else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle@0.3.0/"
+    fun publicPath(): String = when (PrefsManager.flashEngine) {
+        "ruffle_mhhf" -> "${LOCAL_BASE}ruffle_mhhf/"
+        "waflash" -> "${LOCAL_BASE}waflash/"
+        else -> when (PrefsManager.flashCdn) {
+            "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle/"
+            "local"  -> "${LOCAL_BASE}ruffle/"
+            else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle@0.3.0/"
+        }
     }
 
     /** 画质映射到 Ruffle 的 quality 选项 */
