@@ -427,12 +427,12 @@ class DPadView @JvmOverloads constructor(
 
     /** 根据 dpadMode 将方向键映射为 DPAD_* 或 WASD。
      *  - dpad 模式：注入方向键 ↑↓←→
-     *  - wasd 模式：注入 W/A/S/D
-     *  - joystick 模式：注入方向键 ↑↓←→（摇杆 UI + 方向键映射） */
+     *  - wasd 模式：注入 W/A/S/D（十字键 UI）
+     *  - joystick 模式：注入 W/A/S/D（摇杆 UI），摇杆为默认模式 */
     private fun mapDirectionKey(keyCode: Int): Int {
         val mode = PrefsManager.dpadMode
-        if (mode == "dpad" || mode == "joystick") return keyCode
-        // wasd 模式映射到 WASD
+        if (mode == "dpad") return keyCode
+        // joystick 和 wasd 模式都映射到 WASD
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> KeyEvent.KEYCODE_W
             KeyEvent.KEYCODE_DPAD_DOWN -> KeyEvent.KEYCODE_S

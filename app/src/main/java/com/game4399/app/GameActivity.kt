@@ -1060,7 +1060,7 @@ class GameActivity : AppCompatActivity() {
         binding.dpad.invalidate()
         val label = when (newMode) {
             "wasd" -> "WASD 十字键"
-            "joystick" -> "摇杆 (↑↓←→)"
+            "joystick" -> "摇杆 (WASD)"
             else -> "方向键 (↑↓←→)"
         }
         Toast.makeText(this, "方向键已切换为 $label", Toast.LENGTH_SHORT).show()
