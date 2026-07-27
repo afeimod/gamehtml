@@ -91,7 +91,7 @@ class JsBridge(
     }
 
     @JavascriptInterface
-    fun notify() {
+    fun notifyChange() {
         // 简单实现，调用方在收到 fav/history 变化时调用
     }
 
