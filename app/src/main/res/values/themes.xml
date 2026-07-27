@@ -36,7 +36,7 @@
         <item name="cardElevation">4dp</item>
     </style>
 
-    <style name="Widget.FlashBox.KeyButton">
+    <style name="Widget.FlashBox.KeyButton" parent="android:Widget.TextView">
         <item name="android:background">@drawable/bg_key_button</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:fontFamily">sans-serif-medium</item>
