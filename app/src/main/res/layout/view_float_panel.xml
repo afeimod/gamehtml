@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/floatRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <View
+        android:id="@+id/floatBackdrop"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#33000000"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/floatButton"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:background="@drawable/float_button"
+        android:elevation="6dp">
+    </View>
+
+    <LinearLayout
+        android:id="@+id/floatMenu"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/float_menu_bg"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:elevation="10dp">
+
+        <LinearLayout android:id="@+id/menu_back"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_arrow_back" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/back" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_forward"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_arrow_forward" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/forward" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_home"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_home" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/home" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_refresh"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_refresh" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/refresh" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_url"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_search" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/add_url" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_bookmark"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_bookmark" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/add_bookmark" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_pad"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_controller" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/float_gamepad" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_settings"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_settings" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/settings_title" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/menu_exit"
+            style="@style/MenuItem" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:id="@+id/icon" style="@style/MenuIcon" android:src="@drawable/ic_close" />
+            <TextView android:id="@+id/label" style="@style/MenuLabel" android:text="@string/float_exit" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 摇杆 / 方向键 -->
+    <com.game4399.app.widget.PadMoveView
+        android:id="@+id/padMove"
+        android:layout_width="128dp"
+        android:layout_height="128dp" />
+
+    <!-- 独立按键容器 -->
+    <FrameLayout
+        android:id="@+id/padKeysHolder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 顶部编辑栏 -->
+    <LinearLayout
+        android:id="@+id/editBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/float_menu_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="6dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/btnToggleType"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_joystick"
+            app:tint="@color/primary" />
+        <ImageView
+            android:id="@+id/btnToggleMode"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_dpad"
+            app:tint="@color/primary" />
+        <ImageView
+            android:id="@+id/btnAddKey"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_plus_circle"
+            app:tint="@color/primary" />
+        <ImageView
+            android:id="@+id/btnReset"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_refresh"
+            app:tint="@color/danger" />
+        <ImageView
+            android:id="@+id/btnCloseEdit"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_check"
+            app:tint="@color/success" />
+    </LinearLayout>
+
+    <!-- 右上角小齿轮 -->
+    <ImageView
+        android:id="@+id/btnToggleEdit"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="6dp"
+        android:background="@drawable/float_button"
+        android:padding="6dp"
+        android:src="@drawable/ic_settings"
+        app:tint="@color/white" />
+</FrameLayout>
