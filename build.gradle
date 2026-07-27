@@ -1,17 +1,16 @@
 // Top-level build file
 //
-// Repositories are declared in `settings.gradle` via
-// `dependencyResolutionManagement.repositoriesMode = FAIL_ON_PROJECT_REPOS`
-// so we MUST NOT re-declare `repositories` here. Putting them in both
-// places causes:
-//   "Build was configured to prefer settings repositories over project
-//    repositories but repository 'Google' was added by build file 'build.gradle'"
-
-buildscript {
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.2'
-    }
-}
+// Modern AGP 8 / Gradle 8 layout:
+//   * `repositories` for APPLICATION dependencies live in `settings.gradle`
+//     under `dependencyResolutionManagement.repositoriesMode = FAIL_ON_PROJECT_REPOS`.
+//   * `repositories` for PLUGIN resolution live in `settings.gradle` under
+//     `pluginManagement.repositories`.
+//   * The Android Gradle Plugin is pinned in `settings.gradle` via
+//     `pluginManagement.plugins`, so this file no longer needs a `buildscript`
+//     block at all.
+//
+// This avoids the "no repositories are defined" / "repository X was added by
+// build file" build errors that occur when the two repository layers overlap.
 
 tasks.register('clean', Delete) {
     delete rootProject.layout.buildDirectory

@@ -4,6 +4,10 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+    // Pin AGP version here so app/build.gradle can apply by id only.
+    plugins {
+        id 'com.android.application' version '8.2.2'
+    }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
