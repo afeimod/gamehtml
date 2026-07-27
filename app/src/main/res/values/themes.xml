@@ -23,9 +23,11 @@
         <item name="android:windowBackground">@color/black</item>
     </style>
 
-    <style name="Theme.FlashBox.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog.Dark">
+    <style name="Theme.FlashBox.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorSecondary">@color/brand_accent</item>
+        <item name="android:colorBackground">@color/bg_surface</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
     </style>
 
     <style name="Widget.FlashBox.Card" parent="Widget.Material3.CardView.Elevated">
