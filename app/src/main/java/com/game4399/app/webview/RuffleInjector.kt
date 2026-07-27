@@ -28,7 +28,7 @@ object RuffleInjector {
         else -> when (PrefsManager.flashCdn) {
             "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle"
             "local"  -> "${LOCAL_BASE}ruffle/ruffle.js"
-            else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle@0.3.0/ruffle.min.js"
+            else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle/ruffle.min.js"
         }
     }
 
@@ -38,7 +38,7 @@ object RuffleInjector {
         else -> when (PrefsManager.flashCdn) {
             "unpkg"  -> "https://unpkg.com/@ruffle-rs/ruffle/"
             "local"  -> "${LOCAL_BASE}ruffle/"
-            else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle@0.3.0/"
+            else     -> "https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle/"
         }
     }
 
@@ -100,7 +100,7 @@ object RuffleInjector {
                 "splashScreen": true,
                 "preloader": true,
                 "logLevel": "warn",
-                "maxExecutionDuration": {"secs": 15, "nanos": 0}${fontConfigScript()}
+                "maxExecutionDuration": 15${fontConfigScript()}
               };
             })();
         """.trimIndent()
