@@ -1,19 +1,15 @@
 // Top-level build file
+//
+// Repositories are declared in `settings.gradle` via
+// `dependencyResolutionManagement.repositoriesMode = FAIL_ON_PROJECT_REPOS`
+// so we MUST NOT re-declare `repositories` here. Putting them in both
+// places causes:
+//   "Build was configured to prefer settings repositories over project
+//    repositories but repository 'Google' was added by build file 'build.gradle'"
+
 buildscript {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.2.2'
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
     }
 }
 
