@@ -40,12 +40,10 @@
     <string name="nav_exit_fullscreen">退出全屏</string>
     <string name="nav_bookmark">加入收藏</string>
     <string name="nav_bookmarked">已收藏</string>
-    <string name="nav_history">历史记录</string>
     <string name="nav_mode">网页模式</string>
     <string name="nav_zoom">页面缩放</string>
     <string name="nav_engine">播放引擎</string>
     <string name="nav_virtual_keys">虚拟按键</string>
-    <string name="nav_settings">设置</string>
     <string name="nav_keys_editor">按键编辑</string>
 
     <!-- Web modes -->
