@@ -34,10 +34,12 @@ class FlashWebView @JvmOverloads constructor(
             setSupportZoom(true)
             javaScriptCanOpenWindowsAutomatically = true
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            // App cache for offline support (deprecated but still functional pre-33)
+            // App cache API was removed in compileSdk 34; call via reflection for older devices.
             try {
-                setAppCacheEnabled(true)
-                setAppCachePath(context.cacheDir.absolutePath + "/webcache")
+                val m = WebSettings::class.java.getMethod("setAppCacheEnabled", Boolean::class.javaPrimitiveType)
+                m.invoke(this, true)
+                val mp = WebSettings::class.java.getMethod("setAppCachePath", String::class.java)
+                mp.invoke(this, context.cacheDir.absolutePath + "/webcache")
             } catch (_: Throwable) {}
             try { setGeolocationEnabled(true) } catch (_: Throwable) {}
         }
