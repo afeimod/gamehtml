@@ -49,10 +49,12 @@ android {
         }
     }
 
-    // Treat assets/www as the main UI source
-    androidResources {
-        ignoreAssetsPatterns '!.svn:!.git:!.DS_Store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
-    }
+    // Asset ignore patterns: AGP ignores .svn/.git/Thumbs.db/etc. by default,
+    // so we no longer set this explicitly. Earlier versions of this file used
+    // `aaptOptions.ignoreAssetsPattern` (deprecated) and
+    // `androidResources.ignoreAssetsPatterns` (only in AGP 8.3+); both caused
+    // "method not found" errors on AGP 8.2.x, so we just omit the block and
+    // rely on AGP defaults.
 
     lint {
         abortOnError false
