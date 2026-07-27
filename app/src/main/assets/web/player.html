@@ -10,9 +10,14 @@
 <style>
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-  #stage.fill ruffle-player,#stage.fill #canvas{width:100%!important;height:100%!important}
-  #stage #canvas{display:block}
-  ruffle-player{width:100%;height:100%;background:#000}
+  #stage.fill ruffle-player,#stage.fill #canvas,#stage.fill #waflashContainer{width:100%!important;height:100%!important}
+  #stage ruffle-player{width:100%;height:100%;background:#000}
+  #stage #canvas{display:block;background:#000}
+  /* Waflash container */
+  #waflashContainer{position:relative;width:100%;height:100%;background:#000}
+  #waflashStatus{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    color:#9AA4B2;font-size:14px;text-align:center;z-index:5;display:none}
+  /* Player toolbar */
   #pbar{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 4px);z-index:50;
     display:flex;gap:6px;align-items:center;padding:4px 8px;opacity:.92}
   #pbar button{background:rgba(20,24,30,.85);border:1px solid #262C36;color:#ECEFF4;border-radius:8px;
@@ -28,7 +33,13 @@
 </style>
 </head>
 <body>
-<div id="stage"></div>
+<div id="stage">
+  <!-- Waflash needs a #canvas and #waflashStatus element -->
+  <div id="waflashContainer" style="display:none">
+    <div id="waflashStatus"></div>
+    <canvas id="canvas" tabindex="1"></canvas>
+  </div>
+</div>
 <div id="pbar">
   <button id="bHome">⌂ 首页</button>
   <button id="bBack">‹ 后退</button>
@@ -42,6 +53,6 @@
   <button onclick="location.href='https://app.local/index.html'">返回首页</button>
   <button onclick="location.reload()">重试</button></div>
 <script src="controls.js"></script>
-<script type="module" src="player.js"></script>
+<script src="player.js"></script>
 </body>
 </html>

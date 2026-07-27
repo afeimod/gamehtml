@@ -524,7 +524,16 @@ function DEFAULT_CFG(){ return { ruffle:{quality:'high',renderer:'webgl',scale:'
   flashpatch:{quality:'high',renderer:'webgl',scale:'showAll',aspect:'contain',baseEngine:'ruffle',killswitchBypass:true,removeAdware:true,regionUnlock:true,sitePatches:true} }; }
 function DEFAULT_CONTROLS(){ return {enabled:true,primaryType:'joystick',primaryStyle:'wsad',primaryX:18,primaryY:70,primaryScale:1,
   buttons:[{id:'b_KeyJ',label:'J',code:'KeyJ',x:70,y:78,scale:1},{id:'b_KeyK',label:'K',code:'KeyK',x:80,y:70,scale:1},{id:'b_KeyL',label:'L',code:'KeyL',x:88,y:76,scale:1},{id:'b_KeyU',label:'U',code:'KeyU',x:58,y:80,scale:.9},{id:'b_KeyI',label:'I',code:'KeyI',x:66,y:88,scale:.9},{id:'b_KeyO',label:'O',code:'KeyO',x:82,y:88,scale:.9},{id:'b_Enter',label:'⏎',code:'Enter',x:50,y:90,scale:.8},{id:'b_Space',label:'␣',code:'Space',x:40,y:92,scale:1}] }; }
-function DEFAULT_SITES(){ return [{id:'4399',name:'4399电脑版',url:'https://www.4399.com/',mode:'desktop',category:'flash',builtIn:true},{id:'4399m',name:'4399手机版',url:'https://www.4399.com/m/',mode:'mobile',category:'flash',builtIn:true},{id:'mhhf',name:'灵动游戏主页',url:'https://www.mhhf.com/',mode:'desktop',category:'mixed',builtIn:true}]; }
+function DEFAULT_SITES(){ return [
+  {id:'4399',name:'4399电脑版',url:'https://www.4399.com/',mode:'desktop',category:'flash',builtIn:true},
+  {id:'4399m',name:'4399手机版',url:'https://www.4399.com/m/',mode:'mobile',category:'flash',builtIn:true},
+  {id:'4399flash',name:'4399Flash游戏',url:'https://www.4399.com/flash/',mode:'desktop',category:'flash',builtIn:true},
+  {id:'mhhf',name:'灵动游戏主页',url:'https://www.mhhf.com/',mode:'desktop',category:'mixed',builtIn:true},
+  {id:'mhhfgames',name:'灵动游戏库',url:'https://www.mhhf.com/games',mode:'desktop',category:'mixed',builtIn:true},
+  {id:'7k7k',name:'7k7k小游戏',url:'https://www.7k7k.com/',mode:'desktop',category:'flash',builtIn:true},
+  {id:'7k7km',name:'7k7k手机版',url:'https://m.7k7k.com/',mode:'mobile',category:'flash',builtIn:true},
+  {id:'home',name:'游戏盒首页',url:'about:home',mode:'mobile',category:'app',builtIn:true}
+]; }
 
 /* ---------- keyboard model ---------- */
 const KEYBOARD=[

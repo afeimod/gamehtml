@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity(), AndroidBridge.Host, BoxWebClient.BoxWe
         progress = findViewById(R.id.pageProgress)
 
         assetLoader = WebViewAssetLoader.Builder()
+            .setDomain("app.local")
             .addPathHandler("/local/", LocalPathHandler())
             .addPathHandler("/", WebAssetsHandler())
             .build()
@@ -290,8 +291,22 @@ class MainActivity : AppCompatActivity(), AndroidBridge.Host, BoxWebClient.BoxWe
     private inner class WebAssetsHandler : WebViewAssetLoader.PathHandler {
         private val ah = WebViewAssetLoader.AssetsPathHandler(this@MainActivity)
         override fun handle(path: String): WebResourceResponse? {
-            // path is relative to "/", e.g. "index.html" or "engines/ruffle/ruffle.js"
-            return ah.handle("web/$path")
+            val cleanPath = path.trimStart('/')
+            val assetPath = "web/$cleanPath"
+            val resp = ah.handle(assetPath) ?: return null
+            // Fix MIME types for critical engine files
+            val mime = when {
+                cleanPath.endsWith(".wasm") -> "application/wasm"
+                cleanPath.endsWith(".js") || cleanPath.endsWith(".mjs") -> "application/javascript"
+                cleanPath.endsWith(".swf") -> "application/x-shockwave-flash"
+                cleanPath.endsWith(".css") -> "text/css"
+                cleanPath.endsWith(".html") -> "text/html"
+                cleanPath.endsWith(".json") -> "application/json"
+                cleanPath.endsWith(".data") -> "application/octet-stream"
+                else -> resp.mimeType
+            }
+            val encoding = if (resp.encoding.isNullOrEmpty()) "utf-8" else resp.encoding
+            return WebResourceResponse(mime, encoding, resp.data)
         }
     }
 
