@@ -1,7 +1,7 @@
 name: Android Build
 
 # 手动触发：Actions -> Android Build -> Run workflow
-# 支持两种构建：debug / release（release 跟 debug 一样用 debug 签名，避免密钥管理麻烦；如需正式签名请自配）
+# 不用 android-actions/setup-android（最近 license 自动接受会卡住），改成纯 bash 步骤安装 SDK
 on:
   workflow_dispatch:
     inputs:
@@ -40,6 +40,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/.android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,53 +53,43 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # android-actions/setup-android 偶尔会卡在 license 接受 (cmdline-tools 版本不一致)
-      # 显式指定 cmdline-tools-version 与 GitHub Runner 预装一致
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platform-tools
-            platforms;android-34
-            build-tools;34.0.0
-
-      - name: Accept all SDK licenses (safety net)
-        env:
-          # 让 sdkmanager 不走交互
-          JAVA_TOOL_OPTIONS: ""
+      # 纯 bash 装 Android SDK（避开 android-actions/setup-android 当前的 license bug）
+      - name: Install Android SDK (pure bash)
         run: |
           set -e
-          # 找到最新的 cmdline-tools
-          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          elif [ -d "$ANDROID_HOME/cmdline-tools/16.0/bin" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
-          elif [ -d "$ANDROID_HOME/cmdline-tools/12.0/bin" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/12.0/bin/sdkmanager"
-          else
-            SDKMANAGER="$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f | head -1)"
-          fi
-          echo "Using sdkmanager: $SDKMANAGER"
-          # 多次执行以确保所有 license 被接受
-          (yes || true) | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          (yes || true) | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          echo "Licenses accepted"
+          SDK="${{ env.ANDROID_HOME }}"
+          echo "Installing Android SDK to $SDK"
+          mkdir -p "$SDK/cmdline-tools"
+          cd /tmp
+          # 下载 cmdline-tools 16.0 (12266719)
+          echo "Downloading commandlinetools-linux-12266719_latest.zip ..."
+          curl -sSL -o cmdline-tools.zip \
+            "https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip"
+          unzip -q -o cmdline-tools.zip -d /tmp/clt
+          # 目录结构必须是 cmdline-tools/latest/
+          rm -rf "$SDK/cmdline-tools/latest"
+          mkdir -p "$SDK/cmdline-tools/latest"
+          mv /tmp/clt/cmdline-tools/* "$SDK/cmdline-tools/latest/"
+          rm -rf /tmp/clt cmdline-tools.zip
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          echo "sdkmanager: $(which sdkmanager)"
+          sdkmanager --version
 
-      - name: Create local.properties
-        run: |
-          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          if [ -z "$SDK" ]; then
-            echo "ERROR: ANDROID_HOME / ANDROID_SDK_ROOT not set"
-            exit 1
-          fi
-          echo "sdk.dir=$SDK" > local.properties
-          echo "---"
-          cat local.properties
+          # 接受所有 license（多次执行确保新装的 package license 也被接受）
+          echo "Accepting licenses..."
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          echo "Licenses done."
 
-      - name: Set up Gradle 8.7
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.7'
+          # 安装需要的组件
+          echo "Installing platforms;android-34, build-tools;34.0.0, platform-tools..."
+          yes | sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" >/dev/null
+          echo "Installation complete."
+
+          echo "sdk.dir=$SDK" > "$GITHUB_WORKSPACE/local.properties"
+          cat "$GITHUB_WORKSPACE/local.properties"
+          ls -la "$SDK"
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -107,6 +100,11 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
+
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
 
       - name: Build APK
         env:
