@@ -1,186 +1,133 @@
-# 4399 游戏盒 - APK 构建 Workflow
-#
-# 触发方式：手动触发（GitHub 仓库 → Actions → Build APK → Run workflow）
-#
-# 本 workflow 只在手动触发时运行，不会消耗额外的 Actions 额度。
-# 公开仓库 Actions 完全免费；私有仓库每月 2000 分钟免费额度。
-
+# ── FlashGameBox · 手动构建 APK ──────────────────────────────
+# 在 GitHub 仓库的 Actions 页面选择 "Build APK" 工作流，
+# 点击 "Run workflow" 即可手动触发构建。
+# 构建完成后在 Artifacts 区域下载 debug / release APK。
+# 引擎资源（Ruffle/Waflash）离线内置在 assets 中；
+# 如果 Ruffle 不存在，构建前会自动下载。
 name: Build APK
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:        # 手动触发
     inputs:
       build_type:
-        description: 构建类型
+        description: '构建类型'
         required: true
+        default: 'both'
         type: choice
-        default: debug
         options:
+          - both
           - debug
           - release
-          - both
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'app/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/build-apk.yml'
 
-concurrency:
-  group: build-apk-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  JAVA_VERSION: '17'
 
 jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
-      # ---------- 1. 检出代码 ----------
-      - name: Checkout
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      # ---------- 2. 配置 JDK 17 ----------
-      - name: Set up JDK 17
+      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: '17'
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
 
-      # ---------- 3. 验证 Android SDK（ubuntu-latest 已预装） ----------
-      # ubuntu-latest 镜像已预装 Android SDK 35 和 build-tools 35.0.0
-      # 无需再用 android-actions/setup-android（该 action 在 v3 版本对多包名解析有 bug）
-      - name: Verify Android SDK
+      - name: 🤖 Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
+            platform-tools
+
+      - name: 📦 Prepare engine assets (Ruffle offline)
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo ""
-          echo "=== 已安装的 platforms ==="
-          ls -la "$ANDROID_HOME/platforms/" 2>/dev/null || echo "platforms 目录不存在"
-          echo ""
-          echo "=== 已安装的 build-tools ==="
-          ls -la "$ANDROID_HOME/build-tools/" 2>/dev/null || echo "build-tools 目录不存在"
-          echo ""
-          # 如果缺少 android-35，则用 sdkmanager 单独安装（单包名调用，避免多包名解析 bug）
-          if [ ! -d "$ANDROID_HOME/platforms/android-35" ]; then
-            echo "android-35 缺失，正在安装..."
-            yes | sdkmanager "platforms;android-35" > /dev/null 2>&1 || true
-          fi
-          if [ ! -d "$ANDROID_HOME/build-tools/35.0.0" ]; then
-            echo "build-tools;35.0.0 缺失，正在安装..."
-            yes | sdkmanager "build-tools;35.0.0" > /dev/null 2>&1 || true
-          fi
-          echo ""
-          echo "=== 最终验证 ==="
-          ls "$ANDROID_HOME/platforms/" 2>/dev/null
-          ls "$ANDROID_HOME/build-tools/" 2>/dev/null
-
-      # ---------- 4. 生成 Gradle Wrapper ----------
-      # 说明：ubuntu-latest 镜像通过系统级 init 脚本把 AGP 8.1.0 注入 buildscript classpath，
-      # 改 GRADLE_USER_HOME 无法绕过。因此项目已锁定 AGP 8.1.0（见 libs.versions.toml），
-      # 声明相同版本即不冲突。
-      - name: Generate Gradle Wrapper
-        run: |
-          echo "=== 诊断：预装的 Gradle init 脚本 ==="
-          ls -la ~/.gradle/init.d/ 2>/dev/null || echo "~/.gradle/init.d/ 不存在"
-          for f in ~/.gradle/init.d/*.gradle; do
-            [ -f "$f" ] && echo "--- $f ---" && head -15 "$f"
-          done 2>/dev/null || true
-          echo ""
-          echo "=== 系统 Gradle 版本 ==="
-          gradle --version 2>/dev/null | head -5 || true
-          echo ""
-
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ] || [ ! -f gradlew ]; then
-            echo "Gradle wrapper 缺失，正在生成..."
-            gradle wrapper --gradle-version 8.7 --distribution-type bin
+          if [ ! -f app/src/main/assets/web/engines/ruffle/ruffle.js ]; then
+            echo "Ruffle not in assets, downloading..."
+            bash scripts/download-ruffle.sh
           else
-            echo "Gradle wrapper 已存在"
+            echo "Ruffle already in assets (offline), skip download."
           fi
-          chmod +x gradlew
-          ./gradlew --version
+          echo "Engine assets:"
+          ls -lh app/src/main/assets/web/engines/waflash/ | head -5
+          ls -lh app/src/main/assets/web/engines/ruffle/ | head -5
 
-      # ---------- 5. 准备 Release 签名 ----------
-      # 没有配置签名 Secrets 时不生成 keystore.properties，
-      # build.gradle.kts 会自动用内置的 debug.keystore 签名（可用 MT 管理器重新签名）
-      - name: Prepare signing key
-        env:
-          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+      - name: 📦 Download Gradle Wrapper JAR (if missing)
         run: |
-          if [ -z "$SIGNING_KEY_BASE64" ]; then
-            echo "未配置签名 Secrets，使用内置 debug.keystore 签名（可用 MT 管理器重新签名）"
-            # 不生成 keystore.properties，让 build.gradle.kts 回退到内置 debug.keystore
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "gradle-wrapper.jar not found, downloading..."
+            mkdir -p gradle/wrapper
+            curl -fsSL -o gradle/wrapper/gradle-wrapper.jar \
+              "https://raw.githubusercontent.com/gradle/gradle/v8.7/gradle/wrapper/gradle-wrapper.jar"
+            echo "Downloaded gradle-wrapper.jar ($(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes)"
           else
-            echo "检测到签名 Secrets，解码 keystore..."
-            echo "$SIGNING_KEY_BASE64" | base64 -d > app/release.keystore
-            cat > app/keystore.properties <<EOF
-          storeFile=release.keystore
-          storePassword=$SIGNING_STORE_PASSWORD
-          keyAlias=$SIGNING_KEY_ALIAS
-          keyPassword=$SIGNING_KEY_PASSWORD
-          EOF
-            echo "✓ keystore.properties 已生成"
+            echo "gradle-wrapper.jar already present"
           fi
 
-      # ---------- 6. 构建 Debug APK ----------
-      - name: Build Debug APK
-        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
-        run: ./gradlew assembleDebug --stacktrace
+      - name: 🔧 Make gradlew executable
+        run: chmod +x gradlew
 
-      # ---------- 7. 构建 Release APK ----------
-      - name: Build Release APK
-        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
-        run: ./gradlew assembleRelease --stacktrace
+      - name: 💾 Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
-      # ---------- 8. 收集 APK ----------
-      - name: Collect APKs
-        run: |
-          echo "=== 构建产物 ==="
-          find app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "未找到 APK"
+      - name: 🔨 Build Debug APK
+        if: ${{ github.event.inputs.build_type != 'release' }}
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          DATE=$(date +'%Y%m%d')
-          SUFFIX="${VERSION}-${SHORT_SHA}-${DATE}"
+      - name: 🔨 Build Release APK
+        if: ${{ github.event.inputs.build_type != 'debug' }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-          mkdir -p artifacts
-          [ -f app/build/outputs/apk/debug/app-debug.apk ] && \
-            cp app/build/outputs/apk/debug/app-debug.apk artifacts/Game4399-${SUFFIX}-debug.apk
-          [ -f app/build/outputs/apk/release/app-release.apk ] && \
-            cp app/build/outputs/apk/release/app-release.apk artifacts/Game4399-${SUFFIX}-release.apk
-          [ -f app/build/outputs/apk/release/app-release-unsigned.apk ] && \
-            cp app/build/outputs/apk/release/app-release-unsigned.apk artifacts/Game4399-${SUFFIX}-release-unsigned.apk
-
-          echo "=== artifacts 目录 ==="
-          ls -lh artifacts/ 2>/dev/null || echo "artifacts 为空"
-
-      # ---------- 9. 上传 Artifact ----------
-      - name: Upload Debug APK
-        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
+      - name: 📤 Upload Debug APK
+        if: ${{ github.event.inputs.build_type != 'release' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Game4399-debug
-          path: artifacts/*-debug*.apk
-          retention-days: 90
+          name: FlashGameBox-debug
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
+          retention-days: 30
 
-      - name: Upload Release APK
-        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
+      - name: 📤 Upload Release APK
+        if: ${{ github.event.inputs.build_type != 'debug' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Game4399-release
-          path: artifacts/*-release*.apk
-          retention-days: 90
+          name: FlashGameBox-release
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
+          retention-days: 30
 
-      # ---------- 10. 构建摘要 ----------
-      - name: Summary
+      - name: 📊 Build Summary
         if: always()
         run: |
-          echo "## 构建结果" >> $GITHUB_STEP_SUMMARY
-          echo "- 构建类型: \`${{ inputs.build_type }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 提交: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          if [ -d artifacts ] && [ "$(ls -A artifacts 2>/dev/null)" ]; then
-            echo "### 产物" >> $GITHUB_STEP_SUMMARY
-            ls -lh artifacts/ | awk 'NR>1 {print "- `" $NF "` (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Java**: ${{ env.JAVA_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type**: ${{ github.event.inputs.build_type || 'both' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Engine Assets**: Offline in assets/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if ls app/build/outputs/apk/**/*.apk 2>/dev/null; then
+            echo "### Generated APKs" >> $GITHUB_STEP_SUMMARY
+            find app/build/outputs/apk -name "*.apk" -exec sh -c 'echo "- $(basename {}): $(du -h {} | cut -f1)"' \; >> $GITHUB_STEP_SUMMARY
           else
-            echo "### ⚠️ 无产物" >> $GITHUB_STEP_SUMMARY
+            echo "### No APKs generated" >> $GITHUB_STEP_SUMMARY
           fi
