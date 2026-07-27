@@ -497,11 +497,6 @@ class KeyView(
         refreshPos()
     }
 
-    fun setLabel(label: String) {
-        key.label = label
-        invalidate()
-    }
-
     private fun refreshPos() {
         val sz = (56f * key.scale * dp).toInt()
         val lp = layoutParams as ViewGroup.LayoutParams?
@@ -512,15 +507,19 @@ class KeyView(
             lp.height = sz
             layoutParams = lp
         }
+        val finalSz = sz
+        val finalParent = parent
         post {
-            val p = parent as? ViewGroup ?: return@post
+            val p = finalParent as? ViewGroup ?: return@post
             if (p.width == 0) return@post
             val cx = if (key.x < 0) 0.85f else key.x
             val cy = if (key.y < 0) 0.78f else key.y
             val px = p.width
             val py = p.height
-            x = (cx * px - sz / 2f).coerceIn(0f, (px - sz).toFloat())
-            y = (cy * py - sz / 2f).coerceIn(0f, (py - sz).toFloat())
+            val nx = (cx * px - finalSz / 2f).coerceIn(0f, (px - finalSz).toFloat())
+            val ny = (cy * py - finalSz / 2f).coerceIn(0f, (py - finalSz).toFloat())
+            setX(nx)
+            setY(ny)
         }
     }
 
@@ -557,8 +556,8 @@ class KeyView(
                             val dy = event.rawY - lastY
                             if (!dragging && abs(dx) + abs(dy) > 4 * dp) dragging = true
                             if (dragging) {
-                                x += dx
-                                y += dy
+                                setX(x + dx)
+                                setY(y + dy)
                                 lastX = event.rawX
                                 lastY = event.rawY
                                 saveXY()
@@ -632,9 +631,9 @@ class KeyView(
             canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), r, r, border)
             // 右上角删除叉
             canvas.drawCircle(width - 8 * dp, 8 * dp, 8 * dp, close)
-            val x = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; strokeWidth = 2 * dp }
-            canvas.drawLine(width - 12 * dp, 4 * dp, width - 4 * dp, 12 * dp, x)
-            canvas.drawLine(width - 4 * dp, 4 * dp, width - 12 * dp, 12 * dp, x)
+            val xp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; strokeWidth = 2 * dp }
+            canvas.drawLine(width - 12 * dp, 4 * dp, width - 4 * dp, 12 * dp, xp)
+            canvas.drawLine(width - 4 * dp, 4 * dp, width - 12 * dp, 12 * dp, xp)
         }
         val cx = width / 2f
         val cy = height / 2f - (fg.ascent() + fg.descent()) / 2f
