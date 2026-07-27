@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Flash游戏盒</string>
-    <string name="open_swf">用 Flash 游戏盒 打开</string>
-    <string name="cache_dir_name">FlashBox</string>
-    <string name="default_engine">ruffle</string>
-</resources>
