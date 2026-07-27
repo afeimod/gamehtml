@@ -1,6 +1,6 @@
 name: Build APK
 
-# 手动构建 (manual dispatch) + 主分支推送时触发
+# 仅手动构建 (manual dispatch only)
 on:
   workflow_dispatch:
     inputs:
@@ -8,8 +8,6 @@ on:
         description: "构建类型 (debug / release)"
         required: false
         default: "release"
-  push:
-    branches: [ main, master ]
 
 jobs:
   build:
@@ -54,7 +52,7 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Build release APK
-        if: github.event.inputs.build_type == 'release' || github.event_name == 'push'
+        if: github.event.inputs.build_type == 'release'
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Locate APK
