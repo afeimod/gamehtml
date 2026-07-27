@@ -29,12 +29,12 @@ class LinkAdapter(
     }
 
     override fun onBindViewHolder(h: VH, pos: Int) {
-        val it = items[pos]
-        h.tvName.text = it.name
-        h.tvUrl.text = it.url
+        val item = items[pos]
+        h.tvName.text = item.name
+        h.tvUrl.text = item.url
         h.ivFav.setImageResource(if (isFav) R.drawable.ic_bookmark else R.drawable.ic_history)
-        h.ivDelete.setOnClickListener { onDelete(it) }
-        h.itemView.setOnClickListener { onClick(it) }
+        h.ivDelete.setOnClickListener { onDelete(item) }
+        h.itemView.setOnClickListener { onClick(item) }
     }
 
     override fun getItemCount(): Int = items.size

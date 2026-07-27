@@ -45,8 +45,6 @@ class VirtualPad @JvmOverloads constructor(
     private var listener: OnPadActionListener? = null
     private var layout: PadLayout = Prefs.padLayout().also { ensureDefaults(it) }
 
-    init {
-
     private val dpad: PadMoveView
     private val keysHolder: FrameLayout
     private val editBar: View
@@ -98,7 +96,7 @@ class VirtualPad @JvmOverloads constructor(
     fun setListener(l: OnPadActionListener) { listener = l }
 
     fun dispatchKey(code: String, pressed: Boolean) {
-        dispatch(code, pressed)
+        listener?.onPadKey(code, pressed)
     }
 
     fun open() {
@@ -295,7 +293,7 @@ class PadMoveView @JvmOverloads constructor(
                         } else {
                             val base = baseRadius * 2
                             val nd = d0
-                            val newScale = (nd / base).coerceIn(0.5, 2.0)
+                            val newScale = (nd / base).coerceIn(0.5f, 2.0f)
                             layout.moveScale = newScale.toFloat()
                             Prefs.setPadLayout(layout)
                             bind(layout)
@@ -451,15 +449,15 @@ class PadMoveView @JvmOverloads constructor(
     }
 
     private fun drawArrow(canvas: Canvas, cx: Float, cy: Float, rot: Float) {
-        val size = 16 * dp
+        val sz = 16 * dp
         canvas.save()
         canvas.translate(cx, cy)
         canvas.rotate(rot)
         val path = android.graphics.Path()
-        path.moveTo(-size, -size / 2f)
-        path.lineTo(size, 0f)
-        path.lineTo(-size, size / 2f)
-        path.lineTo(-size * 0.4f, 0f)
+        path.moveTo(-sz, -sz / 2f)
+        path.lineTo(sz, 0f)
+        path.lineTo(-sz, sz / 2f)
+        path.lineTo(-sz * 0.4f, 0f)
         path.close()
         canvas.drawPath(path, arrowPaint)
         canvas.restore()
@@ -505,13 +503,13 @@ class KeyView(
     }
 
     private fun refreshPos() {
-        val size = (56 * key.scale * dp).toInt()
+        val sz = (56f * key.scale * dp).toInt()
         val lp = layoutParams as ViewGroup.LayoutParams?
         if (lp == null) {
-            layoutParams = ViewGroup.LayoutParams(size, size)
+            layoutParams = ViewGroup.LayoutParams(sz, sz)
         } else {
-            lp.width = size
-            lp.height = size
+            lp.width = sz
+            lp.height = sz
             layoutParams = lp
         }
         post {
@@ -519,8 +517,10 @@ class KeyView(
             if (p.width == 0) return@post
             val cx = if (key.x < 0) 0.85f else key.x
             val cy = if (key.y < 0) 0.78f else key.y
-            x = (cx * p.width - size / 2f).coerceIn(0f, (p.width - size).toFloat())
-            y = (cy * p.height - size / 2f).coerceIn(0f, (p.height - size).toFloat())
+            val px = p.width
+            val py = p.height
+            x = (cx * px - sz / 2f).coerceIn(0f, (px - sz).toFloat())
+            y = (cy * py - sz / 2f).coerceIn(0f, (py - sz).toFloat())
         }
     }
 
@@ -546,7 +546,7 @@ class KeyView(
                     if (scaling && event.pointerCount >= 2) {
                         val d = distance(event, 0, 1)
                         if (initialDist > 0) {
-                            key.scale = (initialScale * (d / initialDist)).coerceIn(0.4, 2.5)
+                            key.scale = (initialScale * (d / initialDist)).coerceIn(0.4f, 2.5f)
                             pad.updateKey(this)
                             refreshPos()
                         }
@@ -608,8 +608,6 @@ class KeyView(
         }
         return true
     }
-
-    private fun performKeyDispatch() {} // handled by pad
 
     private fun saveXY() {
         val p = parent as? ViewGroup ?: return

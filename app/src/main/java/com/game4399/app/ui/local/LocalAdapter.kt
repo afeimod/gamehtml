@@ -30,13 +30,13 @@ class LocalAdapter(
     }
 
     override fun onBindViewHolder(h: VH, pos: Int) {
-        val it = items[pos]
-        h.tvName.text = it.name
-        h.tvPath.text = it.path
-        h.ivIcon.setImageResource(if (it.isDir) R.drawable.ic_folder else R.drawable.ic_file)
+        val item = items[pos]
+        h.tvName.text = item.name
+        h.tvPath.text = item.path
+        h.ivIcon.setImageResource(if (item.isDir) R.drawable.ic_folder else R.drawable.ic_file)
         h.ivEngine.setImageResource(if (Prefs.engine() == "ruffle") R.drawable.ic_play else R.drawable.ic_joystick)
-        h.ivDelete.setOnClickListener { onDelete(it) }
-        h.itemView.setOnClickListener { onPlay(it) }
+        h.ivDelete.setOnClickListener { onDelete(item) }
+        h.itemView.setOnClickListener { onPlay(item) }
     }
 
     override fun getItemCount(): Int = items.size

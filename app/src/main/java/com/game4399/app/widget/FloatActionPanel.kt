@@ -137,12 +137,14 @@ class FloatActionPanel @JvmOverloads constructor(
         }.start()
     }
 
-    private fun bindMenuItem(id: Int, action: String, icon: Int, label: Int) {
+    private fun bindMenuItem(id: Int, action: String, iconRes: Int, labelRes: Int) {
         val v = findViewById<View>(id) ?: return
-        val iv = v.findViewById<ImageView>(R.id.icon)
-        val tv = v.findViewById<TextView>(R.id.label)
-        iv.setImageResource(icon)
-        tv.setText(label)
+        // 从 menu_back / menu_forward 等 id 推出 icon_back / label_back 等
+        val name = resources.getResourceEntryName(id).removePrefix("menu_")
+        val iconId = resources.getIdentifier("icon_$name", "id", context.packageName)
+        val labelId = resources.getIdentifier("label_$name", "id", context.packageName)
+        if (iconId != 0) v.findViewById<ImageView>(iconId)?.setImageResource(iconRes)
+        if (labelId != 0) v.findViewById<TextView>(labelId)?.setText(labelRes)
         v.setOnClickListener {
             listener?.onFloatAction(action)
             close()

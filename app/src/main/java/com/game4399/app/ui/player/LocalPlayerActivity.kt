@@ -16,6 +16,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.game4399.app.BuildConfig
 import com.game4399.app.R
 import com.game4399.app.data.LocalItem
 import com.game4399.app.data.Prefs

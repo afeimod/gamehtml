@@ -31,6 +31,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.game4399.app.BuildConfig
 import com.game4399.app.R
 import com.game4399.app.data.HistoryItem
 import com.game4399.app.data.Prefs
