@@ -50,21 +50,37 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # gradle/actions/setup-android 不会卡 license，且会自动绑定 ANDROID_HOME
+      # android-actions/setup-android 偶尔会卡在 license 接受 (cmdline-tools 版本不一致)
+      # 显式指定 cmdline-tools-version 与 GitHub Runner 预装一致
       - name: Setup Android SDK
-        uses: gradle/actions/setup-android@v3
+        uses: android-actions/setup-android@v3
         with:
-          android-licenses: accept
           packages: |
             platform-tools
             platforms;android-34
             build-tools;34.0.0
 
-      - name: Show SDK path
+      - name: Accept all SDK licenses (safety net)
+        env:
+          # 让 sdkmanager 不走交互
+          JAVA_TOOL_OPTIONS: ""
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls -la $ANDROID_HOME 2>/dev/null || ls -la $ANDROID_SDK_ROOT 2>/dev/null
+          set -e
+          # 找到最新的 cmdline-tools
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          elif [ -d "$ANDROID_HOME/cmdline-tools/16.0/bin" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
+          elif [ -d "$ANDROID_HOME/cmdline-tools/12.0/bin" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/12.0/bin/sdkmanager"
+          else
+            SDKMANAGER="$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f | head -1)"
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+          # 多次执行以确保所有 license 被接受
+          (yes || true) | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          (yes || true) | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          echo "Licenses accepted"
 
       - name: Create local.properties
         run: |
@@ -74,6 +90,7 @@ jobs:
             exit 1
           fi
           echo "sdk.dir=$SDK" > local.properties
+          echo "---"
           cat local.properties
 
       - name: Set up Gradle 8.7
