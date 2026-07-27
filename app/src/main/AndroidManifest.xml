@@ -28,6 +28,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Game4399"
         android:hardwareAccelerated="true"
+        android:largeHeap="true"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:requestLegacyExternalStorage="true"

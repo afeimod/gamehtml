@@ -83,6 +83,9 @@ class WebAppInterface(private val context: Context) {
     /**
      * 读取本地 SWF 文件内容（Base64），供 JS 创建 Blob URL。
      * 绕过 WebView 对 content:// URI 的跨域限制。
+     *
+     * 注意：大文件（>30MB）不通过此方法读取，避免 readBytes() + Base64 编码
+     * 占用大量内存导致 OOM。大文件应通过 shouldInterceptRequest 流式拦截加载。
      */
     @JavascriptInterface
     fun readLocalSwf(uri: String?): String? {
@@ -90,6 +93,14 @@ class WebAppInterface(private val context: Context) {
         return try {
             Log.d("WebApp:LocalSwf", "读取本地文件: $uri")
             val parsed = android.net.Uri.parse(uri)
+            // 检查文件大小，超过 30MB 拒绝读取（避免 OOM）
+            val fileSize = try {
+                context.contentResolver.openAssetFileDescriptor(parsed, "r")?.use { it.length }
+            } catch(e: Exception) { -1L } ?: -1L
+            if (fileSize > 30L * 1024 * 1024) {
+                Log.w("WebApp:LocalSwf", "文件过大 ($fileSize bytes)，跳过 Base64 读取，请使用 URL 方式加载")
+                return null
+            }
             val data = context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
                 ?: throw java.io.IOException("无法打开文件流")
             Log.d("WebApp:LocalSwf", "读取完成: ${data.size} bytes")

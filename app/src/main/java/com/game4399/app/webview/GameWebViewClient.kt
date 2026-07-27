@@ -210,7 +210,8 @@ open class GameWebViewClient(
         """.trimIndent()
     }
 
-    /** 读取本地 SWF 文件代理（flash.local/local.swf → 真实 content:// URI） */
+    /** 读取本地 SWF 文件代理（flash.local/local.swf → 真实 content:// URI）。
+     *  直接返回文件流，不读入内存，避免大 SWF 文件 OOM。 */
     private fun interceptLocalSwfProxy(view: WebView): WebResourceResponse? {
         val uri = callback.getLocalSwfUri()
         if (uri == null) {
@@ -221,9 +222,10 @@ open class GameWebViewClient(
         return try {
             android.util.Log.d("GameWebViewClient", "local.swf 代理: 读取 $uri")
             val parsed = android.net.Uri.parse(uri)
-            val data = view.context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
+            // 直接返回文件流，不读入内存（避免大 SWF OOM）
+            val input = view.context.contentResolver.openInputStream(parsed)
                 ?: throw java.io.IOException("无法打开文件流")
-            android.util.Log.d("GameWebViewClient", "local.swf 读取完成: ${data.size} bytes")
+            android.util.Log.d("GameWebViewClient", "local.swf 流已打开: $uri")
             WebResourceResponse(
                 "application/x-shockwave-flash", null, 200, "OK",
                 mapOf(
@@ -231,7 +233,7 @@ open class GameWebViewClient(
                     "Content-Type" to "application/x-shockwave-flash",
                     "Cache-Control" to "no-cache"
                 ),
-                java.io.ByteArrayInputStream(data)
+                input
             )
         } catch (e: Exception) {
             android.util.Log.e("GameWebViewClient", "local.swf 读取失败: ${e.message}")
@@ -240,14 +242,16 @@ open class GameWebViewClient(
         }
     }
 
-    /** 读取本地 SWF 文件（content:// 或 file://），返回带 CORS 头的响应 */
+    /** 读取本地 SWF 文件（content:// 或 file://），返回带 CORS 头的响应。
+     *  直接返回文件流，不读入内存，避免大 SWF 文件 OOM。 */
     private fun interceptLocalFile(view: WebView, url: String): WebResourceResponse? {
         return try {
             android.util.Log.d("GameWebViewClient", "读取本地文件: $url")
             val uri = android.net.Uri.parse(url)
-            val data = view.context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            // 直接返回文件流，不读入内存（避免大 SWF OOM）
+            val input = view.context.contentResolver.openInputStream(uri)
                 ?: throw java.io.IOException("无法打开文件流")
-            android.util.Log.d("GameWebViewClient", "本地文件读取完成: ${data.size} bytes")
+            android.util.Log.d("GameWebViewClient", "本地文件流已打开: $url")
             WebResourceResponse(
                 "application/x-shockwave-flash", null,
                 200, "OK",
@@ -256,7 +260,7 @@ open class GameWebViewClient(
                     "Content-Type" to "application/x-shockwave-flash",
                     "Cache-Control" to "no-cache"
                 ),
-                java.io.ByteArrayInputStream(data)
+                input
             )
         } catch (e: Exception) {
             android.util.Log.e("GameWebViewClient", "本地文件读取失败: ${e.message}")
@@ -268,9 +272,6 @@ open class GameWebViewClient(
         }
     }
 
-    /** SWF 下载缓存：避免同一 SWF 被多个并发请求重复下载（Ruffle 会同时发起多个请求） */
-    private val swfCache = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
-
     /** 统一 CORS 响应头：所有 SWF 拦截响应（成功/失败/预检）都带这些头 */
     private val swfCorsHeaders = mapOf(
         "Access-Control-Allow-Origin" to "*",
@@ -280,7 +281,29 @@ open class GameWebViewClient(
         "Cache-Control" to "no-cache"
     )
 
-    /** 原生下载 SWF 文件，返回带 CORS 头的响应（含缓存 + 重试 + SSL 兼容 + Cookie/请求头转发） */
+    // ===== SWF 磁盘缓存（替代内存缓存，避免大文件 OOM）=====
+    // 之前用 ByteArray 缓存整个 SWF，下载 ~128MB 的 SWF 时
+    // ByteArrayOutputStream.grow() → Arrays.copyOf() 分配 128MB 连续内存导致 OOM 崩溃。
+    // 现在改为流式下载到磁盘文件，内存占用恒定（仅 16KB 缓冲区）。
+
+    /** SWF 磁盘缓存目录（app cacheDir，系统可在内存不足时自动清理） */
+    private val swfCacheDir: java.io.File by lazy {
+        java.io.File(com.game4399.app.App.instance.cacheDir, "swf_intercept").apply {
+            if (!exists()) mkdirs()
+        }
+    }
+
+    /** SWF 磁盘缓存：URL → 缓存文件（避免同一 SWF 被多个并发请求重复下载） */
+    private val swfFileCache = java.util.concurrent.ConcurrentHashMap<String, java.io.File>()
+
+    /** 正在下载的 URL → 锁对象（防止同一 SWF 被并发请求重复下载） */
+    private val swfDownloadLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    /** 缓存最大条目数（超出时删除最旧的一半） */
+    private val MAX_SWF_CACHE_ENTRIES = 10
+
+    /** 原生下载 SWF 文件，返回带 CORS 头的响应（含磁盘缓存 + 重试 + SSL 兼容 + Cookie/请求头转发）。
+     *  流式下载到磁盘文件，内存占用恒定（仅 16KB 缓冲区），不再因大 SWF 导致 OOM 崩溃。 */
     private fun interceptSwf(url: String, request: WebResourceRequest? = null): WebResourceResponse? {
         // 0. 处理 CORS 预检请求（OPTIONS）：直接返回 200 + CORS 头，不下载文件
         //    WebResourceRequest.getMethod() 需要 API 24+，低于 24 无法判断方法
@@ -302,107 +325,136 @@ open class GameWebViewClient(
             else -> listOf(url)
         }
 
-        // 2. 检查缓存：Ruffle/WAFlash 可能同时发起多个相同 SWF 请求，缓存避免重复下载
+        // 2. 检查磁盘缓存：Ruffle/WAFlash 可能同时发起多个相同 SWF 请求，缓存避免重复下载
         for (u in tryUrls) {
-            swfCache[u]?.let { cached ->
-                android.util.Log.d("GameWebViewClient", "SWF 缓存命中: ${cached.size} bytes, URL=$u")
+            val cachedFile = swfFileCache[u]
+            if (cachedFile != null && cachedFile.exists() && cachedFile.canRead()) {
+                android.util.Log.d("GameWebViewClient", "SWF 缓存命中: ${cachedFile.length()} bytes, URL=$u")
                 return WebResourceResponse("application/x-shockwave-flash", null, 200, "OK",
-                    swfCorsHeaders, java.io.ByteArrayInputStream(cached))
+                    swfCorsHeaders, java.io.FileInputStream(cachedFile))
+            } else if (cachedFile != null) {
+                swfFileCache.remove(u)
             }
         }
 
         // 3. 逐个 URL 尝试下载（每个 URL 最多重试 3 次）
+        //    使用 per-URL 锁防止并发请求重复下载同一 SWF
         var lastError: Exception? = null
         for (swfUrl in tryUrls) {
-            for (attempt in 1..3) {
-                try {
-                    android.util.Log.d("GameWebViewClient", "拦截 SWF 请求 (尝试 $attempt): $swfUrl")
-                    val conn = java.net.URL(swfUrl).openConnection() as java.net.HttpURLConnection
-                    // HTTPS: 信任所有证书，防止 SSL 握手失败导致 SWF 下载不了
-                    if (conn is javax.net.ssl.HttpsURLConnection) {
-                        conn.sslSocketFactory = trustAllSslSocketFactory()
-                        conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
-                    }
-                    conn.connectTimeout = 10000
-                    conn.readTimeout = 20000
-                    conn.requestMethod = "GET"
-                    conn.instanceFollowRedirects = true
-
-                    // 转发原始请求头（User-Agent, Accept 等），模拟浏览器行为
-                    // 排除需要自行设置的、条件请求的、和 CORS 相关的 header
-                    request?.requestHeaders?.forEach { (key, value) ->
-                        val lk = key.lowercase()
-                        if (lk !in setOf(
-                                "cookie", "referer", "range", "if-modified-since", "if-none-match",
-                                "accept-encoding", "origin", "access-control-request-method",
-                                "access-control-request-headers", "host", "content-length"
-                            )) {
-                            conn.setRequestProperty(key, value)
+            val lock = swfDownloadLocks.computeIfAbsent(swfUrl) { Any() }
+            try {
+                synchronized(lock) {
+                    // 双重检查：等待锁期间其他线程可能已下载完成
+                    swfFileCache[swfUrl]?.let { f ->
+                        if (f.exists() && f.canRead()) {
+                            android.util.Log.d("GameWebViewClient", "SWF 锁等待后缓存命中: ${f.length()} bytes")
+                            return WebResourceResponse("application/x-shockwave-flash", null, 200, "OK",
+                                swfCorsHeaders, java.io.FileInputStream(f))
                         }
                     }
-                    // 确保 User-Agent 存在（完整浏览器 UA，避免被服务器拒绝）
-                    if (request?.requestHeaders?.none { it.key.equals("User-Agent", true) } != false) {
-                        conn.setRequestProperty("User-Agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    }
-                    conn.setRequestProperty("Accept", "*/*")
-                    // 不请求 gzip，避免手动解压
-                    conn.setRequestProperty("Accept-Encoding", "identity")
 
-                    // 转发 Cookie（从 CookieManager 获取，防止防盗链/登录态丢失）
-                    try {
-                        val cookies = android.webkit.CookieManager.getInstance().getCookie(swfUrl)
-                        if (cookies != null && cookies.isNotEmpty()) {
-                            conn.setRequestProperty("Cookie", cookies)
-                            android.util.Log.d("GameWebViewClient", "转发 Cookie: ${cookies.length} chars")
-                        }
-                    } catch(e: Exception) {}
-
-                    // 添加 Referer（防盗链），从 SWF URL 推导同源 origin
-                    if (swfUrl.contains("4399.com")) {
-                        conn.setRequestProperty("Referer", "https://www.4399.com/")
-                    } else {
+                    for (attempt in 1..3) {
+                        var conn: java.net.HttpURLConnection? = null
                         try {
-                            val uri = android.net.Uri.parse(swfUrl)
-                            conn.setRequestProperty("Referer", "${uri.scheme}://${uri.host}/")
-                        } catch(e: Exception) {
-                            conn.setRequestProperty("Referer", swfUrl)
+                            android.util.Log.d("GameWebViewClient", "拦截 SWF 请求 (尝试 $attempt): $swfUrl")
+                            conn = java.net.URL(swfUrl).openConnection() as java.net.HttpURLConnection
+                            // HTTPS: 信任所有证书，防止 SSL 握手失败导致 SWF 下载不了
+                            if (conn is javax.net.ssl.HttpsURLConnection) {
+                                conn.sslSocketFactory = trustAllSslSocketFactory()
+                                conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                            }
+                            conn.connectTimeout = 10000
+                            conn.readTimeout = 20000
+                            conn.requestMethod = "GET"
+                            conn.instanceFollowRedirects = true
+
+                            // 转发原始请求头（User-Agent, Accept 等），模拟浏览器行为
+                            // 排除需要自行设置的、条件请求的、和 CORS 相关的 header
+                            request?.requestHeaders?.forEach { (key, value) ->
+                                val lk = key.lowercase()
+                                if (lk !in setOf(
+                                        "cookie", "referer", "range", "if-modified-since", "if-none-match",
+                                        "accept-encoding", "origin", "access-control-request-method",
+                                        "access-control-request-headers", "host", "content-length"
+                                    )) {
+                                    conn.setRequestProperty(key, value)
+                                }
+                            }
+                            // 确保 User-Agent 存在（完整浏览器 UA，避免被服务器拒绝）
+                            if (request?.requestHeaders?.none { it.key.equals("User-Agent", true) } != false) {
+                                conn.setRequestProperty("User-Agent",
+                                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                            }
+                            conn.setRequestProperty("Accept", "*/*")
+                            // 不请求 gzip，避免手动解压
+                            conn.setRequestProperty("Accept-Encoding", "identity")
+
+                            // 转发 Cookie（从 CookieManager 获取，防止防盗链/登录态丢失）
+                            try {
+                                val cookies = android.webkit.CookieManager.getInstance().getCookie(swfUrl)
+                                if (cookies != null && cookies.isNotEmpty()) {
+                                    conn.setRequestProperty("Cookie", cookies)
+                                    android.util.Log.d("GameWebViewClient", "转发 Cookie: ${cookies.length} chars")
+                                }
+                            } catch(e: Exception) {}
+
+                            // 添加 Referer（防盗链），从 SWF URL 推导同源 origin
+                            if (swfUrl.contains("4399.com")) {
+                                conn.setRequestProperty("Referer", "https://www.4399.com/")
+                            } else {
+                                try {
+                                    val uri = android.net.Uri.parse(swfUrl)
+                                    conn.setRequestProperty("Referer", "${uri.scheme}://${uri.host}/")
+                                } catch(e: Exception) {
+                                    conn.setRequestProperty("Referer", swfUrl)
+                                }
+                            }
+
+                            conn.connect()
+                            val responseCode = conn.responseCode
+                            if (responseCode in 200..299) {
+                                // 流式下载到磁盘文件，避免大文件 OOM
+                                val cachedFile = streamDownloadToFile(conn, swfUrl)
+                                conn.disconnect()
+                                if (cachedFile != null) {
+                                    android.util.Log.d("GameWebViewClient", "SWF 下载完成: ${cachedFile.length()} bytes, URL=$swfUrl")
+                                    // 存入磁盘缓存并清理超量条目
+                                    trimSwfCache()
+                                    swfFileCache[swfUrl] = cachedFile
+                                    return WebResourceResponse(
+                                        "application/x-shockwave-flash", null,
+                                        200, "OK", swfCorsHeaders,
+                                        java.io.FileInputStream(cachedFile)
+                                    )
+                                }
+                            } else if (responseCode in 500..599 && attempt < 3) {
+                                android.util.Log.w("GameWebViewClient", "SWF 服务器错误 $responseCode, 重试...")
+                                Thread.sleep(500L * attempt)
+                                continue
+                            } else {
+                                android.util.Log.w("GameWebViewClient", "SWF 下载失败: HTTP $responseCode, URL=$swfUrl")
+                                lastError = RuntimeException("HTTP $responseCode")
+                                break // 换下一个 URL 尝试
+                            }
+                        } catch (e: Exception) {
+                            lastError = e
+                            android.util.Log.w("GameWebViewClient", "SWF 下载异常 (尝试 $attempt): ${e.message}")
+                            if (attempt < 3) Thread.sleep(500L * attempt)
+                        } finally {
+                            conn?.disconnect()
                         }
                     }
-
-                    conn.connect()
-                    val responseCode = conn.responseCode
-                    if (responseCode in 200..299) {
-                        val data = conn.inputStream.readBytes()
-                        android.util.Log.d("GameWebViewClient", "SWF 下载完成: ${data.size} bytes, URL=$swfUrl")
-                        // 存入缓存（限制缓存大小）
-                        if (swfCache.size >= 10) swfCache.clear()
-                        swfCache[swfUrl] = data
-                        return WebResourceResponse(
-                            "application/x-shockwave-flash", null,
-                            200, "OK", swfCorsHeaders,
-                            java.io.ByteArrayInputStream(data)
-                        )
-                    } else if (responseCode in 500..599 && attempt < 3) {
-                        android.util.Log.w("GameWebViewClient", "SWF 服务器错误 $responseCode, 重试...")
-                        Thread.sleep(500L * attempt)
-                        continue
-                    } else {
-                        android.util.Log.w("GameWebViewClient", "SWF 下载失败: HTTP $responseCode, URL=$swfUrl")
-                        lastError = RuntimeException("HTTP $responseCode")
-                        break // 换下一个 URL 尝试
-                    }
-                } catch (e: Exception) {
-                    lastError = e
-                    android.util.Log.w("GameWebViewClient", "SWF 下载异常 (尝试 $attempt): ${e.message}")
-                    if (attempt < 3) Thread.sleep(500L * attempt)
                 }
+            } finally {
+                swfDownloadLocks.remove(swfUrl)
             }
             // 再次检查缓存：可能在重试期间其他线程已成功下载
-            swfCache[swfUrl]?.let { cached ->
-                android.util.Log.d("GameWebViewClient", "SWF 重试期间缓存命中: ${cached.size} bytes")
-                return WebResourceResponse("application/x-shockwave-flash", null, 200, "OK",
-                    swfCorsHeaders, java.io.ByteArrayInputStream(cached))
+            swfFileCache[swfUrl]?.let { f ->
+                if (f.exists() && f.canRead()) {
+                    android.util.Log.d("GameWebViewClient", "SWF 重试期间缓存命中: ${f.length()} bytes")
+                    return WebResourceResponse("application/x-shockwave-flash", null, 200, "OK",
+                        swfCorsHeaders, java.io.FileInputStream(f))
+                }
             }
         }
 
@@ -415,6 +467,47 @@ open class GameWebViewClient(
         // 返回 502 + CORS 头让引擎知道请求失败，优雅处理（如跳过广告 SWF）。
         return WebResourceResponse("application/x-shockwave-flash", null, 502, "Bad Gateway",
             swfCorsHeaders, java.io.ByteArrayInputStream(ByteArray(0)))
+    }
+
+    /** 流式下载 SWF 到缓存文件（16KB 分块写入，不将整个文件读入内存，避免 OOM） */
+    private fun streamDownloadToFile(conn: java.net.HttpURLConnection, swfUrl: String): java.io.File? {
+        val safeName = java.lang.Integer.toHexString(swfUrl.hashCode())
+        val tmpFile = java.io.File(swfCacheDir, "swf_${safeName}_${System.currentTimeMillis()}.bin")
+        return try {
+            conn.inputStream.use { input ->
+                java.io.FileOutputStream(tmpFile).use { output ->
+                    val chunk = ByteArray(16 * 1024) // 16KB 缓冲区，内存占用恒定
+                    while (true) {
+                        if (Thread.currentThread().isInterrupted) {
+                            tmpFile.delete()
+                            return null
+                        }
+                        val bytesRead = input.read(chunk)
+                        if (bytesRead == -1) break
+                        output.write(chunk, 0, bytesRead)
+                    }
+                }
+            }
+            tmpFile
+        } catch (e: Exception) {
+            android.util.Log.w("GameWebViewClient", "SWF 流式下载失败: ${e.message}")
+            tmpFile.delete()
+            null
+        }
+    }
+
+    /** 清理超量的磁盘缓存（删除最旧的一半文件，控制磁盘占用） */
+    private fun trimSwfCache() {
+        if (swfFileCache.size < MAX_SWF_CACHE_ENTRIES) return
+        val toRemove = swfFileCache.entries
+            .filter { it.value.exists() }
+            .sortedBy { it.value.lastModified() }
+            .take(swfFileCache.size / 2)
+        for ((key, file) in toRemove) {
+            swfFileCache.remove(key)
+            if (file.exists()) file.delete()
+        }
+        android.util.Log.d("GameWebViewClient", "SWF 缓存清理: 删除 ${toRemove.size} 个旧文件")
     }
 
     /** 信任所有 SSL 证书的 SSLSocketFactory（用于 SWF 下载兼容） */
