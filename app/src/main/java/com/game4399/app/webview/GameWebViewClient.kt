@@ -40,6 +40,55 @@ open class GameWebViewClient(
         "ad.4399.com", "stat.4399.com", "analytics.4399.com"
     )
 
+    /** Chrome 87 桌面 UA（游戏页面使用，让 4399 Flash 检测通过） */
+    private val CHROME_87_UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36"
+
+    /** Chrome 120 桌面 UA（非游戏页面使用，保留极速模式） */
+    private val CHROME_120_UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    /**
+     * 判断 URL 是否为游戏页面（匹配旧 APK 的 f(str) 逻辑）。
+     *
+     * - 4399 首页 / /flash / /category 列表页 → false（使用 Chrome 120 极速模式）
+     * - .htm / .html / play. 游戏页 → true（使用 Chrome 87 兼容模式）
+     * - /flash/ 下有子路径的游戏页 → true
+     *
+     * 此判断用于：
+     * 1. HTTP 拦截时选择 User-Agent（Chrome 87 vs 120）
+     * 2. 注入脚本中是否降级 navigator.userAgent
+     */
+    fun isGamePage(url: String): Boolean {
+        // 去除 query string 和 fragment
+        val cleanUrl = url.substringBefore("?").substringBefore("#")
+        // 列表页/首页：不降级 UA
+        if (cleanUrl.endsWith("4399.com/", true) || cleanUrl.endsWith("4399.com", true) ||
+            cleanUrl.endsWith("/flash/", true) || cleanUrl.endsWith("/flash", true) ||
+            cleanUrl.endsWith("/category", true) || cleanUrl.endsWith("/category/", true)) {
+            return false
+        }
+        // 游戏页：.htm / .html / play.
+        if (cleanUrl.contains(".htm", true) || cleanUrl.contains(".html", true) || cleanUrl.contains("play.", true)) {
+            return true
+        }
+        // /flash/ 下的子路径（有具体游戏 ID）
+        if (cleanUrl.contains("/flash/", true)) {
+            // 查找第 6 个 "/" 之后的内容
+            var idx = -1
+            var count = 0
+            for (i in cleanUrl.indices) {
+                if (cleanUrl[i] == '/') {
+                    count++
+                    if (count == 6) { idx = i; break }
+                }
+            }
+            val sub = if (idx == -1) cleanUrl else cleanUrl.substring(idx + 1)
+            if (sub.isNotEmpty()) return true
+        }
+        return false
+    }
+
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val url = request.url?.toString() ?: return false
         if (url.endsWith(".swf", ignoreCase = true)) {
@@ -88,15 +137,188 @@ open class GameWebViewClient(
             return interceptSwf(url, request)
         }
 
-        // 不再拦截 HTML 页面！
-        // 之前 interceptHtml 会自己发 HTTP 请求获取 HTML 并修改，导致：
-        // - 编码处理不当→乱码（GBK 网站用错误 charset 解码）
-        // - 丢失 WebView 原生 cookie/session 管理→登录失败
-        // - 破坏缓存、重定向、条件请求机制
-        // 现在 Flash 注入完全通过 onPageStarted/onPageFinished 的 evaluateJavascript 异步完成
-        // SWF 提取功能仅在用户点击"提取 SWF"时通过 JS 嗅探器扫描页面
+        // 6. HTML 响应拦截：同步注入 Flash 脚本（仅主框架 + Flash 启用时）
+        //    旧版 2.1 APK 使用此方式：在 shouldInterceptRequest 中拦截 HTTP 响应，
+        //    将 Flash 伪造 + 引擎注入脚本直接插入 HTML 的 <head> 之后。
+        //    这解决了 evaluateJavascript 异步注入导致的 WAFlash 渲染模糊问题：
+        //    - 异步注入时，页面 JS 在 Flash 伪造之前执行，导致 WAFlash canvas 尺寸错误
+        //    - 同步注入确保 WAFlash hooks 在页面创建 Flash 元素前就位
+        //    编码处理：从 Content-Type 头读取 charset，正确解码 GBK/GB2312 等编码。
+        //    Cookie/Session：转发原始请求头（含 Cookie）和响应头（含 Set-Cookie）。
+        if (PrefsManager.isFlashEnabled &&
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N &&
+            request.isForMainFrame &&
+            (url.startsWith("http://") || url.startsWith("https://")) &&
+            callback.shouldInjectRuffle(url)) {
+            try {
+                val htmlResponse = interceptHtml(url, request)
+                if (htmlResponse != null) {
+                    return htmlResponse
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("GameWebViewClient", "HTML 拦截异常: ${e.message}")
+            }
+            // 拦截失败时回退到 WebView 原生处理 + evaluateJavascript 异步注入
+        }
 
         return super.shouldInterceptRequest(view, request)
+    }
+
+    /**
+     * 拦截 HTML 响应，同步注入 Flash 支持脚本（在页面 JS 执行前）。
+     *
+     * 旧版 2.1 APK 使用此方式：在 shouldInterceptRequest 中拦截 HTTP 响应，
+     * 将 Flash 伪造 + 引擎注入脚本直接插入 HTML 的 <head> 之后。
+     * 这解决了 evaluateJavascript 异步注入导致的 WAFlash 渲染模糊问题：
+     * - 异步注入时，页面 JS 可能在 Flash 伪造之前执行，导致 WAFlash canvas 尺寸错误
+     * - 同步注入确保 WAFlash hooks 在页面创建 Flash 元素前就位
+     *
+     * 编码处理：从 Content-Type 头读取 charset，正确解码 GBK/GB2312 等编码。
+     * Cookie/Session：转发原始请求头（含 Cookie）和响应头（含 Set-Cookie）。
+     *
+     * @param url 请求 URL
+     * @param request 原始请求（用于转发请求头）
+     * @return 修改后的 WebResourceResponse，或 null 表示不拦截（回退到原生处理）
+     */
+    private fun interceptHtml(url: String, request: WebResourceRequest): WebResourceResponse? {
+        var conn: java.net.HttpURLConnection? = null
+        try {
+            // 1. 发起 HTTP 请求（转发原始请求头，保留 Cookie/UA）
+            conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                if (this is javax.net.ssl.HttpsURLConnection) {
+                    sslSocketFactory = trustAllSslSocketFactory()
+                    hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                }
+                connectTimeout = 15000
+                readTimeout = 20000
+                val method = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    request.method ?: "GET"
+                } else {
+                    "GET"
+                }
+                requestMethod = if (method == "POST") "GET" else method  // HTML 拦截仅用 GET
+                instanceFollowRedirects = true
+
+                // 转发原始请求头（含 Cookie、Referer 等）
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    request.requestHeaders?.forEach { (key, value) ->
+                        val lk = key.lowercase()
+                        // 排除 POST 相关头和编码相关头（我们用 GET 请求）
+                        // 排除 User-Agent（下面根据游戏页面条件设置）
+                        if (lk !in setOf("content-type", "content-length", "transfer-encoding",
+                                "accept-encoding", "user-agent")) {
+                            setRequestProperty(key, value)
+                        }
+                    }
+                }
+                // 确保不使用压缩（我们需要读取原始 HTML）
+                setRequestProperty("Accept-Encoding", "identity")
+                // 设置 User-Agent：游戏页面用 Chrome 87（4399 Flash 检测兼容），
+                // 非游戏页面用 Chrome 120（极速模式）。与旧 APK c() 方法一致。
+                setRequestProperty("User-Agent",
+                    if (isGamePage(url)) CHROME_87_UA else CHROME_120_UA)
+            }
+
+            conn.connect()
+            val responseCode = conn.responseCode
+            if (responseCode !in 200..299) {
+                return null
+            }
+
+            // 2. 解析 Content-Type，获取 MIME 和 charset
+            val contentType = conn.contentType ?: ""
+            val (mimeType, charset) = parseContentType(contentType)
+
+            // 非 HTML 不拦截（让 WebView 原生处理）
+            if (!mimeType.equals("text/html", true) && !mimeType.equals("application/xhtml+xml", true)) {
+                return null
+            }
+
+            // 3. 读取原始字节（用于 SWF 魔术字节检测，避免编码转换破坏二进制数据）
+            val rawBytes = conn.inputStream.use { it.readBytes() }
+
+            // 4. 检测 SWF 魔术字节（部分服务器返回错误 Content-Type）
+            if (rawBytes.size >= 3) {
+                val b0 = rawBytes[0].toInt() and 0xFF
+                val b1 = rawBytes[1].toInt() and 0xFF
+                val b2 = rawBytes[2].toInt() and 0xFF
+                // F(70)/C(67)/Z(90) + W(87) + S(83) = SWF 签名
+                if ((b0 == 70 || b0 == 67 || b0 == 90) && b1 == 87 && b2 == 83) {
+                    android.util.Log.d("GameWebViewClient", "HTML 拦截检测到 SWF 魔术字节: $url")
+                    return WebResourceResponse("application/x-shockwave-flash", null, 200, "OK",
+                        mapOf("Access-Control-Allow-Origin" to "*",
+                              "Content-Type" to "application/x-shockwave-flash",
+                              "Cache-Control" to "no-cache"),
+                        ByteArrayInputStream(rawBytes))
+                }
+            }
+
+            // 5. 读取 HTML 内容（使用正确的编码，解决 GBK 网站乱码问题）
+            val encoding = charset ?: "UTF-8"
+            val cs = try { java.nio.charset.Charset.forName(encoding) }
+                     catch (e: Exception) { java.nio.charset.Charset.forName("UTF-8") }
+            val html = String(rawBytes, cs)
+
+            // 6. 注入 Flash 脚本（插入 <head> 之后，确保在页面 JS 执行前运行）
+            val injectScript = buildFlashInjectScript(url)
+            val modifiedHtml = injectScriptIntoHead(html, injectScript)
+
+            // 7. 收集响应头（转发 Set-Cookie 等，保持 Cookie/Session）
+            val responseHeaders = mutableMapOf<String, String>()
+            conn.headerFields?.forEach { (key, values) ->
+                if (key != null && values.isNotEmpty()) {
+                    responseHeaders[key] = values.joinToString(", ")
+                }
+            }
+            responseHeaders["Access-Control-Allow-Origin"] = "*"
+
+            android.util.Log.d("GameWebViewClient", "HTML 注入成功: $url (${modifiedHtml.length} chars)")
+
+            // 8. 返回修改后的 HTML（使用 UTF-8 编码，与旧 APK 一致）
+            return WebResourceResponse(
+                "text/html", "UTF-8", responseCode,
+                conn.responseMessage ?: "OK", responseHeaders,
+                ByteArrayInputStream(modifiedHtml.toByteArray(java.nio.charset.StandardCharsets.UTF_8))
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("GameWebViewClient", "HTML 拦截失败: ${e.message}")
+            return null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    /** 解析 Content-Type 头，返回 (mimeType, charset) */
+    private fun parseContentType(contentType: String): Pair<String, String?> {
+        val parts = contentType.split(";").map { it.trim() }
+        val mime = parts.firstOrNull()?.lowercase() ?: ""
+        val charsetPart = parts.firstOrNull { it.startsWith("charset=", ignoreCase = true) }
+        val charset = charsetPart?.substringAfter("=")?.trim()?.removeSurrounding("\"")
+        return mime to charset
+    }
+
+    /** 将脚本注入 HTML 的 <head> 之后（或 <html> 之后，或文档开头） */
+    private fun injectScriptIntoHead(html: String, script: String): String {
+        // 查找 <head ...> 标签
+        val headIdx = html.indexOf("<head", ignoreCase = true)
+        if (headIdx >= 0) {
+            val headEnd = html.indexOf(">", headIdx)
+            if (headEnd >= 0) {
+                val pos = headEnd + 1
+                return html.substring(0, pos) + script + html.substring(pos)
+            }
+        }
+        // 查找 <html ...> 标签
+        val htmlIdx = html.indexOf("<html", ignoreCase = true)
+        if (htmlIdx >= 0) {
+            val htmlEnd = html.indexOf(">", htmlIdx)
+            if (htmlEnd >= 0) {
+                val pos = htmlEnd + 1
+                return html.substring(0, pos) + script + html.substring(pos)
+            }
+        }
+        // 都没有找到，插入到文档开头
+        return script + html
     }
 
     /** 构建 Flash 支持伪造 + Ruffle/WAFlash 注入脚本（公开供 GameActivity 在 onPageFinished 兜底使用） */
@@ -105,7 +327,9 @@ open class GameWebViewClient(
         return """
         <script>
         (function(){
-          if(window.__flashPolyfilled)return;window.__flashPolyfilled=true;
+          // 使用与旧 APK 一致的标志位：__flashFaked 和 __flashHideInjected
+          // 这样 HTML 同步注入后，evaluateJavascript 备份脚本会自动跳过
+          if(window.__flashFaked)return;window.__flashFaked=true;window.__flashHideInjected=true;
           // === 1. 伪造 Flash 插件支持（必须在页面 JS 之前） ===
           try {
             var fp = {name:'Shockwave Flash',filename:'libflashplayer.so',description:'Shockwave Flash 32.0 r0',length:1,
@@ -142,68 +366,280 @@ open class GameWebViewClient(
             window.ActiveXObject = function(n){if(n&&/ShockwaveFlash/i.test(n))return {SetVariable:function(){},Variable:function(){return ''}};throw new Error('x');};
           } catch(e) {}
 
-          // === 2. 伪造 document.referrer ===
+          // === 1.5 伪造 navigator.userAgent（仅游戏页面：降级到 Chrome 87，让 4399 Flash 检测通过） ===
+          //         主页/列表页不降级，保留极速模式。与旧 APK a(str) + f(str) 逻辑一致。
+          ${if (isGamePage(pageUrl)) """
           try {
-            Object.defineProperty(document,'referrer',{get:function(){return '$pageUrl';},configurable:true});
+            var curUA = navigator.userAgent || '';
+            var chromeMatch = curUA.match(/Chrome\/(\d+)/);
+            if (chromeMatch && parseInt(chromeMatch[1]) >= 88) {
+              var newUA = curUA.replace(/Chrome\/[\d.]+/, 'Chrome/87.0.4280.141');
+              Object.defineProperty(navigator, 'userAgent', {get:function(){return newUA;}, configurable:true});
+              Object.defineProperty(navigator, 'appVersion', {get:function(){return newUA.replace('Mozilla/','');}, configurable:true});
+            }
           } catch(e) {}
+          """ else ""}
+
+          // === 2. 伪造 document.referrer（固定为 4399 主站，绕过防盗链检测） ===
+          try {
+            Object.defineProperty(document,'referrer',{get:function(){return 'https://www.4399.com/';},configurable:true});
+          } catch(e) {}
+
+          // === 2.5 自动关闭 4399 "不支持 Flash" 弹窗 ===
+          //     4399 检测到"无 Flash 插件"会弹出模态框，自动关闭。与旧 APK a(str) 一致。
+          (function(){
+            var flashKeywords = ['不支持打开游戏', 'Flash官方插件', '兼容模式', '继续游戏',
+              '不支持flash', '极速模式', 'QQ浏览器', '搜狗浏览器', '360浏览器',
+              'EDGE浏览器请按教程', '无需下载插件打开即玩', '为您提供以下方案',
+              '当前浏览器或模式不支持', '下载官方Flash', '下载flash', 'flash插件',
+              'web新游专区', '4399游戏大厅', '请使用以下浏览器', 'PPAPI', 'NPAPI'];
+            var popupSelectors = '.flash_tips,.flash-tips,#flash_tips,#flash-tips,.no_flash,.no-flash,#no_flash,#no-flash,.browser_tip,.browser-tip,#browser_tip,.unsupported,.unsupport,#unsupported,.game_tips,.game-tips,#game_tips,.alert_flash,.alert-flash,#alert_flash,#flashmsg,.flashmsg,#flash_msg,.pop_flash,.pop-flash,#pop_flash,.modal-flash,#modal-flash,.compatible_tip,.compatible-tip,.flash_prompt,.flash-prompt,#flash_prompt';
+            function closeInDoc(doc) {
+              if (!doc) return;
+              try {
+                doc.querySelectorAll(popupSelectors).forEach(function(el){
+                  el.style.display = 'none';
+                  try { el.remove(); } catch(e){}
+                });
+                var btns = doc.querySelectorAll('a, button, span, div, i, img');
+                for (var i = 0; i < btns.length; i++) {
+                  var b = btns[i];
+                  var cls = (b.className || '').toString();
+                  var txt = (b.textContent || '').trim();
+                  if (txt === '×' || txt === 'X' || txt === '关闭' ||
+                      /close| Close|关闭|shut/i.test(cls)) {
+                    if (b.offsetWidth > 0 || b.offsetHeight > 0) {
+                      try { b.click(); } catch(e){}
+                    }
+                  }
+                }
+                var all = doc.querySelectorAll('div, section, aside, table, ul, li');
+                for (var i = 0; i < all.length; i++) {
+                  var el = all[i];
+                  var text = el.textContent || '';
+                  var matchCount = 0;
+                  for (var k = 0; k < flashKeywords.length; k++) {
+                    if (text.indexOf(flashKeywords[k]) >= 0) matchCount++;
+                  }
+                  if (matchCount >= 2) {
+                    el.remove();
+                    console.log('[Flash] 已移除不支持Flash弹窗 (匹配' + matchCount + '个关键词)');
+                  }
+                }
+                var masks = doc.querySelectorAll('[class*="mask"], [class*="overlay"], [class*="Mask"], [class*="Overlay"], [id*="mask"], [id*="overlay"]');
+                masks.forEach(function(m){
+                  var t = (m.textContent || '');
+                  var mc = 0;
+                  for (var k = 0; k < flashKeywords.length; k++) { if (t.indexOf(flashKeywords[k]) >= 0) mc++; }
+                  if (mc >= 1 || t.length < 5) { m.style.display = 'none'; }
+                });
+              } catch(e) {}
+            }
+            function closeFlashDialog() {
+              closeInDoc(document);
+              var iframes = document.querySelectorAll('iframe');
+              for (var i = 0; i < iframes.length; i++) {
+                try { closeInDoc(iframes[i].contentDocument); } catch(e) {}
+              }
+            }
+            var checkCount = 0;
+            var interval = setInterval(function(){
+              closeFlashDialog();
+              checkCount++;
+              if (checkCount > 50) clearInterval(interval);
+            }, 200);
+            if (window.MutationObserver) {
+              var obs = new MutationObserver(function(){ closeFlashDialog(); });
+              try { obs.observe(document.documentElement, {childList:true, subtree:true}); } catch(e){}
+              setTimeout(function(){ obs.disconnect(); }, 15000);
+            }
+          })();
 
           // === 3. Ruffle polyfill（Ruffle 模式） ===
           ${if (!isWaflash) """
           window.RufflePlayer = window.RufflePlayer || {};
           window.RufflePlayer.config = {
+            publicPath: 'https://flash.local/ruffle/',
             autoplay: 'on',
             unmuteOverlay: 'visible',
             backgroundColor: '#000000',
             letterbox: 'on',
             polyfills: true,
+            allowScriptAccess: true,
+            allowFullscreen: false,
+            upgradeToHttps: true,
+            scale: 'showAll',
             maxExecutionDuration: 30,
             logLevel: 'warn'
           };
           var ruffleScript = document.createElement('script');
           ruffleScript.src = 'https://flash.local/ruffle/ruffle.js';
           ruffleScript.onload = function() {
+            window.__ruffleLoaded = true;
             console.log('[Ruffle] 引擎加载完成');
           };
           document.head.appendChild(ruffleScript);
           """ else """
-          // === WAFlash 模式：hook Flash 创建，跳转到 WAFlash 播放器 ===
-          var __wafRedirected = false;
-          function __wafRedirect(swfUrl, baseUrl) {
-            if (__wafRedirected || !swfUrl) return;
-            var isSwf = /\.swf/i.test(swfUrl) || /\/dw-\d+/i.test(swfUrl) ||
-                        /flash\d*\//i.test(swfUrl) || /mm\.4399\.com/i.test(swfUrl);
-            if (!isSwf) return;
-            __wafRedirected = true;
+          // --- WAFlash 页内播放模式（不重定向，保持页面网络上下文） ---
+          // 旧版 2.1 APK 使用页内 canvas 渲染，画面清晰；
+          // 重定向到 waflash.html 会丢失页面 viewport/zoom 上下文导致模糊。
+          window.__waflashDetect = true;  // 防止 WAFLASH_DETECT_SCRIPT 备份脚本重复执行
+          var __wafPlayed = false;
+          var __wafEngineReady = false;
+          var __wafModule = null;
+
+          // 预加载 WAFlash 引擎
+          function __wafLoadEngine() {
+            if (window.__wafEngineLoading) return;
+            window.__wafEngineLoading = true;
+            import('https://flash.local/waflash/waflash-player.min.js').then(function(module) {
+              __wafEngineReady = true;
+              __wafModule = module;
+              console.log('[WAFlash] 引擎加载完成');
+              if (window.__pendingSwfUrl) {
+                __wafPlayInPage(window.__pendingSwfUrl, window.__pendingBaseUrl);
+              }
+            }).catch(function(err) {
+              console.error('[WAFlash] 引擎加载失败: ' + (err.message || err));
+            });
+          }
+
+          // 页内播放 SWF（在当前页面创建 canvas，不跳转）
+          function __wafPlayInPage(swfUrl, baseUrl) {
+            if (__wafPlayed || !swfUrl) return;
+            // 不再按 URL 模式过滤：只要检测到 Flash 元素就尝试播放
+            // 很多在线游戏的 SWF URL 不含 .swf 或 4399 特征（如 PHP 动态 URL、CDN 路径等）
+            __wafPlayed = true;
             try { swfUrl = new URL(swfUrl, baseUrl || window.location.href).href; } catch(e) {}
-            console.log('[WAFlash] 检测到 SWF: ' + swfUrl);
-            if (window.Android && window.Android.openSwf) {
-              window.Android.openSwf(swfUrl, baseUrl || window.location.href);
+            console.log('[WAFlash] 页内播放 SWF: ' + swfUrl);
+
+            // 引擎未就绪：先缓存 URL，引擎加载完自动播放
+            if (!__wafEngineReady) {
+              window.__pendingSwfUrl = swfUrl;
+              window.__pendingBaseUrl = baseUrl;
+              __wafLoadEngine();
+              return;
+            }
+
+            // 创建全屏 canvas 容器
+            var container = document.createElement('div');
+            container.id = '__waflash_container';
+            container.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;z-index:99999;background:#000;';
+            var canvas = document.createElement('canvas');
+            canvas.className = 'waflashCanvas';
+            canvas.id = 'canvas';
+            canvas.style.cssText = 'width:100%;height:100%;display:block;outline:none;';
+            canvas.setAttribute('tabindex', '1');
+            container.appendChild(canvas);
+
+            // 隐藏页面其他内容
+            var bc = document.body.children;
+            for (var i = 0; i < bc.length; i++) {
+              if (bc[i] !== container) { try { bc[i].style.display = 'none'; } catch(e){} }
+            }
+            document.body.appendChild(container);
+            canvas.focus();
+
+            // 设置 base 标签（SWF 内部相对路径以原始页面 URL 为 base）
+            if (baseUrl) {
+              try {
+                var bo = new URL(baseUrl);
+                var bt = document.createElement('base');
+                bt.href = bo.origin + bo.pathname.substring(0, bo.pathname.lastIndexOf('/') + 1);
+                document.head.appendChild(bt);
+                console.log('[WAFlash] base href: ' + bt.href);
+              } catch(e) {}
+            }
+
+            // 调用 WAFlash 引擎播放
+            var fn = (__wafModule && __wafModule.createWaflash) || window.createWaflash;
+            if (fn) {
+              try {
+                fn(swfUrl, { gpu: true });
+                console.log('[WAFlash] 页内播放已启动: ' + swfUrl);
+              } catch(e) {
+                console.error('[WAFlash] 播放失败: ' + e.message);
+                // 回退到独立播放器页面
+                if (window.Android && window.Android.openSwf) {
+                  window.Android.openSwf(swfUrl, baseUrl || window.location.href);
+                }
+              }
             } else {
-              window.location.href = 'https://flash.local/waflash.html?swf=' + encodeURIComponent(swfUrl);
+              console.log('[WAFlash] createWaflash 未找到，引擎可能已自动启动');
             }
           }
+
+          // 预加载引擎
+          __wafLoadEngine();
+
           // hook swfobject.embedSWF
           if (window.swfobject && window.swfobject.embedSWF) {
             var oe = window.swfobject.embedSWF;
-            window.swfobject.embedSWF = function(){__wafRedirect(arguments[0],window.location.href);return oe.apply(this,arguments);};
+            window.swfobject.embedSWF = function(){__wafPlayInPage(arguments[0],window.location.href);return oe.apply(this,arguments);};
           } else {
-            var _swo; Object.defineProperty(window,'swfobject',{configurable:true,get:function(){return _swo;},set:function(v){_swo=v;if(v&&v.embedSWF){var o=v.embedSWF;v.embedSWF=function(){__wafRedirect(arguments[0],window.location.href);return o.apply(this,arguments);};}}});
+            var _swo; Object.defineProperty(window,'swfobject',{configurable:true,get:function(){return _swo;},set:function(v){_swo=v;if(v&&v.embedSWF){var o=v.embedSWF;v.embedSWF=function(){__wafPlayInPage(arguments[0],window.location.href);return o.apply(this,arguments);};}}});
           }
           // hook createFlash (mflash-player)
-          function __hookCF(obj){if(!obj||!obj.createFlash||obj.__wafH)return;obj.__wafH=true;var o=obj.createFlash;obj.createFlash=function(){var u=null;if(typeof arguments[0]==='string')u=arguments[0];else if(arguments[0]&&typeof arguments[0]==='object')u=arguments[0].url||arguments[0].src||arguments[0].swf||arguments[0].movie;if(u)__wafRedirect(u,window.location.href);return o.apply(this,arguments);};}
+          function __hookCF(obj){if(!obj||!obj.createFlash||obj.__wafH)return;obj.__wafH=true;var o=obj.createFlash;obj.createFlash=function(){var u=null;if(typeof arguments[0]==='string')u=arguments[0];else if(arguments[0]&&typeof arguments[0]==='object')u=arguments[0].url||arguments[0].src||arguments[0].swf||arguments[0].movie;if(u)__wafPlayInPage(u,window.location.href);return o.apply(this,arguments);};}
           if(window['mflash-player'])__hookCF(window['mflash-player']);
           var _mp;Object.defineProperty(window,'mflash-player',{configurable:true,get:function(){return _mp;},set:function(v){_mp=v;__hookCF(v);}});
           // hook AC_FL_RunContent
-          if(window.AC_FL_RunContent){var oAC=window.AC_FL_RunContent;window.AC_FL_RunContent=function(){var a=Array.prototype.slice.call(arguments);for(var i=0;i<a.length-1;i++){if((a[i]==='src'||a[i]==='movie')&&a[i+1])__wafRedirect(a[i+1],window.location.href);}return oAC.apply(this,arguments);};}
+          if(window.AC_FL_RunContent){var oAC=window.AC_FL_RunContent;window.AC_FL_RunContent=function(){var a=Array.prototype.slice.call(arguments);for(var i=0;i<a.length-1;i++){if((a[i]==='src'||a[i]==='movie')&&a[i+1])__wafPlayInPage(a[i+1],window.location.href);}return oAC.apply(this,arguments);};}
+          // hook document.createElement('object'/'embed') — 拦截动态创建的 Flash 元素
+          var _dcE = document.createElement.bind(document);
+          document.createElement = function(tag) {
+            var el = _dcE(tag);
+            if (tag && (tag.toLowerCase() === 'object' || tag.toLowerCase() === 'embed')) {
+              var _sa = el.setAttribute.bind(el);
+              el.setAttribute = function(name, value) {
+                _sa(name, value);
+                if (name === 'data' || name === 'src' || name === 'movie') {
+                  setTimeout(function(){ __wafPlayInPage(value, window.location.href); }, 0);
+                }
+              };
+            }
+            return el;
+          };
+          // hook document.write / writeln — 很多老页面用 document.write 创建 Flash 元素
+          var _dw = document.write.bind(document);
+          document.write = function(){ _dw.apply(document, arguments); setTimeout(function(){ __checkFlash(); }, 0); };
+          var _dwln = document.writeln.bind(document);
+          document.writeln = function(){ _dwln.apply(document, arguments); setTimeout(function(){ __checkFlash(); }, 0); };
+          // hook innerHTML / insertAdjacentHTML — 拦截通过 HTML 字符串创建的 Flash 元素
+          var _flashHtmlPattern = /shockwave|\.swf|D27CDB6E|application\/x-shockwave/i;
+          var _isDesc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+          if (_isDesc && _isDesc.set) {
+            var _origSet = _isDesc.set;
+            Object.defineProperty(Element.prototype, 'innerHTML', {
+              get: _isDesc.get,
+              set: function(v) { _origSet.call(this, v); if (v && _flashHtmlPattern.test(v)) setTimeout(function(){ __checkFlash(); }, 0); },
+              configurable: true
+            });
+          }
+          var _iah = Element.prototype.insertAdjacentHTML;
+          Element.prototype.insertAdjacentHTML = function(pos, text) {
+            _iah.call(this, pos, text);
+            if (text && _flashHtmlPattern.test(text)) setTimeout(function(){ __checkFlash(); }, 0);
+          };
+          // hook outerHTML setter — 拦截通过 outerHTML 替换元素创建的 Flash
+          var _ohDesc = Object.getOwnPropertyDescriptor(Element.prototype, 'outerHTML');
+          if (_ohDesc && _ohDesc.set) {
+            var _origOH = _ohDesc.set;
+            Object.defineProperty(Element.prototype, 'outerHTML', {
+              get: _ohDesc.get,
+              set: function(v) { _origOH.call(this, v); if (v && _flashHtmlPattern.test(v)) setTimeout(function(){ __checkFlash(); }, 0); },
+              configurable: true
+            });
+          }
           // DOM 检测
           function __checkFlash(){
-            if(__wafRedirected)return;
-            var sel='object[type="application/x-shockwave-flash"],embed[type="application/x-shockwave-flash"],object[data$=".swf" i],embed[src$=".swf" i],object[classid*="D27CDB6E" i]';
+            if(__wafPlayed)return;
+            var sel='object[type="application/x-shockwave-flash"],embed[type="application/x-shockwave-flash"],object[data$=".swf" i],embed[src$=".swf" i],object[classid*="D27CDB6E" i],object[classid*="d27cdb6e" i],embed[type*="flash" i],object[data*=".swf" i],embed[src*=".swf" i]';
             var els=document.querySelectorAll(sel);
-            for(var i=0;i<els.length;i++){var s=els[i].getAttribute('data')||els[i].getAttribute('src')||'';if(!s){var ps=els[i].querySelectorAll('param[name="movie"],param[name="src"]');for(var j=0;j<ps.length;j++){var v=ps[j].getAttribute('value')||'';if(v){s=v;break;}}}if(s)__wafRedirect(s,window.location.href);}
+            for(var i=0;i<els.length;i++){var s=els[i].getAttribute('data')||els[i].getAttribute('src')||'';if(!s){var ps=els[i].querySelectorAll('param[name="movie"],param[name="src"],param[name="data"]');for(var j=0;j<ps.length;j++){var v=ps[j].getAttribute('value')||'';if(v){s=v;break;}}}if(s)__wafPlayInPage(s,window.location.href);}
           }
           __checkFlash();
-          if(window.MutationObserver){var mo=new MutationObserver(function(){if(__wafRedirected){mo.disconnect();return;}__checkFlash();});try{mo.observe(document.documentElement||document.body||document,{childList:true,subtree:true});}catch(e){}setTimeout(function(){mo.disconnect();},15000);}
+          if(window.MutationObserver){var mo=new MutationObserver(function(){if(__wafPlayed){mo.disconnect();return;}__checkFlash();});try{mo.observe(document.documentElement||document.body||document,{childList:true,subtree:true});}catch(e){}setTimeout(function(){mo.disconnect();},15000);}
           """}
         })();
         </script>
@@ -573,16 +1009,24 @@ open class GameWebViewClient(
 
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
 
-        // Flash 页面：最先注入 Flash 支持伪造（在页面 JS 执行前）
-        // 让 4399 检测到浏览器"有 Flash 插件"，从而创建 <object> 元素
-        // 之后 Ruffle polyfill 会替换 <object> 为 Canvas 播放器
+        // Flash 页面注入策略（与旧 APK 一致）：
+        // - WAFlash 模式：只注入 buildFlashInjectScript（包含 Flash 伪造 + UA 降级 + 弹窗关闭 + 引擎注入）
+        //   不先注入 FLASH_FAKE_SUPPORT_SCRIPT，否则 __flashFaked 标志会导致 buildFlashInjectScript 被跳过
+        // - Ruffle 模式：注入单独的 Flash 伪造 + Ruffle 配置/加载器
         if (isFlashPage) {
-            view?.evaluateJavascript(FLASH_FAKE_SUPPORT_SCRIPT, null)
-            view?.evaluateJavascript(RuffleInjector.configScript(), null)
-            view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
-            view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
             if (PrefsManager.flashEngine == "waflash") {
+                // WAFlash：buildFlashInjectScript 包含完整逻辑（Flash 伪造 + UA 降级 + 弹窗关闭 + 引擎注入）
+                // __flashFaked 守卫确保 HTML 同步注入后不会重复执行
+                val wafScript = buildFlashInjectScript(url ?: "")
+                    .replace("<script>", "").replace("</script>", "").trim()
+                view?.evaluateJavascript(wafScript, null)
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
+            } else {
+                // Ruffle：单独注入各组件
+                view?.evaluateJavascript(FLASH_FAKE_SUPPORT_SCRIPT, null)
+                view?.evaluateJavascript(RuffleInjector.configScript(), null)
+                view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
+                view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
             }
             // 注入 iframe 监控：游戏可能加载在 iframe 中
             view?.evaluateJavascript(IFRAME_INJECT_SCRIPT, null)
@@ -598,10 +1042,15 @@ open class GameWebViewClient(
         super.onPageCommitVisible(view, url)
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
         if (isFlashPage) {
-            view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
-            view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
             if (PrefsManager.flashEngine == "waflash") {
+                // WAFlash：buildFlashInjectScript 守卫确保不重复执行
+                val wafScript = buildFlashInjectScript(url ?: "")
+                    .replace("<script>", "").replace("</script>", "").trim()
+                view?.evaluateJavascript(wafScript, null)
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
+            } else {
+                view?.evaluateJavascript(RuffleInjector.loaderScript(), null)
+                view?.evaluateJavascript(FLASH_HIDE_SCRIPT, null)
             }
         }
         if (url != null && !url.startsWith("file:///android_asset/") && !url.startsWith("https://flash.local/")) {
@@ -613,9 +1062,14 @@ open class GameWebViewClient(
         super.onPageFinished(view, url)
         val isFlashPage = PrefsManager.isFlashEnabled && callback.shouldInjectRuffle(url)
         if (isFlashPage) {
-            view?.evaluateJavascript(RuffleInjector.fullInjection(), null)
             if (PrefsManager.flashEngine == "waflash") {
+                // WAFlash：buildFlashInjectScript 守卫确保不重复执行
+                val wafScript = buildFlashInjectScript(url ?: "")
+                    .replace("<script>", "").replace("</script>", "").trim()
+                view?.evaluateJavascript(wafScript, null)
                 view?.evaluateJavascript(WAFLASH_DETECT_SCRIPT, null)
+            } else {
+                view?.evaluateJavascript(RuffleInjector.fullInjection(), null)
             }
         }
         if (isFlashPage) {
@@ -670,8 +1124,18 @@ open class GameWebViewClient(
               var meta = document.querySelector('meta[name="viewport"]');
               if (!meta) { meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }
               var s = $scale;
-              // 不限制缩放范围：minimum-scale=0.01 允许无限缩小，maximum-scale=1000 允许无限放大
-              meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=0.01, maximum-scale=1000.0, user-scalable=yes';
+              meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=' + s + ', maximum-scale=5.0, user-scalable=yes';
+              // CSS zoom（对桌面固定布局页面有效，viewport meta 无效时兜底）
+              document.documentElement.style.zoom = s;
+              // 监听 DOM 变化，确保动态加载的内容也应用 zoom
+              if (!window.__zoomObserver) {
+                window.__zoomObserver = true;
+                if (window.MutationObserver) {
+                  var mo = new MutationObserver(function(){ document.documentElement.style.zoom = s; });
+                  try { mo.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['style','class']}); } catch(e){}
+                  setTimeout(function(){ mo.disconnect(); }, 5000);
+                }
+              }
             })();
             """.trimIndent()
         } else {
@@ -682,8 +1146,9 @@ open class GameWebViewClient(
               var sw = window.screen.width || 360;
               var scale = Math.min(1, sw / 1200);
               scale = Math.max(0.25, scale);
-              // 不限制缩放范围：minimum-scale=0.01 允许无限缩小，maximum-scale=1000 允许无限放大
-              meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=0.01, maximum-scale=1000.0, user-scalable=yes';
+              meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=5.0, user-scalable=yes';
+              // 自动模式也应用 CSS zoom，保证桌面页面缩放生效
+              document.documentElement.style.zoom = scale;
             })();
             """.trimIndent()
         }
@@ -961,156 +1426,154 @@ open class GameWebViewClient(
         """
 
         /**
-         * WAFlash SWF 检测脚本：
-         * 1. Hook swfobject.embedSWF() — 标准 Flash 嵌入
-         * 2. Hook AC_FL_RunContent() — 老式 Flash 嵌入
-         * 3. Hook createFlash() — 4399 的 mflash-player API
-         * 4. Hook fetch/XMLHttpRequest — 拦截非 .swf 扩展名的 SWF 加载
-         * 5. MutationObserver 检测动态创建的 Flash DOM 元素
+         * WAFlash SWF 检测备份脚本：
+         * 如果 buildFlashInjectScript 的页内播放已执行（window.__wafPlayInPage 存在），
+         * 只补充 DOM 检测；否则自行实现页内播放（不重定向，避免渲染模糊）。
          */
         private const val WAFLASH_DETECT_SCRIPT = """
             (function(){
               if (window.__waflashDetect) return;
               window.__waflashDetect = true;
-              var redirected = false;
 
-              function redirectToPlayer(swfUrl, baseUrl) {
-                if (redirected || !swfUrl) return;
-                // 检测 SWF URL：支持 .swf 扩展名、4399 的 dw-XX 格式、flash 路径
-                var isSwf = /\.swf/i.test(swfUrl) ||
-                            /\/dw-\d+/i.test(swfUrl) ||
-                            /flash\d*\//i.test(swfUrl) ||
-                            /mm\.4399\.com/i.test(swfUrl);
-                if (!isSwf) return;
-                redirected = true;
-                try { swfUrl = new URL(swfUrl, baseUrl || window.location.href).href; } catch(e) {}
-                console.log('[WAFlash] 检测到 SWF: ' + swfUrl);
-                if (window.Android && window.Android.openSwf) {
-                  window.Android.openSwf(swfUrl, baseUrl || window.location.href);
-                } else {
-                  window.location.href = 'https://flash.local/waflash.html?swf=' + encodeURIComponent(swfUrl);
-                }
-              }
-
-              // 1. Hook swfobject.embedSWF
-              if (window.swfobject && window.swfobject.embedSWF) {
-                var origEmbed = window.swfobject.embedSWF;
-                window.swfobject.embedSWF = function() {
-                  redirectToPlayer(arguments[0], window.location.href);
-                  return origEmbed.apply(this, arguments);
-                };
-              } else {
-                var _swfobject;
-                Object.defineProperty(window, 'swfobject', {
-                  configurable: true,
-                  get: function() { return _swfobject; },
-                  set: function(val) {
-                    _swfobject = val;
-                    if (val && val.embedSWF) {
-                      var orig = val.embedSWF;
-                      val.embedSWF = function() {
-                        redirectToPlayer(arguments[0], window.location.href);
-                        return orig.apply(this, arguments);
-                      };
+              // 如果 HTML 注入已定义页内播放函数，直接复用
+              if (typeof window.__wafPlayInPage === 'function') {
+                // 只需补充检测，hooks 已由 HTML 注入设置
+                function checkExisting() {
+                  if (window.__wafPlayed) return;
+                  var sel = 'object[type="application/x-shockwave-flash"],' +
+                    'embed[type="application/x-shockwave-flash"],' +
+                    'object[data$=".swf" i],embed[src$=".swf" i],' +
+                    'object[classid*="D27CDB6E" i],object[classid*="d27cdb6e" i],' +
+                    'embed[type*="flash" i],object[data*=".swf" i],embed[src*=".swf" i]';
+                  var els = document.querySelectorAll(sel);
+                  for (var i = 0; i < els.length; i++) {
+                    var s = els[i].getAttribute('data') || els[i].getAttribute('src') || '';
+                    if (!s) {
+                      var ps = els[i].querySelectorAll('param[name="movie"],param[name="src"],param[name="data"]');
+                      for (var j = 0; j < ps.length; j++) { var v = ps[j].getAttribute('value')||''; if(v){s=v;break;} }
                     }
+                    if (s) { window.__wafPlayInPage(s, window.location.href); return; }
                   }
-                });
-              }
-
-              // 2. Hook AC_FL_RunContent
-              if (window.AC_FL_RunContent) {
-                var origAC = window.AC_FL_RunContent;
-                window.AC_FL_RunContent = function() {
-                  var args = Array.prototype.slice.call(arguments);
-                  for (var i = 0; i < args.length - 1; i++) {
-                    if ((args[i] === 'src' || args[i] === 'movie') && args[i+1]) {
-                      redirectToPlayer(args[i+1], window.location.href);
-                    }
-                  }
-                  return origAC.apply(this, arguments);
-                };
-              }
-
-              // 3. Hook createFlash — 4399 的 mflash-player API
-              //    createFlash(swfUrl, options) 或 createFlash({url: swfUrl, ...})
-              function hookCreateFlash(obj) {
-                if (!obj || !obj.createFlash || obj.__waflashHooked) return;
-                obj.__waflashHooked = true;
-                var orig = obj.createFlash;
-                obj.createFlash = function() {
-                  var swfUrl = null;
-                  if (typeof arguments[0] === 'string') {
-                    swfUrl = arguments[0];
-                  } else if (arguments[0] && typeof arguments[0] === 'object') {
-                    swfUrl = arguments[0].url || arguments[0].src || arguments[0].swf ||
-                             arguments[0].movie || arguments[0].data;
-                  }
-                  if (swfUrl) redirectToPlayer(swfUrl, window.location.href);
-                  return orig.apply(this, arguments);
-                };
-                console.log('[WAFlash] 已 hook createFlash');
-              }
-
-              // 检查 mflash-player 是否已存在（注意：属性名含连字符，必须用方括号）
-              if (window['mflash-player']) hookCreateFlash(window['mflash-player']);
-              if (window.mflashplayer) hookCreateFlash(window.mflashplayer);
-              if (window.MFlash) hookCreateFlash(window.MFlash);
-
-              // 延迟 hook：4399 可能动态加载 mflash-player
-              var _mflash;
-              Object.defineProperty(window, 'mflash-player', {
-                configurable: true,
-                get: function() { return _mflash; },
-                set: function(val) { _mflash = val; hookCreateFlash(val); }
-              });
-              var _mflash2;
-              Object.defineProperty(window, 'mflashplayer', {
-                configurable: true,
-                get: function() { return _mflash2; },
-                set: function(val) { _mflash2 = val; hookCreateFlash(val); }
-              });
-
-              // 4. 检测页面中已有的 Flash 元素
-              function extractSwfUrl(el) {
-                if (!el) return null;
-                var src = el.getAttribute('data') || el.getAttribute('src') ||
-                          el.getAttribute('movie') || el.getAttribute('url') || '';
-                if (src) return src;
-                var params = el.querySelectorAll('param[name="movie"], param[name="src"]');
-                for (var i = 0; i < params.length; i++) {
-                  var v = params[i].getAttribute('value') || '';
-                  if (v) return v;
                 }
-                return null;
-              }
-
-              function checkExistingFlash() {
-                if (redirected) return;
-                var selectors = 'object[type="application/x-shockwave-flash"], ' +
-                  'embed[type="application/x-shockwave-flash"], ' +
-                  'object[data$=".swf" i], embed[src$=".swf" i], ' +
-                  'object[classid*="D27CDB6E" i]';
-                var elements = document.querySelectorAll(selectors);
-                for (var i = 0; i < elements.length; i++) {
-                  var swfUrl = extractSwfUrl(elements[i]);
-                  if (swfUrl) { redirectToPlayer(swfUrl, window.location.href); return; }
-                }
-              }
-
-              checkExistingFlash();
-
-              // 5. MutationObserver 持续监控
-              if (window.MutationObserver) {
-                var observer = new MutationObserver(function() {
-                  if (redirected) { observer.disconnect(); return; }
-                  checkExistingFlash();
-                });
-                try {
-                  observer.observe(document.documentElement || document.body || document, {
-                    childList: true, subtree: true
+                checkExisting();
+                if (window.MutationObserver) {
+                  var mo = new MutationObserver(function(){
+                    if (window.__wafPlayed) { mo.disconnect(); return; }
+                    checkExisting();
                   });
-                } catch(e) {}
-                setTimeout(function() { observer.disconnect(); }, 15000);
+                  try { mo.observe(document.documentElement||document.body||document,{childList:true,subtree:true}); } catch(e){}
+                  setTimeout(function(){ mo.disconnect(); }, 15000);
+                }
+                return;
+              }
+
+              // HTML 注入未执行（可能被缓存等原因跳过），自行实现页内播放
+              var played = false;
+              var engineReady = false;
+              var wafModule = null;
+
+              function loadEngine() {
+                if (window.__wafEngineLoading) return;
+                window.__wafEngineLoading = true;
+                import('https://flash.local/waflash/waflash-player.min.js').then(function(module){
+                  engineReady = true; wafModule = module;
+                  console.log('[WAFlash] 引擎加载完成(备份)');
+                  if (window.__pendingSwfUrl) playInPage(window.__pendingSwfUrl, window.__pendingBaseUrl);
+                }).catch(function(err){ console.error('[WAFlash] 引擎加载失败: '+(err.message||err)); });
+              }
+
+              function playInPage(swfUrl, baseUrl) {
+                if (played || !swfUrl) return;
+                // 不按 URL 模式过滤，信任 Flash 元素检测结果
+                played = true; window.__wafPlayed = true;
+                try { swfUrl = new URL(swfUrl, baseUrl || window.location.href).href; } catch(e) {}
+                console.log('[WAFlash] 页内播放 SWF(备份): ' + swfUrl);
+                if (!engineReady) {
+                  window.__pendingSwfUrl = swfUrl; window.__pendingBaseUrl = baseUrl;
+                  loadEngine(); return;
+                }
+                var container = document.createElement('div');
+                container.id = '__waflash_container';
+                container.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;z-index:99999;background:#000;';
+                var canvas = document.createElement('canvas');
+                canvas.className = 'waflashCanvas'; canvas.id = 'canvas';
+                canvas.style.cssText = 'width:100%;height:100%;display:block;outline:none;';
+                canvas.setAttribute('tabindex','1');
+                container.appendChild(canvas);
+                var bc = document.body.children;
+                for (var i = 0; i < bc.length; i++) { if(bc[i]!==container){try{bc[i].style.display='none';}catch(e){}} }
+                document.body.appendChild(container); canvas.focus();
+                if (baseUrl) {
+                  try { var bo=new URL(baseUrl); var bt=document.createElement('base');
+                    bt.href=bo.origin+bo.pathname.substring(0,bo.pathname.lastIndexOf('/')+1);
+                    document.head.appendChild(bt);
+                  } catch(e) {}
+                }
+                var fn = (wafModule && wafModule.createWaflash) || window.createWaflash;
+                if (fn) {
+                  try { fn(swfUrl, {gpu:true}); console.log('[WAFlash] 页内播放已启动(备份)'); }
+                  catch(e) {
+                    console.error('[WAFlash] 播放失败: '+e.message);
+                    if (window.Android && window.Android.openSwf) window.Android.openSwf(swfUrl, baseUrl||window.location.href);
+                  }
+                } else { console.log('[WAFlash] createWaflash 未找到'); }
+              }
+
+              loadEngine();
+
+              // Hook swfobject.embedSWF
+              if (window.swfobject && window.swfobject.embedSWF) {
+                var oe = window.swfobject.embedSWF;
+                window.swfobject.embedSWF = function(){playInPage(arguments[0],window.location.href);return oe.apply(this,arguments);};
+              } else {
+                var _swo; Object.defineProperty(window,'swfobject',{configurable:true,get:function(){return _swo;},set:function(v){_swo=v;if(v&&v.embedSWF){var o=v.embedSWF;v.embedSWF=function(){playInPage(arguments[0],window.location.href);return o.apply(this,arguments);};}}});
+              }
+              // Hook AC_FL_RunContent
+              if (window.AC_FL_RunContent) {
+                var oAC = window.AC_FL_RunContent;
+                window.AC_FL_RunContent = function(){var a=Array.prototype.slice.call(arguments);for(var i=0;i<a.length-1;i++){if((a[i]==='src'||a[i]==='movie')&&a[i+1])playInPage(a[i+1],window.location.href);}return oAC.apply(this,arguments);};
+              }
+              // Hook createFlash (mflash-player)
+              function hookCF(obj){if(!obj||!obj.createFlash||obj.__wafH)return;obj.__wafH=true;var o=obj.createFlash;obj.createFlash=function(){var u=null;if(typeof arguments[0]==='string')u=arguments[0];else if(arguments[0]&&typeof arguments[0]==='object')u=arguments[0].url||arguments[0].src||arguments[0].swf||arguments[0].movie;if(u)playInPage(u,window.location.href);return o.apply(this,arguments);};}
+              if(window['mflash-player'])hookCF(window['mflash-player']);
+              if(window.mflashplayer)hookCF(window.mflashplayer);
+              var _mp;Object.defineProperty(window,'mflash-player',{configurable:true,get:function(){return _mp;},set:function(v){_mp=v;hookCF(v);}});
+              var _mp2;Object.defineProperty(window,'mflashplayer',{configurable:true,get:function(){return _mp2;},set:function(v){_mp2=v;hookCF(v);}});
+
+              // hook document.write / writeln — 老页面常用 document.write 创建 Flash
+              var _dw = document.write.bind(document);
+              document.write = function(){ _dw.apply(document, arguments); setTimeout(function(){ checkExisting(); }, 0); };
+              var _dwln = document.writeln.bind(document);
+              document.writeln = function(){ _dwln.apply(document, arguments); setTimeout(function(){ checkExisting(); }, 0); };
+              // hook innerHTML / insertAdjacentHTML / outerHTML
+              var _fhp = /shockwave|\.swf|D27CDB6E|application\/x-shockwave/i;
+              var _id = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+              if (_id && _id.set) { var _os = _id.set; Object.defineProperty(Element.prototype, 'innerHTML', { get: _id.get, set: function(v){ _os.call(this, v); if(v && _fhp.test(v)) setTimeout(function(){ checkExisting(); }, 0); }, configurable: true }); }
+              var _iah = Element.prototype.insertAdjacentHTML;
+              Element.prototype.insertAdjacentHTML = function(p, t){ _iah.call(this, p, t); if(t && _fhp.test(t)) setTimeout(function(){ checkExisting(); }, 0); };
+              var _ohd = Object.getOwnPropertyDescriptor(Element.prototype, 'outerHTML');
+              if (_ohd && _ohd.set) { var _ooh = _ohd.set; Object.defineProperty(Element.prototype, 'outerHTML', { get: _ohd.get, set: function(v){ _ooh.call(this, v); if(v && _fhp.test(v)) setTimeout(function(){ checkExisting(); }, 0); }, configurable: true }); }
+
+              // 检测已有 Flash 元素
+              function checkExisting() {
+                if (played) return;
+                var sel = 'object[type="application/x-shockwave-flash"],' +
+                  'embed[type="application/x-shockwave-flash"],' +
+                  'object[data$=".swf" i],embed[src$=".swf" i],' +
+                  'object[classid*="D27CDB6E" i],object[classid*="d27cdb6e" i],' +
+                  'embed[type*="flash" i],object[data*=".swf" i],embed[src*=".swf" i]';
+                var els = document.querySelectorAll(sel);
+                for (var i = 0; i < els.length; i++) {
+                  var s = els[i].getAttribute('data')||els[i].getAttribute('src')||'';
+                  if (!s) { var ps=els[i].querySelectorAll('param[name="movie"],param[name="src"],param[name="data"]');for(var j=0;j<ps.length;j++){var v=ps[j].getAttribute('value')||'';if(v){s=v;break;}} }
+                  if (s) { playInPage(s, window.location.href); return; }
+                }
+              }
+              checkExisting();
+              if (window.MutationObserver) {
+                var mo = new MutationObserver(function(){ if(played){mo.disconnect();return;} checkExisting(); });
+                try { mo.observe(document.documentElement||document.body||document,{childList:true,subtree:true}); } catch(e){}
+                setTimeout(function(){ mo.disconnect(); }, 15000);
               }
             })();
         """
