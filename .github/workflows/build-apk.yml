@@ -7,7 +7,7 @@
 name: Build APK
 
 on:
-  workflow_dispatch:        # 手动触发
+  workflow_dispatch:        # 仅手动触发，不自动构建
     inputs:
       build_type:
         description: '构建类型'
@@ -18,14 +18,6 @@ on:
           - both
           - debug
           - release
-  push:
-    branches: [ main, master ]
-    paths:
-      - 'app/**'
-      - 'build.gradle.kts'
-      - 'settings.gradle.kts'
-      - 'gradle.properties'
-      - '.github/workflows/build-apk.yml'
 
 env:
   JAVA_VERSION: '17'
