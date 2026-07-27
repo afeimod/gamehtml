@@ -23,13 +23,17 @@
 #   Important for running:
 #
 #   (1) You need a POSIX-compliant shell to run this script. If your /bin/sh is
-#       Bourne-incompatible (bash, ksh, zsh, fish, ...), it will fall back to a
-#       generic shell. Modern /bin/sh (e.g. dash on Ubuntu) is usually OK.
+#       Bourne-incompatible then see the bootstrap section at the end.
 #
-#   (2) You need a Java installation to run Gradle. Either install it on your
-#       system or set JAVA_HOME in the environment.
+#   (2) This script targets any POSIX shell, so it avoids extensions provided
+#       by Bash, Ksh, etc; in particular arrays are avoided.
+#
+#       "The Portable Shell Syntax" is the baseline, defined at:
+#       https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html
 #
 ##############################################################################
+
+# Attempt to set APP_HOME
 
 # Resolve links: $0 may be a link
 app_path=$0
@@ -50,6 +54,7 @@ done
 # This is normally unused
 # shellcheck disable=SC2034
 APP_BASE_NAME=${0##*/}
+# Discard cd standard output in case $CDPATH is set (https://github.com/gradle/gradle/issues/25036)
 APP_HOME=$( cd -P "${APP_HOME:-./}" > /dev/null && printf '%s\n' "$PWD" ) || exit
 
 # Use the maximum available, or set MAX_FD != -1 to use that value.
@@ -80,6 +85,7 @@ esac
 
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
+
 # Determine the Java command to use to start the JVM.
 if [ -n "$JAVA_HOME" ] ; then
     if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
@@ -96,7 +102,7 @@ location of your Java installation."
     fi
 else
     JAVACMD=java
-    if ! command -v java > /dev/null 2>&1
+    if ! command -v java >/dev/null 2>&1
     then
         die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
 
@@ -163,7 +169,8 @@ if "$cygwin" || "$msys" ; then
     done
 fi
 
-# Add a user-defined pattern to the JVM args
+
+# Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 
 # Collect all arguments for the java command:
@@ -179,7 +186,7 @@ set -- \
         "$@"
 
 # Stop when "xargs" is not available.
-if ! command -v xargs > /dev/null 2>&1
+if ! command -v xargs >/dev/null 2>&1
 then
     die "xargs is not available"
 fi
@@ -201,6 +208,8 @@ fi
 #
 # This will of course break if any of these variables contains a newline or
 # an unmatched quote.
+#
+
 eval "set -- $(
         printf '%s\n' "$DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS" |
         xargs -n1 |

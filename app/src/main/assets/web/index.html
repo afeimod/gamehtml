@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0E1116">
+<title>Flash游戏盒</title>
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="controls.css">
+</head>
+<body>
+<div id="app">
+  <!-- Top bar -->
+  <header id="topbar">
+    <button id="btnBack" class="icon-btn" title="后退">‹</button>
+    <div id="addrWrap">
+      <input id="addr" type="text" placeholder="输入网址或搜索游戏…" autocomplete="off" enterkeyhint="go">
+      <button id="btnGo" class="icon-btn" title="打开">⏎</button>
+    </div>
+    <button id="btnMenu" class="icon-btn" title="菜单">☰</button>
+  </header>
+
+  <!-- Main scroll area -->
+  <main id="views">
+    <section id="view-home" class="view active"></section>
+    <section id="view-library" class="view"></section>
+    <section id="view-web" class="view"></section>
+    <section id="view-history" class="view"></section>
+    <section id="view-favorites" class="view"></section>
+    <section id="view-settings" class="view"></section>
+  </main>
+
+  <!-- Bottom navigation -->
+  <nav id="bottomnav">
+    <button data-view="home" class="nav active"><span class="ic">⌂</span><span>首页</span></button>
+    <button data-view="library" class="nav"><span class="ic">▤</span><span>本地</span></button>
+    <button data-view="web" class="nav"><span class="ic">🌐</span><span>网页</span></button>
+    <button data-view="history" class="nav"><span class="ic">⌛</span><span>历史</span></button>
+    <button data-view="favorites" class="nav"><span class="ic">★</span><span>收藏</span></button>
+    <button data-view="settings" class="nav"><span class="ic">⚙</span><span>设置</span></button>
+  </nav>
+
+  <!-- Modal root -->
+  <div id="modalRoot"></div>
+  <!-- Toast -->
+  <div id="toast"></div>
+</div>
+
+<script src="controls.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
