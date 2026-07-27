@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/black"
+    android:clipChildren="false">
+
+    <!-- Web surface -->
+    <com.flashbox.app.web.FlashWebView
+        android:id="@+id/web_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Top control bar (auto-hide) -->
+    <LinearLayout
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/overlay_dim"
+        android:padding="@dimen/spacing_s">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/spacing_s"
+            android:src="@drawable/ic_back"
+            app:tint="@color/white" />
+        <ImageButton
+            android:id="@+id/btn_forward"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/spacing_s"
+            android:src="@drawable/ic_forward"
+            app:tint="@color/white" />
+        <ImageButton
+            android:id="@+id/btn_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/spacing_s"
+            android:src="@drawable/ic_refresh"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/tv_url"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_s"
+            android:layout_marginEnd="@dimen/spacing_s"
+            android:maxLines="1"
+            android:ellipsize="middle"
+            android:textColor="@color/white"
+            android:textSize="@dimen/text_caption" />
+
+        <ImageButton
+            android:id="@+id/btn_star"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/spacing_s"
+            android:src="@drawable/ic_fav"
+            app:tint="@color/white" />
+        <ImageButton
+            android:id="@+id/btn_close"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/spacing_s"
+            android:src="@drawable/ic_close"
+            app:tint="@color/white" />
+    </LinearLayout>
+
+    <!-- Progress -->
+    <ProgressBar
+        android:id="@+id/progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="top"
+        android:layout_marginTop="?attr/actionBarSize"
+        android:max="100"
+        android:progressTint="@color/brand_accent"
+        android:visibility="gone" />
+
+    <!-- Movable floating menu button -->
+    <ImageView
+        android:id="@+id/fab_menu"
+        android:layout_width="@dimen/fab_size"
+        android:layout_height="@dimen/fab_size"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="@dimen/spacing_l"
+        android:background="@drawable/bg_fab_gradient"
+        android:elevation="8dp"
+        android:padding="@dimen/spacing_m"
+        android:src="@drawable/ic_settings"
+        app:tint="@color/white" />
+
+    <!-- Virtual keys overlay (joystick/dpad + independent keys injected at runtime) -->
+    <FrameLayout
+        android:id="@+id/vk_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false" />
+
+</FrameLayout>

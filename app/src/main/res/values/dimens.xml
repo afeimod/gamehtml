@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_s">8dp</dimen>
+    <dimen name="spacing_m">12dp</dimen>
+    <dimen name="spacing_l">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="card_radius">18dp</dimen>
+    <dimen name="card_elevation">4dp</dimen>
+    <dimen name="fab_size">56dp</dimen>
+    <dimen name="key_default_size">64dp</dimen>
+    <dimen name="joystick_size">160dp</dimen>
+    <dimen name="dpad_size">160dp</dimen>
+    <dimen name="text_caption">12sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_title">18sp</dimen>
+</resources>

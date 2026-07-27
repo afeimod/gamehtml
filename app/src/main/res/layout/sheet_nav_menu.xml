@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/bg_surface"
+    android:padding="@dimen/spacing_l">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="@dimen/spacing_m"
+        android:background="@color/divider" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/spacing_m"
+        android:text="@string/float_menu"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold" />
+
+    <!-- Quick nav grid -->
+    <androidx.gridlayout.widget.GridLayout
+        android:id="@+id/grid_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:columnCount="4"
+        app:rowCount="2" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="@dimen/spacing_m"
+        android:background="@color/divider" />
+
+    <!-- Web mode selector -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/spacing_s"
+        android:text="@string/nav_mode"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/toggle_mode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:singleSelection="true">
+        <Button
+            android:id="@+id/btn_mode_desktop"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/mode_desktop" />
+        <Button
+            android:id="@+id/btn_mode_compat"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/mode_compat" />
+        <Button
+            android:id="@+id/btn_mode_mobile"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/mode_mobile" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <!-- Engine selector -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_m"
+        android:layout_marginBottom="@dimen/spacing_s"
+        android:text="@string/nav_engine"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/toggle_engine"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:singleSelection="true">
+        <Button
+            android:id="@+id/btn_engine_ruffle"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/player_engine_ruffle" />
+        <Button
+            android:id="@+id/btn_engine_waflash"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/player_engine_waflash" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <!-- Zoom slider -->
+    <TextView
+        android:id="@+id/tv_zoom_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_m"
+        android:layout_marginBottom="@dimen/spacing_s"
+        android:text="@string/nav_zoom"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body" />
+
+    <SeekBar
+        android:id="@+id/seek_zoom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="300"
+        android:progress="100" />
+
+    <!-- Toggles -->
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/switch_adblock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_m"
+        android:text="@string/settings_adblock"
+        android:textColor="@color/text_primary" />
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/switch_vk"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/nav_virtual_keys"
+        android:textColor="@color/text_primary" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_keys_editor"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_m"
+        android:text="@string/nav_keys_editor"
+        app:icon="@drawable/ic_keys" />
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_engine_settings"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_s"
+        android:text="@string/settings_engine"
+        app:icon="@drawable/ic_engine" />
+
+</LinearLayout>

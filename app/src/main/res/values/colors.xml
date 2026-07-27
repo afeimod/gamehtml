@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand -->
+    <color name="brand_primary">#6C5CE7</color>
+    <color name="brand_primary_dark">#5345C7</color>
+    <color name="brand_accent">#00CEC9</color>
+    <color name="brand_secondary">#FD79A8</color>
+
+    <color name="bg_dark">#12121A</color>
+    <color name="bg_surface">#1E1E2A</color>
+    <color name="bg_surface_alt">#262633</color>
+    <color name="text_primary">#F5F5FA</color>
+    <color name="text_secondary">#A0A0B5</color>
+    <color name="divider">#2A2A38</color>
+
+    <color name="overlay_dim">#99000000</color>
+    <color name="joystick_base">#3A3A4A</color>
+    <color name="joystick_stick">#6C5CE7</color>
+    <color name="key_bg">#CC2A2A38</color>
+    <color name="key_bg_active">#6C5CE7</color>
+    <color name="fab_bg">#6C5CE7</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="transparent">#00000000</color>
+    <color name="card_bg_light">#FFFFFF</color>
+    <color name="bg_light">#F2F2F7</color>
+    <color name="text_primary_light">#1C1C1E</color>
+    <color name="text_secondary_light">#6B6B7B</color>
+</resources>

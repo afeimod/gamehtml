@@ -1,0 +1,105 @@
+<resources>
+    <string name="app_name">灵动Flash游戏盒</string>
+    <string name="app_short">FlashBox</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_local">本地</string>
+    <string name="nav_history">历史</string>
+    <string name="nav_fav">收藏</string>
+    <string name="nav_settings">设置</string>
+
+    <!-- Home -->
+    <string name="home_quick_web">网址导航</string>
+    <string name="home_add_url">添加网址</string>
+    <string name="home_open_url">打开网址</string>
+    <string name="hint_url">输入网址或搜索关键词</string>
+
+    <!-- Local -->
+    <string name="local_add_file">添加文件</string>
+    <string name="local_add_folder">添加文件夹</string>
+    <string name="local_empty">还没有本地游戏，点击右上角添加 SWF 文件或文件夹</string>
+    <string name="local_scan">扫描</string>
+
+    <!-- Player -->
+    <string name="player_engine_ruffle">Ruffle 引擎</string>
+    <string name="player_engine_waflash">Waflash 引擎</string>
+    <string name="player_choose_engine">选择播放引擎</string>
+    <string name="player_choose_engine_msg">本地播放需要选择一个 Flash 引擎</string>
+    <string name="player_loading">加载中…</string>
+    <string name="player_replay">重新开始</string>
+
+    <!-- Floating / nav sheet -->
+    <string name="float_menu">菜单</string>
+    <string name="nav_back">后退</string>
+    <string name="nav_forward">前进</string>
+    <string name="nav_refresh">刷新</string>
+    <string name="nav_home_page">主页</string>
+    <string name="nav_share">分享</string>
+    <string name="nav_fullscreen">全屏</string>
+    <string name="nav_exit_fullscreen">退出全屏</string>
+    <string name="nav_bookmark">加入收藏</string>
+    <string name="nav_bookmarked">已收藏</string>
+    <string name="nav_history">历史记录</string>
+    <string name="nav_mode">网页模式</string>
+    <string name="nav_zoom">页面缩放</string>
+    <string name="nav_engine">播放引擎</string>
+    <string name="nav_virtual_keys">虚拟按键</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_keys_editor">按键编辑</string>
+
+    <!-- Web modes -->
+    <string name="mode_desktop">电脑桌面模式</string>
+    <string name="mode_compat">兼容模式</string>
+    <string name="mode_mobile">移动手机模式</string>
+
+    <!-- Virtual keys -->
+    <string name="vk_joystick">摇杆</string>
+    <string name="vk_dpad">方向键</string>
+    <string name="vk_wasd">WASD方式</string>
+    <string name="vk_arrows">上下左右方式</string>
+    <string name="vk_add_key">添加按键</string>
+    <string name="vk_reset">恢复默认</string>
+    <string name="vk_scale">缩放</string>
+    <string name="vk_pick_key">选择键盘按键</string>
+    <string name="vk_independent_keys">独立按键</string>
+    <string name="vk_direction">方向控制</string>
+
+    <!-- Settings -->
+    <string name="settings_general">通用设置</string>
+    <string name="settings_engine">引擎设置</string>
+    <string name="settings_quality">画质</string>
+    <string name="settings_aspect">画面比例</string>
+    <string name="settings_renderer">渲染后端</string>
+    <string name="settings_adblock">广告拦截</string>
+    <string name="settings_cache">网页缓存</string>
+    <string name="settings_clear_cache">清除缓存</string>
+    <string name="settings_clear_history">清除历史记录</string>
+    <string name="settings_default_engine">默认本地引擎</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_keep_screen_on">屏幕常亮</string>
+    <string name="settings_landscape">横屏播放</string>
+    <string name="settings_auto_rotate_keys">自动旋转时显示按键</string>
+    <string name="settings_show_keys_online">在线网页也显示按键</string>
+
+    <!-- History / favorites -->
+    <string name="history_empty">暂无历史记录</string>
+    <string name="fav_empty">暂无收藏</string>
+    <string name="action_delete">删除</string>
+    <string name="action_open">打开</string>
+    <string name="action_clear_all">全部清除</string>
+
+    <!-- Common -->
+    <string name="ok">确定</string>
+    <string name="cancel">取消</string>
+    <string name="back">返回</string>
+    <string name="loading">加载中…</string>
+    <string name="title">标题</string>
+    <string name="url">网址</string>
+    <string name="save">保存</string>
+    <string name="edit">编辑</string>
+    <string name="search">搜索</string>
+
+    <string name="default_home_url">https://www.4399.com/flash/</string>
+</resources>

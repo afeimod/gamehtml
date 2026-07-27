@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="@dimen/spacing_l">
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/toggle_engine_cfg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:singleSelection="true">
+        <Button
+            android:id="@+id/cfg_ruffle"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/player_engine_ruffle" />
+        <Button
+            android:id="@+id/cfg_waflash"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/player_engine_waflash" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_l"
+        android:layout_marginBottom="@dimen/spacing_s"
+        android:text="@string/settings_quality"
+        android:textColor="@color/text_secondary" />
+    <Spinner
+        android:id="@+id/spinner_quality"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_m"
+        android:layout_marginBottom="@dimen/spacing_s"
+        android:text="@string/settings_aspect"
+        android:textColor="@color/text_secondary" />
+    <Spinner
+        android:id="@+id/spinner_aspect"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_m"
+        android:layout_marginBottom="@dimen/spacing_s"
+        android:text="@string/settings_renderer"
+        android:textColor="@color/text_secondary" />
+    <Spinner
+        android:id="@+id/spinner_renderer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/switch_letterbox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_m"
+        android:text="黑边保持比例" />
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/switch_smooth"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="抗锯齿平滑" />
+</LinearLayout>
