@@ -1,0 +1,14 @@
+{
+  "name": "Flash 游戏盒",
+  "short_name": "Flash游戏盒",
+  "description": "在 Android 上重温经典 Flash 游戏，集成 Ruffle / Waflash / swf2js 三大引擎。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0F1015",
+  "theme_color": "#FF5722",
+  "icons": [
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

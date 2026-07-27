@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fb_red">#FF5722</color>
+    <color name="fb_red_dark">#E64A19</color>
+    <color name="fb_amber">#FFC107</color>
+    <color name="fb_bg">#0F1015</color>
+    <color name="fb_card">#1A1C24</color>
+    <color name="fb_text">#E6E8EE</color>
+    <color name="fb_subtext">#8A8E9C</color>
+</resources>

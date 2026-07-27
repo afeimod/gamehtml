@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Game4399 Contributors
+Copyright (c) 2025 Flash Game Box Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,10 +22,11 @@ SOFTWARE.
 
 ---
 
-第三方组件许可：
+This project bundles third-party Flash engines, each under its own license:
 
-- Ruffle (https://github.com/ruffle-rs/ruffle) — MIT License
-  Copyright (c) 2018-2026 Ruffle contributors
+- Ruffle (https://github.com/ruffle-rs/ruffle) - MIT OR Apache-2.0
+- Waflash Player (https://github.com/AbhinavJaiswal1/Waflash-Player) - MIT
+- swf2js (https://github.com/ienaga/swf2js) - BSD
 
-- AndroidX WebKit, Material Components, AppCompat — Apache License 2.0
-  Copyright (C) The Android Open Source Project
+FlashPatch (https://github.com/darktohka/FlashPatch) is referenced in the
+project structure but its code is not bundled in this application.
