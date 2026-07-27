@@ -29,6 +29,7 @@ class LocalFragment : Fragment() {
     private val binding get() = _binding!!
     private val app get() = requireActivity().application as FlashBoxApp
     private lateinit var adapter: LocalFileAdapter
+    private var pendingAction: (() -> Unit)? = null
 
     private val pickSwf = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNullOrEmpty()) return@registerForActivityResult
@@ -123,15 +124,18 @@ class LocalFragment : Fragment() {
 
     private fun ensureStoragePermission(action: () -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (Environment.isExternalStorageManager()) action()
-            else {
+            if (Environment.isExternalStorageManager()) {
+                action()
+            } else {
+                pendingAction = action
                 AlertDialog.Builder(requireContext(), R.style.Theme_FlashBox_Dialog)
                     .setTitle(R.string.nav_local)
-                    .setMessage("需要所有文件访问权限以读取本地 SWF 文件")
+                    .setMessage("需要所有文件访问权限以读取本地 SWF 文件，请在设置中开启后返回")
                     .setPositiveButton(R.string.ok) { _, _ ->
-                        startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION))
+                        openAllFilesAccessSettings()
                     }
-                    .setNegativeButton(R.string.cancel, null)
+                    .setNegativeButton(R.string.cancel) { _, _ -> pendingAction = null }
+                    .setCancelable(false)
                     .show()
             }
         } else {
@@ -139,7 +143,46 @@ class LocalFragment : Fragment() {
                 == PackageManager.PERMISSION_GRANTED) {
                 action()
             } else {
+                pendingAction = action
                 requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 1001)
+            }
+        }
+    }
+
+    private fun openAllFilesAccessSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                data = Uri.parse("package:${requireContext().packageName}")
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback: try the general all-files-access settings page
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            } catch (e2: Exception) {
+                // Last resort: open app details settings
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:${requireContext().packageName}")
+                    }
+                    startActivity(intent)
+                } catch (e3: Exception) {
+                    android.widget.Toast.makeText(
+                        requireContext(), "无法打开权限设置，请手动前往设置开启", android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // After returning from the all-files-access settings page, execute pending action
+        if (pendingAction != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                val action = pendingAction
+                pendingAction = null
+                action?.invoke()
             }
         }
     }
@@ -147,7 +190,9 @@ class LocalFragment : Fragment() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1001 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            // user will tap again
+            val action = pendingAction
+            pendingAction = null
+            action?.invoke()
         }
     }
 

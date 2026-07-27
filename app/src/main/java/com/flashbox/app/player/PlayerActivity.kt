@@ -31,6 +31,10 @@ import com.flashbox.app.virtualkey.VirtualKeyMode
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.snackbar.Snackbar
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
 
@@ -72,6 +76,15 @@ class PlayerActivity : AppCompatActivity() {
         binding.webView.applyMode(app.settings.defaultWebMode)
         binding.webView.applyZoom(app.settings.pageZoom)
         currentEngine = app.settings.defaultEngine
+
+        // Prepare BOTH engines' assets to internal storage in background thread.
+        // Online pages need inject scripts + engine JS in filesDir before injection.
+        // Local playback needs engine files before loading player.html.
+        // Ruffle may require runtime download if not bundled in APK.
+        MainScope().launch(Dispatchers.IO) {
+            EngineAssets.ensurePrepared(this@PlayerActivity, EngineType.RUFFLE)
+            EngineAssets.ensurePrepared(this@PlayerActivity, EngineType.WAFLASH)
+        }
 
         binding.webView.onProgress = { p ->
             binding.progress.visibility = if (p in 1..99) View.VISIBLE else View.GONE
@@ -204,23 +217,28 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun loadLocalSwf(engine: EngineType, swf: File) {
         currentEngine = engine
-        EngineAssets.ensurePrepared(this, engine)
-        val config = app.settings.engineConfig(engine)
-        val cfgJson = Uri.encode(Gson().toJson(config))
-        val swfUri = Uri.encode("file://${swf.absolutePath}")
-        val name = Uri.encode(swf.name)
-        val html = EngineAssets.playerHtml(this)
-        val url = "file://${html.absolutePath}" +
-                "?engine=${engine.id}" +
-                "&swf=$swfUri" +
-                "&name=$name" +
-                "&config=$cfgJson" +
-                "&local=1"
-        binding.tvUrl.text = currentTitle
-        currentUrl = swf.absolutePath
-        binding.webView.applyMode(WebMode.DESKTOP)
-        binding.webView.loadUrl(url)
-        recordHistory("file://${swf.absolutePath}")
+        // Prepare engine assets in background, then load player.html on main thread
+        MainScope().launch(Dispatchers.IO) {
+            EngineAssets.ensurePrepared(this@PlayerActivity, engine)
+            withContext(Dispatchers.Main) {
+                val config = app.settings.engineConfig(engine)
+                val cfgJson = Uri.encode(Gson().toJson(config))
+                val swfUri = Uri.encode("file://${swf.absolutePath}")
+                val name = Uri.encode(swf.name)
+                val html = EngineAssets.playerHtml(this@PlayerActivity)
+                val url = "file://${html.absolutePath}" +
+                        "?engine=${engine.id}" +
+                        "&swf=$swfUri" +
+                        "&name=$name" +
+                        "&config=$cfgJson" +
+                        "&local=1"
+                binding.tvUrl.text = currentTitle
+                currentUrl = swf.absolutePath
+                binding.webView.applyMode(WebMode.DESKTOP)
+                binding.webView.loadUrl(url)
+                recordHistory("file://${swf.absolutePath}")
+            }
+        }
     }
 
     private fun copyUriToInternal(uri: Uri, name: String): File {

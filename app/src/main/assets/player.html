@@ -46,7 +46,15 @@
   var ENGINE = qs.get('engine') || 'ruffle';
   var SWF = qs.get('swf') || '';
   var NAME = qs.get('name') || 'movie.swf';
-  var CFG = qs.get('config') ? JSON.parse(decodeURIComponent(qs.get('config'))) : {};
+  // FIX: URLSearchParams.get() already decodes URL encoding once.
+  // Do NOT call decodeURIComponent again - it causes double-decoding errors.
+  var rawCfg = qs.get('config');
+  var CFG = {};
+  if (rawCfg) {
+    try { CFG = JSON.parse(rawCfg); } catch(e) {
+      try { CFG = JSON.parse(decodeURIComponent(rawCfg)); } catch(e2) { CFG = {}; }
+    }
+  }
   var BASE = location.href.substring(0, location.href.lastIndexOf('/')+1);
 
   window.FlashBox = { engine: ENGINE, swf: SWF, name: NAME, config: CFG };
@@ -121,14 +129,18 @@
         showError('Ruffle 初始化失败', String(e));
       }
     };
-    s.onerror = function(){ showError('引擎加载失败', 'Ruffle 资源缺失，请在设置中检查或使用 Waflash。'); };
+    s.onerror = function(){
+      showError('引擎加载失败', 'Ruffle 资源缺失，正在尝试 Waflash…');
+      // Auto-fallback to Waflash if Ruffle fails
+      ENGINE = 'waflash';
+      setTimeout(loadWaflash, 500);
+    };
     document.head.appendChild(s);
   }
 
   // ============ Waflash ============
   function loadWaflash(){
     setSplash('加载 Waflash 引擎…');
-    // Waflash expects a GAME global
     var dim = aspectDimensions(CFG.scale);
     window.GAME = {
       name: NAME.replace(/\.swf$/i,''),
@@ -167,28 +179,79 @@
     css.href = BASE + 'css/embed.css';
     document.head.appendChild(css);
 
-    // load waflash loader
+    // Load waflash loader (non-module script)
     var loader = document.createElement('script');
     loader.src = BASE + 'engines/waflash/waflash.js';
     loader.onload = function(){
-      // waflash.js calls createWaflash(GAME.src, wafOptions) which is defined in waflash-player.min.js
       setSplash('启动 Waflash…');
     };
-    loader.onerror = function(){ showError('引擎加载失败', 'Waflash 资源缺失，请使用 Ruffle。'); };
+    loader.onerror = function(){
+      showError('引擎加载失败', 'Waflash 资源缺失，正在尝试 Ruffle…');
+      // Auto-fallback to Ruffle if Waflash fails
+      ENGINE = 'ruffle';
+      setTimeout(loadRuffle, 500);
+    };
     document.head.appendChild(loader);
 
-    // load the player module (defines createWaflash)
-    var mod = document.createElement('script');
-    mod.type = 'module';
-    mod.crossOrigin = 'anonymous';
-    mod.textContent =
-      'import { createWaflash } from "' + BASE + 'engines/waflash/waflash-player.min.js";\n' +
-      'window.createWaflash = createWaflash;\n' +
-      'try { createWaflash(window.GAME.src, window.wafOptions || {}); \n' +
-      '  setTimeout(function(){ document.getElementById("splash").style.display="none"; }, 2500);\n' +
-      '  try{AndroidBridge.ready();}catch(e){} \n' +
-      '} catch(e){ console.error(e); }';
-    document.head.appendChild(mod);
+    // FIX: Load waflash-player.min.js as a regular script instead of ES module
+    // ES module import from file:// has CORS issues on Android WebView
+    var playerScript = document.createElement('script');
+    playerScript.src = BASE + 'engines/waflash/waflash-player.min.js';
+    playerScript.onload = function(){
+      setSplash('初始化 Waflash 播放器…');
+      try {
+        if (typeof createWaflash === 'function') {
+          createWaflash(window.GAME.src, window.wafOptions || {});
+          setTimeout(function(){ hideSplash(); }, 2500);
+          try{AndroidBridge.ready();}catch(e){}
+        } else if (typeof window.createWaflash === 'function') {
+          window.createWaflash(window.GAME.src, window.wafOptions || {});
+          setTimeout(function(){ hideSplash(); }, 2500);
+          try{AndroidBridge.ready();}catch(e){}
+        } else {
+          // waflash-player.min.js might export via ES module; try dynamic import as fallback
+          try {
+            var modScript = document.createElement('script');
+            modScript.type = 'module';
+            modScript.textContent =
+              'import { createWaflash } from "' + BASE + 'engines/waflash/waflash-player.min.js";\n' +
+              'window.createWaflash = createWaflash;\n' +
+              'try { createWaflash(window.GAME.src, window.wafOptions || {}); \n' +
+              '  setTimeout(function(){ document.getElementById("splash").style.display="none"; }, 2500);\n' +
+              '  try{AndroidBridge.ready();}catch(e){} \n' +
+              '} catch(e){ console.error(e); ' +
+              '  document.getElementById("err_title").textContent="Waflash 播放出错";' +
+              '  document.getElementById("err_msg").textContent=String(e);' +
+              '  document.getElementById("err").style.display="flex";' +
+              '  document.getElementById("splash").style.display="none";' +
+              '}';
+            document.head.appendChild(modScript);
+          } catch(e2) {
+            showError('Waflash 初始化失败', String(e2));
+          }
+        }
+      } catch(e) {
+        showError('Waflash 初始化失败', String(e));
+      }
+    };
+    playerScript.onerror = function(){
+      // Fallback to ES module import
+      try {
+        var modScript = document.createElement('script');
+        modScript.type = 'module';
+        modScript.textContent =
+          'import { createWaflash } from "' + BASE + 'engines/waflash/waflash-player.min.js";\n' +
+          'window.createWaflash = createWaflash;\n' +
+          'try { createWaflash(window.GAME.src, window.wafOptions || {}); \n' +
+          '  setTimeout(function(){ document.getElementById("splash").style.display="none"; }, 2500);\n' +
+          '  try{AndroidBridge.ready();}catch(e){} \n' +
+          '} catch(e){ console.error(e); }';
+        document.head.appendChild(modScript);
+      } catch(e) {
+        showError('引擎加载失败', 'Waflash player 加载失败，请使用 Ruffle。');
+      }
+    };
+    document.head.appendChild(playerScript);
 
     reportTitle();
   }
