@@ -130,7 +130,6 @@ class SettingsFragment : Fragment() {
     private fun clearCache() {
         try {
             requireContext().cacheDir.deleteRecursively()
-            val webCache = android.webkit.WebViewProvider::class.java
             // Android WebView manages its own cache; trigger clear
             android.webkit.WebStorage.getInstance().deleteAllData()
             snack("缓存已清除")
@@ -160,7 +159,6 @@ class SettingsFragment : Fragment() {
     private fun addButtonRow(container: LinearLayout, title: String, onClick: () -> Unit) {
         val btn = com.google.android.material.button.MaterialButton(requireContext()).apply {
             text = title
-            style = com.google.android.material.button.MaterialButton.STYLE_TEXT
             gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
             setOnClickListener { onClick() }
             val p = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)

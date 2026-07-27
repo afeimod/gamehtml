@@ -71,7 +71,7 @@ class SettingsRepository(context: Context) {
         set(value) = prefs.edit().putString(KEY_VK_DIR, value.id).apply()
 
     var vkKeyLayout: String
-        get() = prefs.getString(KEY_VK_LAYOUT, VirtualKeyMode.WASD.id)
+        get() = prefs.getString(KEY_VK_LAYOUT, VirtualKeyMode.WASD) ?: VirtualKeyMode.WASD
         set(value) = prefs.edit().putString(KEY_VK_LAYOUT, value).apply()
 
     /** JSON list of independent key definitions (code,label,x,y,size). */

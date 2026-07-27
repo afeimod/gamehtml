@@ -36,8 +36,8 @@ class KeyButtonView @JvmOverloads constructor(
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             if (!editMode) return false
             val scale = detector.scaleFactor
-            val newW = (width * scale).coerceIn(dp(40), dp(180)).roundToInt()
-            val newH = (height * scale).coerceIn(dp(40), dp(180)).roundToInt()
+            val newW = (width * scale).coerceIn(dp(40).toFloat(), dp(180).toFloat()).roundToInt()
+            val newH = (height * scale).coerceIn(dp(40).toFloat(), dp(180).toFloat()).roundToInt()
             layoutParams?.let {
                 it.width = newW
                 it.height = newH

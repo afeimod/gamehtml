@@ -16,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.flashbox.app.FlashBoxApp
+import com.flashbox.app.MainActivity
 import com.flashbox.app.R
 import com.flashbox.app.data.FavoriteEntity
 import com.flashbox.app.data.HistoryEntity

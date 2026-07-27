@@ -64,7 +64,7 @@ class FlashWebView @JvmOverloads constructor(
             setGeolocationEnabled(true)
             blockNetworkLoads = false
             // Force-disable algorithmic darkening so flash canvases render correctly
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARK_THEME)) {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                 WebSettingsCompat.setAlgorithmicDarkeningAllowed(this, false)
             }
         }

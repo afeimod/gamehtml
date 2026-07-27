@@ -41,7 +41,7 @@ class HomeFragment : Fragment() {
             val text = binding.urlInput.text.toString().trim()
             if (text.isNotEmpty()) PlayerActivity.launchUrl(requireContext(), text)
         }
-        binding.urlInput.setOnEditorActionListener { v, _ ->
+        binding.urlInput.setOnEditorActionListener { v, _, _ ->
             val text = v.text.toString().trim()
             if (text.isNotEmpty()) PlayerActivity.launchUrl(requireContext(), text)
             true
