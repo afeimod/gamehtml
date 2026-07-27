@@ -1,46 +1,23 @@
-# Build outputs
-build/
-.gradle/
-*.apk
-*.aab
-*.dex
-*.class
+# Built artifacts
 *.iml
-.idea/
-local.properties
 .gradle/
-.kotlin/
-captures/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/app/build
+/captures
 .externalNativeBuild
 .cxx
-*.hprof
+local.properties
 
-# JS
-node_modules/
-*.log
-npm-debug.log*
+# Gradle wrapper jar (generated at build time)
+gradle/wrapper/gradle-wrapper.jar
 
-# Android Studio
-.navigation/
-.cxx/
+# Engine assets generated into source by build tasks
+app/src/main/assets/engines/ruffle/
+app/src/main/assets/engines/waflash/
 
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-*.swp
-*.swo
-
-# Custom keystore
-flashbox-release.jks
-keystore.jks
+# Keystore
 *.jks
 *.keystore
-
-# Secrets
-secrets.properties
-
-# Test output
-test-output/
-test-results/
-reports/
