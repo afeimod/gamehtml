@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Flash 玩家</title>
+    <link rel="stylesheet" href="css/base.css">
+    <style>
+        body { background: #000; color: #fff; margin: 0; }
+        .player-wrap { position: fixed; inset: 0; background: #000; }
+        .stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+        .stage .holder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        .stage .holder > * { max-width: 100%; max-height: 100%; }
+        .aspect-fill .holder > * { width: 100% !important; height: 100% !important; }
+        .aspect-stretch .holder > * { width: 100% !important; height: 100% !important; object-fit: fill; }
+        .status {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            color: #fff; opacity: 0.7; font-size: 14px; pointer-events: none;
+        }
+        .toolbar {
+            position: fixed; top: 0; left: 0; right: 0;
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 10px; background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+        .toolbar .tb {
+            background: rgba(255,255,255,0.1); border: none; color: #fff;
+            width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .toolbar .tb:active { background: rgba(255,255,255,0.2); }
+        .toolbar .ttl { font-size: 13px; opacity: 0.9; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .err {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            color: #ff6b6b; font-size: 14px; max-width: 80%; text-align: center;
+        }
+    </style>
+</head>
+<body class="aspect-fit no-float">
+    <div class="player-wrap">
+        <div class="toolbar">
+            <button class="tb" id="btnBack" title="返回">←</button>
+            <button class="tb" id="btnReload" title="重启引擎">↻</button>
+            <span class="ttl" id="title">Flash 玩家</span>
+            <button class="tb" id="btnEngine" title="切换引擎">引</button>
+            <button class="tb" id="btnFs" title="全屏">⛶</button>
+        </div>
+        <div class="stage" id="stage">
+            <div class="holder" id="holder">
+                <div class="status" id="status">正在加载 Ruffle 引擎…</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="engines/ruffle/ruffle-selfhosted.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        // 解析 URL 参数
+        const params = new URLSearchParams(location.search);
+        const src = params.get("src") || "";
+        const name = params.get("name") || "Flash Game";
+        const quality = params.get("quality") || "high";
+        const aspect = params.get("aspect") || "fit";
+        const bg = params.get("bg") || "#1a1a1a";
+        const letterbox = (params.get("letterbox") || "true") === "true";
+
+        document.body.classList.remove("aspect-fit", "aspect-fill", "aspect-stretch");
+        document.body.classList.add("aspect-" + aspect);
+        document.body.style.background = bg;
+        document.getElementById("title").textContent = name;
+
+        // 画质 -> Ruffle 配置
+        // low: 关闭 letterbox，low quality
+        // best: 开启 letterbox, high quality
+        function applyConfig() {
+            const baseCfg = {
+                autoplay: "on",
+                backgroundColor: bg,
+                letterbox: letterbox ? "fullscreen" : "off",
+                scale: "showAll",
+                quality: quality === "low" ? "low" : quality === "best" ? "best" : quality === "medium" ? "medium" : "high",
+                wmode: "direct",
+                allowNetworking: "all",
+                allowScriptAccess: "always",
+                unmuted: true,
+                polyfills: true,
+                preloader: true,
+                showSwfDownload: false,
+                logLevel: "error",
+            };
+            if (window.RufflePlayer) {
+                try { window.RufflePlayer.config = baseCfg; } catch (e) { console.warn(e); }
+            }
+        }
+        applyConfig();
+
+        // 工具栏
+        document.getElementById("btnBack").onclick = () => {
+            if (window.AndroidBridge) window.AndroidBridge.close();
+            else history.length > 1 ? history.back() : location.href = "index.html";
+        };
+        document.getElementById("btnReload").onclick = () => location.reload();
+        document.getElementById("btnEngine").onclick = () => {
+            const u = new URL(location.href);
+            const newEng = (window.AndroidBridge && window.AndroidBridge.engine) ? window.AndroidBridge.engine() : "ruffle";
+            const target = newEng === "ruffle" ? "waflash_player.html" : "ruffle_player.html";
+            location.href = target + "?" + u.searchParams.toString();
+        };
+        document.getElementById("btnFs").onclick = () => {
+            const el = document.documentElement;
+            if (document.fullscreenElement) document.exitFullscreen();
+            else if (el.requestFullscreen) el.requestFullscreen();
+        };
+
+        // 加载并启动 Ruffle
+        let ruffleInstance = null;
+        function startRuffle() {
+            try {
+                const player = window.RufflePlayer.newest();
+                ruffleInstance = player.createPlayer();
+                const holder = document.getElementById("holder");
+                holder.innerHTML = "";
+                holder.appendChild(ruffleInstance);
+                // 加载
+                const source = decodeURIComponent(src);
+                ruffleInstance.load(source).then(() => {
+                    document.getElementById("status").style.display = "none";
+                    if (window.AndroidBridge) window.AndroidBridge.onLoaded();
+                }).catch(e => {
+                    showError("加载失败: " + (e.message || e));
+                });
+                ruffleInstance.style.width = "100%";
+                ruffleInstance.style.height = "100%";
+                ruffleInstance.style.outline = "none";
+            } catch (e) {
+                showError("Ruffle 启动失败: " + (e.message || e));
+            }
+        }
+        function showError(msg) {
+            const s = document.getElementById("status");
+            s.textContent = msg;
+            s.style.color = "#FF6B6B";
+            s.style.display = "block";
+            console.error(msg);
+            if (window.AndroidBridge) window.AndroidBridge.onError(msg);
+        }
+        // Ruffle 通过 webpack 暴露为 IIFE，等 DOMContentLoaded
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", startRuffle);
+        } else {
+            startRuffle();
+        }
+    </script>
+</body>
+</html>

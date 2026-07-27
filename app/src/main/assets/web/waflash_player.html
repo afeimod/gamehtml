@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Flash 玩家</title>
+    <link rel="stylesheet" href="css/base.css">
+    <style>
+        body { background: #000; color: #fff; margin: 0; }
+        .player-wrap { position: fixed; inset: 0; background: #000; }
+        .stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+        .stage .holder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        .stage .holder > * { max-width: 100%; max-height: 100%; }
+        .aspect-fill .holder > * { width: 100% !important; height: 100% !important; }
+        .aspect-stretch .holder > * { width: 100% !important; height: 100% !important; object-fit: fill; }
+        .status {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            color: #fff; opacity: 0.7; font-size: 14px; pointer-events: none;
+        }
+        .toolbar {
+            position: fixed; top: 0; left: 0; right: 0;
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 10px; background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+        .toolbar .tb {
+            background: rgba(255,255,255,0.1); border: none; color: #fff;
+            width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .toolbar .tb:active { background: rgba(255,255,255,0.2); }
+        .toolbar .ttl { font-size: 13px; opacity: 0.9; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .err {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            color: #ff6b6b; font-size: 14px; max-width: 80%; text-align: center;
+        }
+    </style>
+</head>
+<body class="aspect-fit no-float">
+    <div class="player-wrap">
+        <div class="toolbar">
+            <button class="tb" id="btnBack" title="返回">←</button>
+            <button class="tb" id="btnReload" title="重启引擎">↻</button>
+            <span class="ttl" id="title">Flash 玩家</span>
+            <button class="tb" id="btnEngine" title="切换引擎">引</button>
+            <button class="tb" id="btnFs" title="全屏">⛶</button>
+        </div>
+        <div class="stage" id="stage">
+            <div class="holder" id="holder">
+                <div class="status" id="status">正在加载 Waflash 引擎…</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+    <script>
+        const params = new URLSearchParams(location.search);
+        const src = params.get("src") || "";
+        const name = params.get("name") || "Flash Game";
+        const quality = params.get("quality") || "high";
+        const aspect = params.get("aspect") || "fit";
+        const bg = params.get("bg") || "#1a1a1a";
+
+        document.body.classList.remove("aspect-fit", "aspect-fill", "aspect-stretch");
+        document.body.classList.add("aspect-" + aspect);
+        document.body.style.background = bg;
+        document.getElementById("title").textContent = name;
+
+        document.getElementById("btnBack").onclick = () => {
+            if (window.AndroidBridge) window.AndroidBridge.close();
+            else history.length > 1 ? history.back() : location.href = "index.html";
+        };
+        document.getElementById("btnReload").onclick = () => location.reload();
+        document.getElementById("btnEngine").onclick = () => {
+            const u = new URL(location.href);
+            const target = "ruffle_player.html";
+            location.href = target + "?" + u.searchParams.toString();
+        };
+        document.getElementById("btnFs").onclick = () => {
+            const el = document.documentElement;
+            if (document.fullscreenElement) document.exitFullscreen();
+            else if (el.requestFullscreen) el.requestFullscreen();
+        };
+
+        // 加载 Waflash 引擎模块
+        function loadWaflash() {
+            const holder = document.getElementById("holder");
+            holder.innerHTML = "";
+            // 重建 Waflash 容器
+            const container = document.createElement("div");
+            container.id = "waflashContainer";
+            container.style.cssText = "width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: " + bg + ";";
+            const canvas = document.createElement("canvas");
+            canvas.className = "waflashCanvas";
+            canvas.id = "canvas";
+            canvas.setAttribute("tabindex", "1");
+            canvas.style.cssText = "max-width: 100%; max-height: 100%; outline: none;";
+            container.appendChild(canvas);
+            const status = document.createElement("div");
+            status.id = "waflashStatus";
+            status.style.cssText = "color:#fff;opacity:0.6;position:absolute;";
+            status.style.display = "none";
+            container.appendChild(status);
+            holder.appendChild(container);
+
+            // 注入 Waflash 引擎（ES Module）
+            const wafJs = document.createElement("script");
+            wafJs.type = "module";
+            wafJs.textContent = `
+                import { createWaflash } from "./engines/waflash/waflash-player.min.js";
+                window.__createWaflash = createWaflash;
+                window.__waflashReady = true;
+            `;
+            wafJs.onerror = () => showError("Waflash 引擎脚本下载失败");
+            document.head.appendChild(wafJs);
+
+            // 轮询 module 加载
+            const tryStart = () => {
+                if (window.__createWaflash) {
+                    try {
+                        const opts = {
+                            enableFilters: quality === "best" || quality === "high",
+                            gpu: quality !== "low",
+                        };
+                        window.__createWaflash(decodeURIComponent(src), opts);
+                        document.getElementById("status").style.display = "none";
+                        if (window.AndroidBridge) window.AndroidBridge.onLoaded();
+                    } catch (e) {
+                        showError("Waflash 加载失败: " + (e.message || e));
+                    }
+                } else {
+                    setTimeout(tryStart, 80);
+                }
+            };
+            tryStart();
+        }
+        function showError(msg) {
+            const s = document.getElementById("status");
+            s.textContent = msg;
+            s.style.color = "#FF6B6B";
+            s.style.display = "block";
+            console.error(msg);
+            if (window.AndroidBridge) window.AndroidBridge.onError(msg);
+        }
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", loadWaflash);
+        } else {
+            loadWaflash();
+        }
+    </script>
+</body>
+</html>

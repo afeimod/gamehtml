@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>4399 Flash 游戏盒</title>
+    <link rel="stylesheet" href="css/base.css">
+    <style>
+        .hero {
+            display: flex; align-items: center; gap: 12px;
+            background: linear-gradient(135deg, #5B5BF3 0%, #7B6BFF 60%, #FF6B6B 100%);
+            color: #fff; padding: 18px; border-radius: 18px;
+            box-shadow: 0 8px 28px rgba(91,91,243,0.25);
+            margin-bottom: 14px;
+        }
+        .hero .em { font-size: 22px; font-weight: 800; }
+        .hero .sm { font-size: 12px; opacity: .9; margin-top: 2px; }
+        .hero .pulse {
+            margin-left: auto;
+            background: rgba(255,255,255,0.15); padding: 8px 14px;
+            border-radius: 20px; font-size: 12px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .cat {
+            display: flex; gap: 8px; margin: 12px 0 6px; overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .cat::-webkit-scrollbar { display: none; }
+        .cat .pill {
+            padding: 6px 12px; border-radius: 14px; font-size: 12px; white-space: nowrap;
+            background: var(--card); border: 1px solid var(--divider); cursor: pointer;
+        }
+        .cat .pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .game {
+            background: var(--card); border: 1px solid var(--divider);
+            border-radius: 14px; overflow: hidden; cursor: pointer;
+            display: flex; flex-direction: column;
+            transition: transform .15s;
+        }
+        .game:active { transform: scale(0.98); }
+        .game .cover {
+            aspect-ratio: 4/3;
+            background: linear-gradient(135deg, #5B5BF3, #FF6B6B);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 800; font-size: 22px;
+        }
+        .game .nm { padding: 8px 10px; font-size: 13px; font-weight: 600; }
+        .game .meta { padding: 0 10px 8px; color: var(--text-2); font-size: 11px; }
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        @media (min-width: 720px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+        @media (min-width: 1000px) { .grid { grid-template-columns: repeat(5, 1fr); } }
+    </style>
+</head>
+<body class="app">
+    <div class="hero">
+        <div>
+            <div class="em">4399 Flash 游戏盒</div>
+            <div class="sm">兼容 Ruffle + Waflash 双引擎</div>
+        </div>
+        <div class="pulse" id="enginePill">Ruffle</div>
+    </div>
+
+    <div class="search">
+        <span style="color: var(--text-2); padding: 0 6px;">🔍</span>
+        <input id="searchInput" placeholder="搜索游戏 / 输入网址 / 粘贴 SWF 链接" />
+        <button id="btnGo">▶</button>
+    </div>
+
+    <div class="tiles">
+        <div class="tile" data-url="https://www.4399.com/">
+            <div class="icon">PC</div>
+            <div class="name">4399电脑版</div>
+        </div>
+        <div class="tile" data-url="https://m.4399.com/">
+            <div class="icon red">手</div>
+            <div class="name">4399手机版</div>
+        </div>
+        <div class="tile" data-url="https://www.lingdongyouxi.com/">
+            <div class="icon green">灵</div>
+            <div class="name">灵动游戏</div>
+        </div>
+        <div class="tile" data-url="https://www.7k7k.com/">
+            <div class="icon amber">7</div>
+            <div class="name">7k7k</div>
+        </div>
+        <div class="tile" data-url="https://www.yx007.com/">
+            <div class="icon purple">7</div>
+            <div class="name">007游戏</div>
+        </div>
+        <div class="tile" data-url="https://www.3839.com/">
+            <div class="icon cyan">3</div>
+            <div class="name">3839</div>
+        </div>
+        <div class="tile" data-url="https://www.h5uc.com/">
+            <div class="icon pink">H5</div>
+            <div class="name">H5UC</div>
+        </div>
+        <div class="tile" data-url="https://www.sanguosha.com/">
+            <div class="icon">三</div>
+            <div class="name">三国杀</div>
+        </div>
+    </div>
+
+    <div class="cat" id="cats">
+        <div class="pill active" data-cat="all">全部</div>
+        <div class="pill" data-cat="hot">热门</div>
+        <div class="pill" data-cat="action">动作</div>
+        <div class="pill" data-cat="puzzle">益智</div>
+        <div class="pill" data-cat="shoot">射击</div>
+        <div class="pill" data-cat="rpg">RPG</div>
+        <div class="pill" data-cat="sport">体育</div>
+        <div class="pill" data-cat="io">io</div>
+    </div>
+
+    <div class="section">
+        <h3>推荐游戏</h3>
+        <span class="more" onclick="openExternal('https://www.4399.com/flash/')">查看更多</span>
+    </div>
+    <div class="grid" id="games"></div>
+
+    <div class="section">
+        <h3>收藏</h3>
+        <span class="more" onclick="openFav()">管理</span>
+    </div>
+    <div class="list" id="favList"></div>
+
+    <div class="section">
+        <h3>历史</h3>
+        <span class="more" id="btnClearHistory">清空</span>
+    </div>
+    <div class="list" id="histList"></div>
+
+    <div class="foot">© 4399 Flash 游戏盒 · Powered by Ruffle + Waflash</div>
+
+    <script src="js/main.js"></script>
+    <script>
+        const SAMPLE_GAMES = [
+            { name: "黄金矿工", cat: "puzzle", color: "#5B5BF3", letter: "G" },
+            { name: "合金弹头", cat: "action", color: "#22C55E", letter: "合" },
+            { name: "拳皇wing", cat: "action", color: "#EF4444", letter: "拳" },
+            { name: "火柴人枪战", cat: "shoot", color: "#F59E0B", letter: "枪" },
+            { name: "森林冰火人", cat: "puzzle", color: "#06B6D4", letter: "冰" },
+            { name: "狂野飙车", cat: "sport", color: "#A855F7", letter: "车" },
+            { name: "僵尸危机", cat: "shoot", color: "#EC4899", letter: "尸" },
+            { name: "超级玛丽", cat: "action", color: "#5B5BF3", letter: "马" },
+            { name: "连连看", cat: "puzzle", color: "#22C55E", letter: "连" },
+            { name: "三国杀", cat: "rpg", color: "#EF4444", letter: "三" },
+            { name: "双截龙", cat: "action", color: "#F59E0B", letter: "龙" },
+            { name: "拳王", cat: "sport", color: "#06B6D4", letter: "拳" },
+            { name: "泡泡堂", cat: "io", color: "#A855F7", letter: "泡" },
+            { name: "雷电", cat: "shoot", color: "#EC4899", letter: "雷" },
+            { name: "魂斗罗", cat: "action", color: "#5B5BF3", letter: "魂" },
+            { name: "贪吃蛇", cat: "io", color: "#22C55E", letter: "蛇" },
+        ];
+
+        const elGames = document.getElementById("games");
+        function renderGames(filter) {
+            const list = (filter === "all" || !filter) ? SAMPLE_GAMES : SAMPLE_GAMES.filter(g => g.cat === filter);
+            elGames.innerHTML = "";
+            list.forEach(g => {
+                const d = document.createElement("div");
+                d.className = "game";
+                d.innerHTML = `
+                    <div class="cover" style="background: linear-gradient(135deg, ${g.color}, ${shade(g.color, -30)})">
+                        <span>${g.letter}</span>
+                    </div>
+                    <div class="nm">${g.name}</div>
+                    <div class="meta">点击搜索 → 跳到 4399 详情</div>
+                `;
+                d.onclick = () => openSearch(g.name);
+                elGames.appendChild(d);
+            });
+        }
+        function shade(hex, p) {
+            const n = parseInt(hex.replace('#', ''), 16);
+            const r = Math.max(0, Math.min(255, (n >> 16) + p));
+            const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + p));
+            const b = Math.max(0, Math.min(255, (n & 0xff) + p));
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+        renderGames("all");
+
+        document.querySelectorAll("#cats .pill").forEach(p => {
+            p.addEventListener("click", () => {
+                document.querySelectorAll("#cats .pill").forEach(x => x.classList.remove("active"));
+                p.classList.add("active");
+                renderGames(p.dataset.cat);
+            });
+        });
+
+        document.querySelectorAll(".tile[data-url]").forEach(t => {
+            t.addEventListener("click", () => openExternal(t.dataset.url));
+        });
+
+        document.getElementById("btnGo").addEventListener("click", () => {
+            const v = document.getElementById("searchInput").value.trim();
+            if (!v) return;
+            if (/^https?:\/\//i.test(v) || /\.swf(\?|$)/i.test(v)) openExternal(v);
+            else openSearch(v);
+        });
+        document.getElementById("searchInput").addEventListener("keydown", e => {
+            if (e.key === "Enter") document.getElementById("btnGo").click();
+        });
+
+        function openSearch(name) {
+            openExternal("https://so2.4399.com/search/search.php?k=" + encodeURIComponent(name));
+        }
+        function openExternal(url) {
+            if (window.GAMEBOX) {
+                // 走 browser.html 以获得 PC/Mobile 模式
+                const bUrl = "browser.html?url=" + encodeURIComponent(url);
+                window.GAMEBOX.open(bUrl);
+            } else {
+                location.href = url;
+            }
+        }
+        function openFav() {
+            if (window.GAMEBOX) window.GAMEBOX.openFav();
+        }
+
+        // 收藏 / 历史
+        function renderFav() {
+            const list = (window.GAMEBOX && window.GAMEBOX.favorites()) || [];
+            const root = document.getElementById("favList");
+            root.innerHTML = "";
+            if (list.length === 0) {
+                root.innerHTML = '<div style="text-align:center; color: var(--text-2); padding: 20px;">还没有收藏</div>';
+                return;
+            }
+            list.slice(0, 10).forEach(it => {
+                const d = document.createElement("div");
+                d.className = "row";
+                d.innerHTML = `<div class="ico">★</div><div class="meta"><div class="n">${escapeHtml(it.name)}</div><div class="u">${escapeHtml(it.url)}</div></div>`;
+                d.onclick = () => openExternal(it.url);
+                root.appendChild(d);
+            });
+        }
+        function renderHist() {
+            const list = (window.GAMEBOX && window.GAMEBOX.history()) || [];
+            const root = document.getElementById("histList");
+            root.innerHTML = "";
+            if (list.length === 0) {
+                root.innerHTML = '<div style="text-align:center; color: var(--text-2); padding: 20px;">还没有历史</div>';
+                return;
+            }
+            list.slice(0, 12).forEach(it => {
+                const d = document.createElement("div");
+                d.className = "row";
+                d.innerHTML = `<div class="ico">⏱</div><div class="meta"><div class="n">${escapeHtml(it.name)}</div><div class="u">${escapeHtml(it.url)}</div></div>`;
+                d.onclick = () => openExternal(it.url);
+                root.appendChild(d);
+            });
+        }
+        function escapeHtml(s) {
+            return (s + "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+        }
+        document.getElementById("btnClearHistory").addEventListener("click", () => {
+            if (window.GAMEBOX) window.GAMEBOX.clearHistory();
+            renderHist();
+        });
+
+        // 引擎标签
+        const eng = (window.GAMEBOX && window.GAMEBOX.engine) ? window.GAMEBOX.engine() : "ruffle";
+        document.getElementById("enginePill").textContent = eng === "ruffle" ? "Ruffle" : "Waflash";
+
+        renderFav();
+        renderHist();
+        if (window.GAMEBOX) {
+            window.GAMEBOX.onChange(() => { renderFav(); renderHist(); });
+        }
+    </script>
+</body>
+</html>
