@@ -470,6 +470,9 @@ open class GameWebViewClient(
         // 注入按键安全钩子：页面失焦时自动释放所有按键（所有页面通用）
         view?.evaluateJavascript(KEY_SAFETY_SCRIPT, null)
 
+        // 注入 View Transitions API 兼容性补丁：防止"Transition was skipped"导致页面无法跳转
+        view?.evaluateJavascript(VIEW_TRANSITION_PATCH_SCRIPT, null)
+
         // 4399 页面：伪造 document.referrer 绕过防盗链检测 + IE 兼容模式伪造
         if (url != null && url.contains("4399.com")) {
             view?.evaluateJavascript(REFERER_SPOOF_SCRIPT, null)
@@ -650,6 +653,46 @@ open class GameWebViewClient(
               document.addEventListener('visibilitychange', function() {
                 if (document.hidden) releaseAll();
               });
+            })();
+        """
+
+        /**
+         * View Transitions API 兼容性补丁（所有页面通用）。
+         *
+         * 问题：部分网站（如 gamefunbar.com）使用 document.startViewTransition() 实现
+         *       SPA 风格的页面跳转。Android WebView 对该 API 的支持不完善，
+         *       可能直接跳过过渡（Transition was skipped），导致：
+         *       1. 回调函数未执行 → 页面无法跳转（核心 Bug）
+         *       2. finished Promise 抛出未捕获的 AbortError → 控制台报错
+         *
+         * 方案：用 polyfill 替换 document.startViewTransition，确保回调始终同步执行，
+         *       返回的 Promise 始终正常 resolve（不抛 AbortError）。
+         *       代价是丢失过渡动画，但不影响功能与导航。
+         */
+        private const val VIEW_TRANSITION_PATCH_SCRIPT = """
+            (function(){
+              if (window.__vtPatch) return;
+              window.__vtPatch = true;
+              document.startViewTransition = function(callback) {
+                var result;
+                try {
+                  result = callback ? callback() : undefined;
+                } catch(e) {
+                  result = Promise.reject(e);
+                }
+                var p = (result && typeof result.then === 'function') ? result : Promise.resolve();
+                var finished = p.then(undefined, function(err) {
+                  if (err && err.name === 'AbortError') return;
+                  throw err;
+                });
+                return {
+                  finished: finished,
+                  ready: Promise.resolve(),
+                  updateCallbackDone: p,
+                  skipTransition: function() {},
+                  types: []
+                };
+              };
             })();
         """
 
