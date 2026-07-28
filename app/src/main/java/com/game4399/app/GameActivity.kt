@@ -126,6 +126,8 @@ class GameActivity : AppCompatActivity() {
                 applyDesktopUaForUrl(currentUrl)
             }
         }
+        // 注入 Document Start 脚本（在页面 JS 之前执行 View Transitions polyfill 等）
+        webView.injectDocumentStartScripts()
     }
 
     /**
