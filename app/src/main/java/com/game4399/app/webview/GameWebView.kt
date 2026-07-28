@@ -479,9 +479,14 @@ open class GameWebView @JvmOverloads constructor(
         private const val DOCUMENT_START_SCRIPT = """
             (function(){
               // === 1. View Transitions API polyfill ===
+              // 问题：Android WebView 的 startViewTransition 可能直接跳过过渡
+              // （Transition was skipped），导致回调不执行、页面无法跳转。
+              // 方案：彻底替换 startViewTransition，确保回调始终同步执行。
+              // 关键：必须覆盖 Document.prototype（而非仅 document 实例），
+              //       因为 WebView 可能通过原型 getter 返回原生实现，覆盖实例无效。
               if (!window.__vtPatched) {
                 window.__vtPatched = true;
-                document.startViewTransition = function(callback) {
+                var vtPolyfill = function(callback) {
                   var result;
                   try {
                     result = callback ? callback() : undefined;
@@ -501,8 +506,30 @@ open class GameWebView @JvmOverloads constructor(
                     types: []
                   };
                 };
+                // 覆盖 Document.prototype（最优先：阻止原生 getter 返回原始实现）
+                try {
+                  Object.defineProperty(Document.prototype, 'startViewTransition', {
+                    value: vtPolyfill,
+                    writable: true,
+                    configurable: true
+                  });
+                } catch(e) {}
+                // 同时覆盖 document 实例（双重保险）
+                try { document.startViewTransition = vtPolyfill; } catch(e) {}
               }
-              // === 2. navigator.plugins 兜底：确保 namedItem/item 方法存在 ===
+              // === 2. 捕获 unhandledrejection：抑制 View Transitions 的 AbortError ===
+              if (!window.__vtRejectionHook) {
+                window.__vtRejectionHook = true;
+                window.addEventListener('unhandledrejection', function(event) {
+                  if (event.reason && event.reason.name === 'AbortError') {
+                    var msg = event.reason.message || String(event.reason);
+                    if (msg.indexOf('Transition') >= 0 || msg.indexOf('skipped') >= 0 || msg === 'AbortError') {
+                      event.preventDefault();
+                    }
+                  }
+                });
+              }
+              // === 3. navigator.plugins 兜底：确保 namedItem/item 方法存在 ===
               try {
                 var np = navigator.plugins;
                 if (np && typeof np.namedItem !== 'function') {

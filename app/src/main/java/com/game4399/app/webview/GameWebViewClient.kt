@@ -88,13 +88,10 @@ open class GameWebViewClient(
             return interceptSwf(url, request)
         }
 
-        // 不再拦截 HTML 页面！
-        // 之前 interceptHtml 会自己发 HTTP 请求获取 HTML 并修改，导致：
-        // - 编码处理不当→乱码（GBK 网站用错误 charset 解码）
-        // - 丢失 WebView 原生 cookie/session 管理→登录失败
-        // - 破坏缓存、重定向、条件请求机制
-        // 现在 Flash 注入完全通过 onPageStarted/onPageFinished 的 evaluateJavascript 异步完成
-        // SWF 提取功能仅在用户点击"提取 SWF"时通过 JS 嗅探器扫描页面
+        // 不拦截 HTML 页面！
+        // View Transitions polyfill 通过 addDocumentStartJavaScript（Document Start 注入）
+        // 和 onPageStarted 兜底注入实现，无需 HTML 拦截。
+        // HTML 拦截会导致：编码问题、cookie/session 丢失、缓存/重定向破坏。
 
         return super.shouldInterceptRequest(view, request)
     }
@@ -470,8 +467,9 @@ open class GameWebViewClient(
         // 注入按键安全钩子：页面失焦时自动释放所有按键（所有页面通用）
         view?.evaluateJavascript(KEY_SAFETY_SCRIPT, null)
 
-        // View Transitions API 补丁兜底：addDocumentStartJavaScript 已在页面 JS 之前注入，
-        // 此处作为不支持 DOCUMENT_START_SCRIPT 特性的旧 WebView 的兜底
+        // View Transitions API polyfill 兜底：addDocumentStartJavaScript 已在页面 JS 之前
+        // 覆盖 Document.prototype.startViewTransition。此处作为旧 WebView 的兜底，
+        // 同样覆盖 Document.prototype + 捕获 unhandledrejection。
         view?.evaluateJavascript(VIEW_TRANSITION_PATCH_SCRIPT, null)
 
         // 4399 页面：伪造 document.referrer 绕过防盗链检测 + IE 兼容模式伪造
@@ -674,7 +672,7 @@ open class GameWebViewClient(
             (function(){
               if (window.__vtPatch) return;
               window.__vtPatch = true;
-              document.startViewTransition = function(callback) {
+              var vtPolyfill = function(callback) {
                 var result;
                 try {
                   result = callback ? callback() : undefined;
@@ -694,6 +692,28 @@ open class GameWebViewClient(
                   types: []
                 };
               };
+              // 覆盖 Document.prototype（阻止原生 getter 返回原始实现）
+              try {
+                Object.defineProperty(Document.prototype, 'startViewTransition', {
+                  value: vtPolyfill,
+                  writable: true,
+                  configurable: true
+                });
+              } catch(e) {}
+              // 同时覆盖 document 实例（双重保险）
+              try { document.startViewTransition = vtPolyfill; } catch(e) {}
+              // 捕获 unhandledrejection：抑制 View Transitions 的 AbortError
+              if (!window.__vtRejectionHook) {
+                window.__vtRejectionHook = true;
+                window.addEventListener('unhandledrejection', function(event) {
+                  if (event.reason && event.reason.name === 'AbortError') {
+                    var msg = event.reason.message || String(event.reason);
+                    if (msg.indexOf('Transition') >= 0 || msg.indexOf('skipped') >= 0 || msg === 'AbortError') {
+                      event.preventDefault();
+                    }
+                  }
+                });
+              }
             })();
         """
 
