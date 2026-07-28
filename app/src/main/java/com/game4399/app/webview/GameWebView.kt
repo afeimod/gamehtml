@@ -10,6 +10,7 @@ import android.view.View
 import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.util.Collections
 import kotlin.math.abs
@@ -99,10 +100,16 @@ open class GameWebView @JvmOverloads constructor(
         if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
             WebSettingsCompat.setSafeBrowsingEnabled(this, true)
         }
-        // 注入 Document Start 脚本：在页面任何 JS 之前执行（AndroidX WebKit 1.6.0+）
-        // 解决 evaluateJavascript(onPageStarted) 时序问题——异步注入可能晚于页面自身脚本
+    }
+
+    /**
+     * 注入 Document Start 脚本：在页面任何 JS 之前执行（AndroidX WebKit 1.6.0+）。
+     * 必须在 WebView 创建后、首次加载前调用。
+     * 解决 evaluateJavascript(onPageStarted) 时序问题——异步注入可能晚于页面自身脚本。
+     */
+    fun injectDocumentStartScripts() {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebSettingsCompat.addDocumentStartJavaScript(this, DOCUMENT_START_SCRIPT, setOf("*"))
+            WebViewCompat.addDocumentStartJavaScript(this, DOCUMENT_START_SCRIPT, setOf("*"))
         }
     }
 
