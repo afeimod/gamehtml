@@ -494,6 +494,14 @@ open class GameWebView @JvmOverloads constructor(
                     result = Promise.reject(e);
                   }
                   var p = (result && typeof result.then === 'function') ? result : Promise.resolve();
+                  // 强制触发重绘：原生 startViewTransition 会触发渲染帧，
+                  // polyfill 仅同步执行回调，WebView 不知道 DOM 已更新需要重绘。
+                  // 不触发重绘 → 页面"卡住"，切后台再回来 onResume 强制重绘才恢复。
+                  requestAnimationFrame(function() {
+                    try {
+                      void document.body && document.body.offsetHeight;
+                    } catch(e) {}
+                  });
                   var finished = p.then(undefined, function(err) {
                     if (err && err.name === 'AbortError') return;
                     throw err;

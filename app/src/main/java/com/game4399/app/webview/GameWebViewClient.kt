@@ -516,6 +516,8 @@ open class GameWebViewClient(
         if (url != null && !url.startsWith("file:///android_asset/") && !url.startsWith("https://flash.local/")) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
+        // 强制重绘兜底：页面首次可见时确保渲染帧已提交
+        view?.invalidate()
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
@@ -533,6 +535,20 @@ open class GameWebViewClient(
         if (url != null && !url.startsWith("file:///android_asset/") && !url.startsWith("https://flash.local/")) {
             view?.evaluateJavascript(buildViewportScript(), null)
         }
+
+        // 强制重绘：部分网页（如使用 View Transitions 的 SPA）加载完成后
+        // 渲染管线未正确触发重绘，导致页面"卡住"（切后台再回来才显示）。
+        // invalidate + requestLayout 强制 WebView 重新绘制当前帧。
+        view?.invalidate()
+        view?.requestLayout()
+        // 延迟二次重绘：等待 evaluateJavascript 注入的脚本执行完毕后再触发一次
+        view?.postDelayed({
+            view?.invalidate()
+            view?.evaluateJavascript(
+                "try{void document.body&&document.body.offsetHeight;}catch(e){}", null
+            )
+        }, 300)
+
         callback.onPageFinished(url)
     }
 
@@ -680,6 +696,10 @@ open class GameWebViewClient(
                   result = Promise.reject(e);
                 }
                 var p = (result && typeof result.then === 'function') ? result : Promise.resolve();
+                // 强制触发重绘：解决 polyfill 执行回调后 WebView 不重绘导致页面"卡住"
+                requestAnimationFrame(function() {
+                  try { void document.body && document.body.offsetHeight; } catch(e) {}
+                });
                 var finished = p.then(undefined, function(err) {
                   if (err && err.name === 'AbortError') return;
                   throw err;
