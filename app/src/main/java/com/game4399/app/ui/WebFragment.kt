@@ -54,6 +54,8 @@ class WebFragment : Fragment() {
             webChromeClient = object : GameWebChromeClient(chromeCb) {}
             webViewClient = object : GameWebViewClient(viewCb) {}
         }
+        // 注入 Document Start 脚本（在页面 JS 之前执行 View Transitions polyfill 等）
+        webView.injectDocumentStartScripts()
 
         // 取消下拉刷新，避免游戏操作误触发
         binding.swipeRefresh.isEnabled = false
