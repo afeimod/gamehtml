@@ -99,6 +99,11 @@ open class GameWebView @JvmOverloads constructor(
         if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
             WebSettingsCompat.setSafeBrowsingEnabled(this, true)
         }
+        // 注入 Document Start 脚本：在页面任何 JS 之前执行（AndroidX WebKit 1.6.0+）
+        // 解决 evaluateJavascript(onPageStarted) 时序问题——异步注入可能晚于页面自身脚本
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebSettingsCompat.addDocumentStartJavaScript(this, DOCUMENT_START_SCRIPT, setOf("*"))
+        }
     }
 
     /**
@@ -453,6 +458,57 @@ open class GameWebView @JvmOverloads constructor(
     companion object {
         /** 心跳同步间隔（ms）：定期检查并释放"卡住"的按键 */
         private const val HEARTBEAT_INTERVAL = 300L
+
+        /**
+         * Document Start 脚本：通过 addDocumentStartJavaScript 在页面任何 JS 之前执行。
+         *
+         * 核心功能：
+         * 1. View Transitions API polyfill — 替换 document.startViewTransition，
+         *    确保 SPA 导航回调始终执行，避免 "Transition was skipped" 导致页面无法跳转。
+         *    必须在页面 JS 之前注入，否则网站框架可能已捕获原始引用。
+         * 2. navigator.plugins 兜底 — 确保任何页面（含 iframe）的 navigator.plugins
+         *    都有 namedItem/item 方法，避免 Ruffle 引擎崩溃。
+         */
+        private const val DOCUMENT_START_SCRIPT = """
+            (function(){
+              // === 1. View Transitions API polyfill ===
+              if (!window.__vtPatched) {
+                window.__vtPatched = true;
+                document.startViewTransition = function(callback) {
+                  var result;
+                  try {
+                    result = callback ? callback() : undefined;
+                  } catch(e) {
+                    result = Promise.reject(e);
+                  }
+                  var p = (result && typeof result.then === 'function') ? result : Promise.resolve();
+                  var finished = p.then(undefined, function(err) {
+                    if (err && err.name === 'AbortError') return;
+                    throw err;
+                  });
+                  return {
+                    finished: finished,
+                    ready: Promise.resolve(),
+                    updateCallbackDone: p,
+                    skipTransition: function() {},
+                    types: []
+                  };
+                };
+              }
+              // === 2. navigator.plugins 兜底：确保 namedItem/item 方法存在 ===
+              try {
+                var np = navigator.plugins;
+                if (np && typeof np.namedItem !== 'function') {
+                  np.namedItem = function(name) {
+                    return (name === 'Shockwave Flash') ? { name: name, length: 1, 0: { type: 'application/x-shockwave-flash' } } : null;
+                  };
+                }
+                if (np && typeof np.item !== 'function') {
+                  np.item = function(i) { return i === 0 ? { name: 'Shockwave Flash' } : null; };
+                }
+              } catch(e) {}
+            })();
+        """
 
         /**
          * JavaScript 按键状态管理器初始化脚本（自初始化：仅在 window.__gameKeys 不存在时创建）。

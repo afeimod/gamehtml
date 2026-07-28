@@ -470,7 +470,8 @@ open class GameWebViewClient(
         // 注入按键安全钩子：页面失焦时自动释放所有按键（所有页面通用）
         view?.evaluateJavascript(KEY_SAFETY_SCRIPT, null)
 
-        // 注入 View Transitions API 兼容性补丁：防止"Transition was skipped"导致页面无法跳转
+        // View Transitions API 补丁兜底：addDocumentStartJavaScript 已在页面 JS 之前注入，
+        // 此处作为不支持 DOCUMENT_START_SCRIPT 特性的旧 WebView 的兜底
         view?.evaluateJavascript(VIEW_TRANSITION_PATCH_SCRIPT, null)
 
         // 4399 页面：伪造 document.referrer 绕过防盗链检测 + IE 兼容模式伪造
@@ -580,8 +581,8 @@ open class GameWebViewClient(
               var meta = document.querySelector('meta[name="viewport"]');
               if (!meta) { meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }
               var s = $scale;
-              // 不限制缩放范围：minimum-scale=0.01 允许无限缩小，maximum-scale=1000 允许无限放大
-              meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=0.01, maximum-scale=1000.0, user-scalable=yes';
+              // minimum-scale=0.01 允许无限缩小，maximum-scale=10.0 是 WebView 允许的最大值
+              meta.content = 'width=device-width, initial-scale=' + s + ', minimum-scale=0.01, maximum-scale=10.0, user-scalable=yes';
             })();
             """.trimIndent()
         } else {
@@ -592,8 +593,8 @@ open class GameWebViewClient(
               var sw = window.screen.width || 360;
               var scale = Math.min(1, sw / 1200);
               scale = Math.max(0.25, scale);
-              // 不限制缩放范围：minimum-scale=0.01 允许无限缩小，maximum-scale=1000 允许无限放大
-              meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=0.01, maximum-scale=1000.0, user-scalable=yes';
+              // minimum-scale=0.01 允许无限缩小，maximum-scale=10.0 是 WebView 允许的最大值
+              meta.content = 'width=device-width, initial-scale=' + scale + ', minimum-scale=0.01, maximum-scale=10.0, user-scalable=yes';
             })();
             """.trimIndent()
         }
@@ -777,6 +778,9 @@ open class GameWebViewClient(
                     try {
                       var fp = {name:'Shockwave Flash',filename:'libflashplayer.so',description:'Shockwave Flash 32.0 r0',length:1,
                         0:{type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash'}};
+                      fp.namedItem = function(n){ return (n === 'Shockwave Flash') ? fp : null; };
+                      fp.item = function(i){ return i === 0 ? fp : null; };
+                      fp.refresh = function(){};
                       Object.defineProperty(navigator,'plugins',{get:function(){return fp;},configurable:true});
                       Object.defineProperty(navigator,'mimeTypes',{get:function(){return {'application/x-shockwave-flash':{type:'application/x-shockwave-flash',suffixes:'swf',description:'Shockwave Flash',enabledPlugin:fp}};},configurable:true});
                       window.ActiveXObject = function(n){if(/ShockwaveFlash/i.test(n))return {SetVariable:function(){}};throw new Error('x');};
@@ -887,7 +891,8 @@ open class GameWebViewClient(
                     arr.refresh = function() {};
                     arr.item = function(i) { return arr[i] || null; };
                     return arr;
-                  }
+                  },
+                  configurable: true
                 });
               } catch(e) {}
               function hideFlashTips() {
