@@ -60,35 +60,54 @@
     var canvas = document.getElementById('canvas');
 
     // === 屏幕比例（aspect ratio）===
-    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1"
-    // WAFlash 的 canvas 100% 撑满 waflashContainer,这里改 container 即可
+    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1" | "stretch"
+    //
+    // WAFlash 渲染原理（读 waflash.min.js 源码确认）：
+    //   - WAFlash 是 WASM 引擎,通过 Emscripten 的 canvas 函数拿到 <canvas> 元素
+    //   - 引擎内部用 canvas.width / canvas.height 作为"逻辑像素"做渲染坐标系
+    //   - 渲染主循环里 scaleMode=2(SHOW_ALL)按 n*f < c*o 算等比缩放 + 居中
+    //   - canvas 大小变化会被 Emscripten 监听到,WASM 端会按新尺寸重渲染
+    //   - 关键限制:WAFlash 没暴露 scaleMode 的 JS 接口(它通过 WASM 内存改),
+    //     所以"强制按 16:9 缩放"做不到,只能强制视口尺寸 + 让 WAFlash SHOW_ALL 居中
+    //   - 也就是说:如果 SWF 是 4:3,选 16:9 → canvas 设 16:9 → SWF 居中在 16:9 里
+    //     (左右黑边更多,但 SWF 内容不会被拉伸变形)
+    //   - stretch 对 WAFlash 无效(JS 端无法切到 EXACT_FIT),自动降级为 fit
     var waflashContainer = document.getElementById('waflashContainer');
     var __waflashAspectMode = 'fit';
 
-    function waflashParseRatio(mode) {
-      if (!mode || mode === 'fit') return null;
+    function waflashParseMode(mode) {
+      if (!mode || mode === 'fit') return { kind: 'fit' };
+      if (mode === 'stretch') return { kind: 'fit' }; // WAFlash 暂不支持拉伸
       var parts = mode.split(':');
-      if (parts.length !== 2) return null;
+      if (parts.length !== 2) return { kind: 'fit' };
       var w = parseFloat(parts[0]);
       var h = parseFloat(parts[1]);
-      if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return null;
-      return w / h;
+      if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return { kind: 'fit' };
+      return { kind: 'ratio', ratio: w / h };
     }
 
     function waflashApplyAspectRatio(mode) {
       try {
-        var ratio = waflashParseRatio(mode);
-        if (!ratio) {
+        var m = waflashParseMode(mode);
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+
+        if (m.kind === 'fit') {
+          // 还原:container 100%,canvas 100%
           waflashContainer.style.position = '';
           waflashContainer.style.left = '';
           waflashContainer.style.top = '';
           waflashContainer.style.width = '100%';
           waflashContainer.style.height = '100%';
-          waflashContainer.style.transform = '';
+          canvas.style.width = '100%';
+          canvas.style.height = '100%';
+          canvas.width = vw * (window.devicePixelRatio || 1);
+          canvas.height = vh * (window.devicePixelRatio || 1);
           return 'fit';
         }
-        var vw = window.innerWidth;
-        var vh = window.innerHeight;
+
+        // ratio:contain 居中
+        var ratio = m.ratio;
         var boxRatio = vw / vh;
         var bw, bh;
         if (boxRatio > ratio) {
@@ -96,12 +115,21 @@
         } else {
           bw = vw; bh = vw / ratio;
         }
+        var dpr = window.devicePixelRatio || 1;
+
         waflashContainer.style.position = 'fixed';
         waflashContainer.style.inset = '0';
         waflashContainer.style.width = bw + 'px';
         waflashContainer.style.height = bh + 'px';
         waflashContainer.style.left = ((vw - bw) / 2) + 'px';
         waflashContainer.style.top = ((vh - bh) / 2) + 'px';
+
+        // 关键:同时改 canvas.width/height(物理像素,WAFlash 渲染坐标系)
+        // 和 canvas.style.width/height(CSS 像素)
+        canvas.style.width = bw + 'px';
+        canvas.style.height = bh + 'px';
+        canvas.width = Math.round(bw * dpr);
+        canvas.height = Math.round(bh * dpr);
         return mode;
       } catch (e) {
         console.error('waflashApplyAspectRatio failed:', e);
@@ -118,12 +146,12 @@
         waflashApplyAspectRatio(__waflashAspectMode);
       }
     });
-    // 初始化时也应用 URL 上的 ratio 参数
+    // 初始化时也应用 URL 上的 ratio 参数(等 canvas 准备好)
     (function () {
       var r = params.get('ratio');
       if (r) {
         __waflashAspectMode = r;
-        waflashApplyAspectRatio(__waflashAspectMode);
+        setTimeout(function () { waflashApplyAspectRatio(__waflashAspectMode); }, 50);
       }
     })();
 

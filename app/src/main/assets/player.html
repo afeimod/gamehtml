@@ -144,45 +144,115 @@
     };
 
     // ===== 屏幕比例（aspect ratio）=====
-    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1"
-    // fit  → 铺满（默认，stage 100% / 100%）
-    // 其他 → 在视口内按宽:高 居中缩放，黑边由 body 背景 #000 兜底
-    function parseRatio(mode) {
-      if (!mode || mode === 'fit') return null;
+    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1" | "stretch"
+    //
+    // Ruffle 渲染原理（读 ruffle.js 源码确认）：
+    //   - <ruffle-player> 是 web component,内部 shadow DOM
+    //   - width/height 属性 → attributeChangedCallback → updateStyles →
+    //     把 :host{width:..;height:..} 注入 shadow DOM,改 web component 自身尺寸
+    //   - ruffle().config.scale 决定 SWF 怎么塞进 web component 视口：
+    //       showAll  - 等比缩放,SWF 完整可见
+    //       exactFit - 非等比拉伸,铺满
+    //       noBorder - 等比缩放,裁掉超出部分
+    //       noScale  - 原始尺寸,可能裁掉
+    //   - ruffle().config.letterbox 决定黑边策略：
+    //       on         - 显示黑条
+    //       fullscreen - 在更大空间里显示(默认)
+    //       off        - 不显示黑条
+    //
+    // 所以"屏幕比例"= 改 web component 的 width/height 属性 + 选 scale/letterbox。
+    function parseAspectMode(mode) {
+      // 返回 { kind: 'fit' | 'ratio' | 'stretch', ratio?: number }
+      if (!mode || mode === 'fit') return { kind: 'fit' };
+      if (mode === 'stretch') return { kind: 'stretch' };
       var parts = mode.split(':');
-      if (parts.length !== 2) return null;
+      if (parts.length !== 2) return { kind: 'fit' };
       var w = parseFloat(parts[0]);
       var h = parseFloat(parts[1]);
-      if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return null;
-      return w / h;
+      if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return { kind: 'fit' };
+      return { kind: 'ratio', ratio: w / h };
+    }
+
+    function findRufflePlayer() {
+      return document.querySelector('ruffle-player');
+    }
+
+    function getPlayerInstance() {
+      var p = findRufflePlayer();
+      if (!p || !p.ruffle) return null;
+      try { return p.ruffle(); } catch (e) { return null; }
     }
 
     function applyAspectRatio(mode) {
       try {
-        var ratio = parseRatio(mode);
-        if (!ratio) {
-          // fit: 还原默认
+        var m = parseAspectMode(mode);
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var player = findRufflePlayer();
+        var inst = getPlayerInstance();
+
+        if (m.kind === 'fit') {
+          // fit: 让 ruffle-player 撑满视口,Ruffle 默认 showAll + letterbox:fullscreen
+          if (player) {
+            player.removeAttribute('width');
+            player.removeAttribute('height');
+            player.style.width = '100%';
+            player.style.height = '100%';
+            player.style.position = '';
+            player.style.left = '';
+            player.style.top = '';
+          }
           stage.style.position = 'fixed';
           stage.style.inset = '0';
           stage.style.width = '100%';
           stage.style.height = '100%';
-          stage.style.left = '';
-          stage.style.top = '';
-          stage.style.transform = '';
+          if (inst && inst.config) {
+            inst.config.scale = 'showAll';
+            inst.config.letterbox = 'fullscreen';
+          }
           return 'fit';
         }
-        var vw = window.innerWidth;
-        var vh = window.innerHeight;
-        // contain: 在视口内按 ratio 居中缩放
+
+        if (m.kind === 'stretch') {
+          // stretch: 撑满视口,scale 改 exactFit,letterbox 关
+          if (player) {
+            player.removeAttribute('width');
+            player.removeAttribute('height');
+            player.style.width = '100%';
+            player.style.height = '100%';
+            player.style.position = '';
+            player.style.left = '';
+            player.style.top = '';
+          }
+          stage.style.position = 'fixed';
+          stage.style.inset = '0';
+          stage.style.width = '100%';
+          stage.style.height = '100%';
+          if (inst && inst.config) {
+            inst.config.scale = 'exactFit';
+            inst.config.letterbox = 'off';
+          }
+          return 'stretch';
+        }
+
+        // ratio 模式:16:9 / 4:3 / 3:2 / 1:1
+        // 在视口内按 ratio contain 居中,把 ruffle-player 设成该尺寸
+        var ratio = m.ratio;
         var boxRatio = vw / vh;
         var bw, bh;
         if (boxRatio > ratio) {
-          // 视口更宽 → 高贴满
-          bh = vh;
-          bw = vh * ratio;
+          bh = vh; bw = vh * ratio;
         } else {
-          bw = vw;
-          bh = vw / ratio;
+          bw = vw; bh = vw / ratio;
+        }
+        // 关键:用属性(width/height)而不是 style,这样 Ruffle 的 updateStyles
+        // 才会把它注入 :host 选择器,WASM 端 layout 才会按这个尺寸重算
+        if (player) {
+          player.setAttribute('width', Math.round(bw) + 'px');
+          player.setAttribute('height', Math.round(bh) + 'px');
+          player.style.position = 'absolute';
+          player.style.left = ((vw - bw) / 2) + 'px';
+          player.style.top = ((vh - bh) / 2) + 'px';
         }
         stage.style.position = 'fixed';
         stage.style.inset = '0';
@@ -190,7 +260,10 @@
         stage.style.height = bh + 'px';
         stage.style.left = ((vw - bw) / 2) + 'px';
         stage.style.top = ((vh - bh) / 2) + 'px';
-        stage.style.transform = '';
+        if (inst && inst.config) {
+          inst.config.scale = 'showAll';
+          inst.config.letterbox = 'on';
+        }
         return mode;
       } catch (e) {
         console.error('applyAspectRatio failed:', e);
@@ -214,7 +287,8 @@
     var __initialRatio = param('ratio', null);
     if (__initialRatio) {
       __currentAspectMode = __initialRatio;
-      applyAspectRatio(__currentAspectMode);
+      // 延迟到 ruffle-player 创建后再应用
+      setTimeout(function () { applyAspectRatio(__currentAspectMode); }, 50);
     }
 
     // 禁用长按选择 / 上下文菜单 / 缩放

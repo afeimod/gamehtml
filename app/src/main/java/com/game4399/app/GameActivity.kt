@@ -1357,14 +1357,19 @@ class GameActivity : AppCompatActivity() {
 
     // ============== 屏幕比例（Aspect Ratio） ==============
 
-    /** 支持的比例模式：fit(铺满) / 16:9 / 4:3 / 3:2 / 1:1 */
-    private val aspectRatioModes = arrayOf("fit", "16:9", "4:3", "3:2", "1:1")
+    /** 支持的比例模式：
+     *  - fit: 默认,Ruffle/WebView 撑满,引擎自己按 SWF 原比例 + letterbox 处理
+     *  - 16:9 / 4:3 / 3:2 / 1:1: 强制视口比例,SWF 在该视口里居中(Ruffle showAll + letterbox on;WAFlash 自动 SHOW_ALL 居中)
+     *  - stretch: 拉伸铺满(Ruffle scale=exactFit,letterbox=off;WAFlash 不支持,自动降级为 fit)
+     */
+    private val aspectRatioModes = arrayOf("fit", "16:9", "4:3", "3:2", "1:1", "stretch")
     private val aspectRatioLabels = arrayOf(
-        "默认铺满 (Fit)",
+        "默认 (Fit,引擎居中)",
         "宽屏 16:9",
         "标屏 4:3",
         "相机 3:2",
-        "正方 1:1"
+        "正方 1:1",
+        "拉伸铺满 (Stretch,WAFlash 不支持)"
     )
 
     /** 是否为内置 Flash 播放器页面（player.html / waflash.html） */
