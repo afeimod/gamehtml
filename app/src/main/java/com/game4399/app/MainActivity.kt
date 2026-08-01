@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onClose() { finish() }
             override fun onExtractSwf() {} // 主界面不支持 SWF 提取
+            override fun onOpenAspectRatio() {} // 主界面不支持屏幕比例设置
         })
 
         binding.bottomNav.setOnItemSelectedListener(BottomNavigationView.OnNavigationItemSelectedListener {
