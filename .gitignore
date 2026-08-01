@@ -1,23 +1,49 @@
-# Built artifacts
-*.iml
+# Android / Gradle
 .gradle/
-/local.properties
-/.idea/
-.DS_Store
-/build
-/app/build
-/captures
-.externalNativeBuild
-.cxx
+build/
+!gradle/wrapper/gradle-wrapper.jar
+**/build/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# 本地配置
 local.properties
-
-# Gradle wrapper jar (generated at build time)
-gradle/wrapper/gradle-wrapper.jar
-
-# Engine assets generated into source by build tasks
-app/src/main/assets/engines/ruffle/
-app/src/main/assets/engines/waflash/
-
-# Keystore
+keystore.properties
 *.jks
-*.keystore
+release.keystore
+# debug.keystore 需要提交到仓库，确保 CI 环境能签名
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.navigation/
+captures/
+
+# Eclipse / Gradle IDE
+.classpath
+.project
+.settings/
+bin/
+gen/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 日志
+*.log
+logs/
+
+# NDK
+.cxx/
+
+# GitHub Actions 临时产物
+artifacts/

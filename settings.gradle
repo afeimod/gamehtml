@@ -1,8 +1,8 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
         google()
         mavenCentral()
+        gradlePluginPortal()
     }
 }
 dependencyResolutionManagement {
@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Game4399FlashBox"
-include(":app")
+rootProject.name = "SnakeGame"
+include ':app'
