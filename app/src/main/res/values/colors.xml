@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主色：4399 品牌橙红 -->
+    <color name="brand_primary">#FFC1072E</color>
+    <color name="brand_primary_dark">#FF8E0E1F</color>
+    <color name="brand_accent">#FFFF5722</color>
+    <color name="brand_orange">#FFFF9800</color>
+
+    <!-- 背景 -->
+    <color name="bg_dark">#FF121212</color>
+    <color name="bg_surface">#FF1E1E1E</color>
+    <color name="bg_surface_light">#FFF5F5F5</color>
+    <color name="bg_card">#FF2A2A2A</color>
+    <color name="bg_card_light">#FFFFFFFF</color>
+
+    <!-- 文字 -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB0B0B0</color>
+    <color name="text_primary_light">#FF212121</color>
+    <color name="text_secondary_light">#FF757575</color>
+
+    <!-- 手柄 -->
+    <color name="dpad_bg">#4D000000</color>
+    <color name="dpad_button">#99FFFFFF</color>
+    <color name="dpad_button_pressed">#FFFF5722</color>
+    <color name="action_a">#FFE53935</color>
+    <color name="action_b">#FF1E88E5</color>
+    <color name="action_pressed">#FFFFFFFF</color>
+
+    <!-- 状态 -->
+    <color name="progress">#FFFFC107</color>
+    <color name="divider">#FF3A3A3A</color>
+    <color name="divider_light">#FFE0E0E0</color>
+    <color name="overlay">#88000000</color>
+    <color name="error">#FFEF5350</color>
+</resources>

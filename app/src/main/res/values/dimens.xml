@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 间距 -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="spacing_xxl">32dp</dimen>
+
+    <!-- 圆角 -->
+    <dimen name="radius_sm">6dp</dimen>
+    <dimen name="radius_md">10dp</dimen>
+    <dimen name="radius_lg">16dp</dimen>
+
+    <!-- 字体 -->
+    <dimen name="text_caption">12sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_title">18sp</dimen>
+    <dimen name="text_headline">22sp</dimen>
+
+    <!-- 组件 -->
+    <dimen name="toolbar_height">56dp</dimen>
+    <dimen name="bottom_nav_height">64dp</dimen>
+    <dimen name="game_card_height">120dp</dimen>
+    <dimen name="progress_height">3dp</dimen>
+
+    <!-- 虚拟手柄 -->
+    <dimen name="dpad_size">180dp</dimen>
+    <dimen name="action_group_size">160dp</dimen>
+    <dimen name="action_button_size">64dp</dimen>
+    <dimen name="gamepad_margin">20dp</dimen>
+</resources>

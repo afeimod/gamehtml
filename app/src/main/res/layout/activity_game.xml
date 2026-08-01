@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    游戏界面：FrameLayout 分层
+    底层 WebView（游戏画面）
+    顶层 1：进度条
+    顶层 2：网页全屏容器（Flash/视频全屏时显示，在控件之下）
+    顶层 3：加载遮罩 / 错误页（在手柄之下，不挡按键）
+    顶层 4：虚拟手柄（左下方向键 + 右下 A/B + 中下 Start/Select）+ 悬浮菜单
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- 游戏画面 -->
+    <com.game4399.app.webview.GameWebView
+        android:id="@+id/gameWebView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 进度条 -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/progress_height"
+        android:layout_gravity="top"
+        android:max="100"
+        android:progressDrawable="@drawable/progress_game"
+        android:visibility="gone" />
+
+    <!-- 网页全屏容器（Flash/视频全屏时显示，在手柄控件之下） -->
+    <FrameLayout
+        android:id="@+id/fullscreenContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:visibility="gone" />
+
+    <!-- 可拖动悬浮菜单（横竖屏通用，默认右上角） -->
+    <com.game4399.app.widget.FloatingMenuView
+        android:id="@+id/floatingMenu"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp" />
+
+    <!-- 虚拟手柄：左下方向键 -->
+    <com.game4399.app.input.DPadView
+        android:id="@+id/dpad"
+        android:layout_width="@dimen/dpad_size"
+        android:layout_height="@dimen/dpad_size"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="@dimen/gamepad_margin"
+        android:visibility="gone" />
+
+    <!-- 虚拟手柄：右下 A/B 按钮 -->
+    <com.game4399.app.input.ActionButtonView
+        android:id="@+id/actionButtons"
+        android:layout_width="@dimen/action_group_size"
+        android:layout_height="@dimen/action_group_size"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="@dimen/gamepad_margin"
+        android:visibility="gone" />
+
+    <!-- Start / Select 中下 -->
+    <LinearLayout
+        android:id="@+id/systemButtons"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="@dimen/gamepad_margin"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btnSelect"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/gamepad_select"
+            android:textColor="@android:color/white" />
+
+        <Button
+            android:id="@+id/btnStart"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_lg"
+            android:text="@string/gamepad_start"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
+    <!-- 鼠标按钮：左键/右键（默认隐藏，通过按键设置添加） -->
+    <com.game4399.app.input.MouseControlView
+        android:id="@+id/mouseControl"
+        android:layout_width="160dp"
+        android:layout_height="100dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="@dimen/gamepad_margin"
+        android:visibility="gone" />
+
+    <!-- 错误页 -->
+    <LinearLayout
+        android:id="@+id/errorView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/load_failed"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_title" />
+
+        <Button
+            android:id="@+id/btnRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:text="@string/refresh" />
+    </LinearLayout>
+
+</FrameLayout>

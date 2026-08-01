@@ -1,82 +1,186 @@
+# 4399 游戏盒 - APK 构建 Workflow
+#
+# 触发方式：手动触发（GitHub 仓库 → Actions → Build APK → Run workflow）
+#
+# 本 workflow 只在手动触发时运行，不会消耗额外的 Actions 额度。
+# 公开仓库 Actions 完全免费；私有仓库每月 2000 分钟免费额度。
+
 name: Build APK
 
-# 仅手动构建 (manual dispatch only)
 on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: "构建类型 (debug / release)"
-        required: false
-        default: "release"
+        description: 构建类型
+        required: true
+        type: choice
+        default: debug
+        options:
+          - debug
+          - release
+          - both
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
+      # ---------- 1. 检出代码 ----------
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---------- 2. 配置 JDK 17 ----------
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.5'
-
-      - name: Generate Gradle wrapper (if missing)
+      # ---------- 3. 验证 Android SDK（ubuntu-latest 已预装） ----------
+      # ubuntu-latest 镜像已预装 Android SDK 35 和 build-tools 35.0.0
+      # 无需再用 android-actions/setup-android（该 action 在 v3 版本对多包名解析有 bug）
+      - name: Verify Android SDK
         run: |
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "gradle-wrapper.jar missing, generating..."
-            gradle wrapper --gradle-version 8.5 --distribution-type bin
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo ""
+          echo "=== 已安装的 platforms ==="
+          ls -la "$ANDROID_HOME/platforms/" 2>/dev/null || echo "platforms 目录不存在"
+          echo ""
+          echo "=== 已安装的 build-tools ==="
+          ls -la "$ANDROID_HOME/build-tools/" 2>/dev/null || echo "build-tools 目录不存在"
+          echo ""
+          # 如果缺少 android-35，则用 sdkmanager 单独安装（单包名调用，避免多包名解析 bug）
+          if [ ! -d "$ANDROID_HOME/platforms/android-35" ]; then
+            echo "android-35 缺失，正在安装..."
+            yes | sdkmanager "platforms;android-35" > /dev/null 2>&1 || true
+          fi
+          if [ ! -d "$ANDROID_HOME/build-tools/35.0.0" ]; then
+            echo "build-tools;35.0.0 缺失，正在安装..."
+            yes | sdkmanager "build-tools;35.0.0" > /dev/null 2>&1 || true
+          fi
+          echo ""
+          echo "=== 最终验证 ==="
+          ls "$ANDROID_HOME/platforms/" 2>/dev/null
+          ls "$ANDROID_HOME/build-tools/" 2>/dev/null
+
+      # ---------- 4. 生成 Gradle Wrapper ----------
+      # 说明：ubuntu-latest 镜像通过系统级 init 脚本把 AGP 8.1.0 注入 buildscript classpath，
+      # 改 GRADLE_USER_HOME 无法绕过。因此项目已锁定 AGP 8.1.0（见 libs.versions.toml），
+      # 声明相同版本即不冲突。
+      - name: Generate Gradle Wrapper
+        run: |
+          echo "=== 诊断：预装的 Gradle init 脚本 ==="
+          ls -la ~/.gradle/init.d/ 2>/dev/null || echo "~/.gradle/init.d/ 不存在"
+          for f in ~/.gradle/init.d/*.gradle; do
+            [ -f "$f" ] && echo "--- $f ---" && head -15 "$f"
+          done 2>/dev/null || true
+          echo ""
+          echo "=== 系统 Gradle 版本 ==="
+          gradle --version 2>/dev/null | head -5 || true
+          echo ""
+
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ] || [ ! -f gradlew ]; then
+            echo "Gradle wrapper 缺失，正在生成..."
+            gradle wrapper --gradle-version 8.7 --distribution-type bin
+          else
+            echo "Gradle wrapper 已存在"
           fi
           chmod +x gradlew
+          ./gradlew --version
 
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Build debug APK
-        if: github.event.inputs.build_type != 'release'
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
-
-      - name: Build release APK
-        if: github.event.inputs.build_type == 'release'
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
-
-      - name: Locate APK
-        id: apk
+      # ---------- 5. 准备 Release 签名 ----------
+      # 没有配置签名 Secrets 时不生成 keystore.properties，
+      # build.gradle.kts 会自动用内置的 debug.keystore 签名（可用 MT 管理器重新签名）
+      - name: Prepare signing key
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         run: |
-          APK=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
-          echo "apk_path=$APK" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK"
+          if [ -z "$SIGNING_KEY_BASE64" ]; then
+            echo "未配置签名 Secrets，使用内置 debug.keystore 签名（可用 MT 管理器重新签名）"
+            # 不生成 keystore.properties，让 build.gradle.kts 回退到内置 debug.keystore
+          else
+            echo "检测到签名 Secrets，解码 keystore..."
+            echo "$SIGNING_KEY_BASE64" | base64 -d > app/release.keystore
+            cat > app/keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=$SIGNING_STORE_PASSWORD
+          keyAlias=$SIGNING_KEY_ALIAS
+          keyPassword=$SIGNING_KEY_PASSWORD
+          EOF
+            echo "✓ keystore.properties 已生成"
+          fi
 
-      - name: Upload APK artifact
+      # ---------- 6. 构建 Debug APK ----------
+      - name: Build Debug APK
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
+        run: ./gradlew assembleDebug --stacktrace
+
+      # ---------- 7. 构建 Release APK ----------
+      - name: Build Release APK
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      # ---------- 8. 收集 APK ----------
+      - name: Collect APKs
+        run: |
+          echo "=== 构建产物 ==="
+          find app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "未找到 APK"
+
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          DATE=$(date +'%Y%m%d')
+          SUFFIX="${VERSION}-${SHORT_SHA}-${DATE}"
+
+          mkdir -p artifacts
+          [ -f app/build/outputs/apk/debug/app-debug.apk ] && \
+            cp app/build/outputs/apk/debug/app-debug.apk artifacts/Game4399-${SUFFIX}-debug.apk
+          [ -f app/build/outputs/apk/release/app-release.apk ] && \
+            cp app/build/outputs/apk/release/app-release.apk artifacts/Game4399-${SUFFIX}-release.apk
+          [ -f app/build/outputs/apk/release/app-release-unsigned.apk ] && \
+            cp app/build/outputs/apk/release/app-release-unsigned.apk artifacts/Game4399-${SUFFIX}-release-unsigned.apk
+
+          echo "=== artifacts 目录 ==="
+          ls -lh artifacts/ 2>/dev/null || echo "artifacts 为空"
+
+      # ---------- 9. 上传 Artifact ----------
+      - name: Upload Debug APK
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
         uses: actions/upload-artifact@v4
         with:
-          name: FlashBox-APK
-          path: app/build/outputs/apk/**/*.apk
-          if-no-files-found: error
-          retention-days: 30
+          name: Game4399-debug
+          path: artifacts/*-debug*.apk
+          retention-days: 90
+          if-no-files-found: warn
 
-      - name: Upload build reports (on failure)
-        if: failure()
+      - name: Upload Release APK
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
         uses: actions/upload-artifact@v4
         with:
-          name: build-reports
-          path: |
-            app/build/reports
-            build/reports
-          if-no-files-found: ignore
-          retention-days: 7
+          name: Game4399-release
+          path: artifacts/*-release*.apk
+          retention-days: 90
+          if-no-files-found: warn
+
+      # ---------- 10. 构建摘要 ----------
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 构建结果" >> $GITHUB_STEP_SUMMARY
+          echo "- 构建类型: \`${{ inputs.build_type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 提交: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ -d artifacts ] && [ "$(ls -A artifacts 2>/dev/null)" ]; then
+            echo "### 产物" >> $GITHUB_STEP_SUMMARY
+            ls -lh artifacts/ | awk 'NR>1 {print "- `" $NF "` (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ 无产物" >> $GITHUB_STEP_SUMMARY
+          fi
