@@ -1386,28 +1386,19 @@ class GameActivity : AppCompatActivity() {
 
     /**
      * 把当前 screenRatio 设置应用到 WebView。
-     * - fit (默认): 不动 player.html,跟原版完全一致
-     * - 16:9 / 4:3 / 3:2 / 1:1: 注入 JS 调 `window.__applyAspectRatio(mode)`,
-     *   Ruffle 内部会在下一帧 tick 时自动响应 clientWidth/Height 变化重算 viewport
-     * - WAFlash: 运行时改比例不生效,需要 reload 整个 player 页面
+     * 通过 JS 调 window.__applyAspectRatio(mode),Ruffle 端会改 #stage 容器
+     * 的 cssText(让 ruffle-player 跟着变 → Ruffle 下一帧 set_viewport_dimensions
+     * 重算 viewport 矩阵),WAFlash 端会改 #waflashContainer 的 cssText。
+     * **不 reload 页面**,Ruffle 实时生效,WAFlash 因为 WASM 不监听 canvas
+     * size 变化所以不响应(在选择菜单里会有提示让用户 reload)。
      */
     private fun applyScreenRatio() {
         val mode = PrefsManager.screenRatio
         val url = webView.url ?: currentUrl
         android.util.Log.d("AspectRatio", "applyScreenRatio: mode=$mode url=$url")
-        // 默认 fit 不动 player.html,避免干扰正常播放
-        if (mode == "fit") {
-            android.util.Log.d("AspectRatio", "  mode=fit, skip (no-op)")
-            return
-        }
+        // 非 Flash 播放器页面不需要处理
         if (!isFlashPlayerUrl(url)) {
             android.util.Log.d("AspectRatio", "  skip: not flash player url")
-            return
-        }
-        val isWaflash = url.startsWith("https://flash.local/waflash.html") ||
-            url.startsWith("file:///android_asset/waflash.html")
-        if (isWaflash) {
-            android.util.Log.d("AspectRatio", "  skip: WAFlash, ratio set via URL reload")
             return
         }
         binding.root.post {
@@ -1420,7 +1411,10 @@ class GameActivity : AppCompatActivity() {
         }
     }
 
-    /** 屏幕比例选择对话框 */
+    /** 屏幕比例选择对话框
+     *  Ruffle 端实时生效(改 stage 容器 CSS,WebView 不 reload)
+     *  WAFlash 端因为 WASM 不监听 canvas size 变化不响应,提示用户手动刷新
+     */
     private fun showAspectRatioPicker() {
         val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val current = PrefsManager.screenRatio
@@ -1430,39 +1424,21 @@ class GameActivity : AppCompatActivity() {
             .setSingleChoiceItems(aspectRatioLabels, checked) { dialog, which ->
                 val mode = aspectRatioModes[which]
                 sp.edit().putString("screen_ratio", mode).apply()
+                android.util.Log.d("AspectRatio", "user selected: $mode (current=$current)")
+                // Ruffle 端直接调 JS 改 stage 容器 CSS,实时生效,无需 reload
+                applyScreenRatio()
+                // WAFlash 端如果当前是 WAFlash 引擎,Toast 提示需要刷新
                 val url = webView.url ?: currentUrl
-                val isFlashPlayer = isFlashPlayerUrl(url)
-                android.util.Log.d("AspectRatio", "user selected: $mode (current=$current) url=$url")
-                if (isFlashPlayer && mode != current) {
-                    // Flash 播放器页面下切比例:reload 当前 URL + 新 ratio 参数
-                    // 这样:
-                    // 1. Ruffle 重新创建 player,从 ?ratio= 读初始比例
-                    // 2. WAFlash 在启动时从 ?ratio= 读初始比例
-                    // 3. 普通玩家页面也能正确重置
-                    Toast.makeText(this, "已切换,正在重新加载…", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                    binding.root.postDelayed({
-                        try {
-                            val uri = Uri.parse(url)
-                            val swfUrl = uri.getQueryParameter("swf") ?: currentUrl
-                            val baseUrl = uri.getQueryParameter("base")
-                            val reloaded = NavHelper.playerUrl(swfUrl, base = baseUrl, title = currentTitle)
-                            val sep = if (reloaded.contains("?")) "&" else "?"
-                            val withRatio = "$reloaded${sep}ratio=$mode"
-                            android.util.Log.d("AspectRatio", "reload: $withRatio")
-                            webView.loadUrl(withRatio)
-                        } catch (e: Exception) {
-                            android.util.Log.e("AspectRatio", "reload failed", e)
-                            // 兜底:不 reload,直接尝试 JS 改
-                            applyScreenRatio()
-                        }
-                    }, 300)
+                val isWaflash = url.startsWith("https://flash.local/waflash.html") ||
+                    url.startsWith("file:///android_asset/waflash.html")
+                if (isWaflash && mode != "fit" && mode != current) {
+                    Toast.makeText(this,
+                        "${aspectRatioLabels[which]} (WAFlash 引擎需手动刷新页面生效)",
+                        Toast.LENGTH_LONG).show()
                 } else {
-                    // 非 Flash 页面,或者选的是当前模式,直接走 JS 路径
-                    applyScreenRatio()
                     Toast.makeText(this, "已切换: ${aspectRatioLabels[which]}", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
                 }
+                dialog.dismiss()
             }
             .setNegativeButton("取消", null)
             .show()
