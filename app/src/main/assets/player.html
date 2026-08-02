@@ -242,6 +242,33 @@
 
     // 窗口尺寸变化（旋转/全屏/分屏）时重应用当前比例
     var __currentAspectMode = 'fit';
+
+    // 用 MutationObserver 监听 ruffle-player 加入 DOM
+    // (Ruffle 加载 SWF 是异步的,可能在 player.html 解析完几秒后才出现)
+    function __observeRufflePlayer() {
+      var existing = findRufflePlayer();
+      if (existing) {
+        // 已经有了,等 Ruffle 内部初始化完
+        setTimeout(function () { applyAspectRatio(__currentAspectMode); }, 200);
+        return;
+      }
+      var mo = new MutationObserver(function (mutations, observer) {
+        var p = findRufflePlayer();
+        if (p) {
+          observer.disconnect();
+          // 给 Ruffle 多帧让内部 clientWidth/Height 稳定
+          setTimeout(function () { applyAspectRatio(__currentAspectMode); }, 300);
+        }
+      });
+      mo.observe(document.body || document.documentElement, {
+        childList: true,
+        subtree: true,
+      });
+      // 兜底:10 秒还没出现就放弃
+      setTimeout(function () { try { mo.disconnect(); } catch(e){} }, 10000);
+    }
+    __observeRufflePlayer();
+
     window.addEventListener('resize', function () {
       if (__currentAspectMode && __currentAspectMode !== 'fit') {
         applyAspectRatio(__currentAspectMode);
@@ -256,8 +283,7 @@
     var __initialRatio = param('ratio', null);
     if (__initialRatio) {
       __currentAspectMode = __initialRatio;
-      // 延迟到 ruffle-player 创建后再应用
-      setTimeout(function () { applyAspectRatio(__currentAspectMode); }, 50);
+      // 已经在 __observeRufflePlayer 那边等 ruffle-player
     }
 
     // 禁用长按选择 / 上下文菜单 / 缩放
