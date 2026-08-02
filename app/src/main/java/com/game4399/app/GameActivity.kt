@@ -117,8 +117,6 @@ class GameActivity : AppCompatActivity() {
         webView.apply {
             // 关掉 WebView 缓存,防止新旧 player.html / ruffle.js 混用导致 JS 不生效
             settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-            settings.domStorageEnabled = true
-            settings.javaScriptCanOpenWindowsAutomatically = true
             addJavascriptInterface(webAppInterface, "Android")
             webChromeClient = object : GameWebChromeClient(chromeCallback) {}
             webViewClient = gameWebViewClient
@@ -1387,21 +1385,20 @@ class GameActivity : AppCompatActivity() {
 
     /**
      * 把当前 screenRatio 设置应用到 WebView。
-     * - 普通网页：忽略（不裁剪）
-     * - Ruffle 播放器页面：注入 JS 调 `window.__applyAspectRatio(mode)`，
-     *   Ruffle 会在下一帧 tick 时自动响应 clientWidth/Height 变化重算 viewport
-     * - WAFlash 播放器页面：WAFlash 不会响应运行时 canvas 尺寸变化
-     *   （无 ResizeObserver + scaleMode 改不到 JS）,所以这里不调,WAFlash 启动
-     *   时已经从 URL ?ratio= 参数读到了,只有用户切比例时通过 reload 重新加载
-     *
-     * 用 loadUrl("javascript:...") 而不是 evaluateJavascript,因为前者是同步的
-     * (在当前 callstack 里跑),不会因为 WebView 内部 message queue 的时序
-     * 错过 Ruffle 初始化窗口。配合 binding.root.post 延迟一帧。
+     * - fit (默认): 不动 player.html,跟原版完全一致
+     * - 16:9 / 4:3 / 3:2 / 1:1: 注入 JS 调 `window.__applyAspectRatio(mode)`,
+     *   Ruffle 内部会在下一帧 tick 时自动响应 clientWidth/Height 变化重算 viewport
+     * - WAFlash: 运行时改比例不生效,需要 reload 整个 player 页面
      */
     private fun applyScreenRatio() {
         val mode = PrefsManager.screenRatio
         val url = webView.url ?: currentUrl
         android.util.Log.d("AspectRatio", "applyScreenRatio: mode=$mode url=$url")
+        // 默认 fit 不动 player.html,避免干扰正常播放
+        if (mode == "fit") {
+            android.util.Log.d("AspectRatio", "  mode=fit, skip (no-op)")
+            return
+        }
         if (!isFlashPlayerUrl(url)) {
             android.util.Log.d("AspectRatio", "  skip: not flash player url")
             return
@@ -1414,10 +1411,11 @@ class GameActivity : AppCompatActivity() {
         }
         binding.root.post {
             val safeMode = mode.replace("'", "\\'").replace("\"", "\\\"")
-            // 用 loadUrl("javascript:...") 同步执行,确保 Ruffle 已初始化
             val js = "javascript:try{window.__applyAspectRatio('$safeMode')}catch(e){console.error('aspect',e)}"
             android.util.Log.d("AspectRatio", "  loadUrl: $js")
-            webView.loadUrl(js)
+            try { webView.loadUrl(js) } catch (e: Exception) {
+                android.util.Log.e("AspectRatio", "  loadUrl failed", e)
+            }
         }
     }
 
