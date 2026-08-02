@@ -23,14 +23,17 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
-  canvas {
-    position: absolute !important;
-    top: 0 !important; left: 0 !important;
-    width: 100% !important; height: 100% !important;
-    display: block !important; outline: none;
-    touch-action: none;
-    margin: 0 !important; padding: 0 !important;
-    border: 0 !important; background: #000 !important;
+  /* WAFlash 容器居中：防止画面靠左显示 */
+  #waflashContainer {
+    position: fixed !important; inset: 0 !important;
+    width: 100vw !important; height: 100vh !important;
+    display: flex !important; align-items: center !important; justify-content: center !important;
+    background: #000 !important;
+  }
+  canvas, canvas.waflashCanvas {
+    width: 100% !important; height: 100% !important; display: block !important; outline: none !important;
+    touch-action: none !important;
+    margin: 0 auto !important;
     font-family: "SimHei", "Microsoft YaHei", "SimSun", "Noto Sans CJK SC",
                  Arial, Helvetica, sans-serif !important;
   }
@@ -53,6 +56,9 @@
     <div id="waflashStatus">Loading...</div>
     <div id="hint">WAFlash · AS2/AS3</div>
   </div>
+  <!-- 隐藏输入框：用于唤起 Android 输入法 (IME)，将输入文本转发给 WAFlash -->
+  <input type="text" id="imeInput" autocomplete="off" autocorrect="off" autocapitalize="off"
+    style="position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;border:none;outline:none;font-size:16px;" />
 
   <script>
     var params = new URLSearchParams(location.search);
@@ -64,75 +70,91 @@
     var statusEl = document.getElementById('waflashStatus');
     var canvas = document.getElementById('canvas');
 
-    // === 屏幕比例（aspect ratio）===
-    // mode: "fit" | "fill" | "16:9" | "4:3" | "21:9" | "3:2" | "1:1" | "stretch"
-    //
-    // 实现思路(从 ref APK 反编译学到):
-    //   改 #waflashContainer 的 cssText,canvas 内部 CSS 强制 100%×100% 填满。
-    //   跟 Ruffle 不同的是:WAFlash main loop 不会自动响应 canvas size 变化,
-    //   所以 WAFlash 改比例后还是得 reload 整个 player 页面才能真生效。
-    //   (这个限制是 WAFlash WASM 端没暴露 scaleMode / ResizeObserver 导致的)
-    var waflashContainer = document.getElementById('waflashContainer');
-    var __waflashAspectMode = 'fit';
+    // === IME 输入法支持（解决 WAFlash 点击输入框不弹软键盘） ===
+    // 优先使用 GameWebView 注入的 NativeIme.showIme()（最稳：直接拉起 Android 软键盘），
+    // 兜底用隐藏 <input id="imeInput"> 聚焦，捕获 compositionend / input 事件后
+    // 通过 KeyboardEvent 把文本分发给 canvas（供 WAFlash 引擎接收）。
+    var hasNativeIme = typeof window.NativeIme !== 'undefined' && typeof window.NativeIme.showIme === 'function';
+    var imeInput = document.getElementById('imeInput');
+    var lastImeValue = '';
+    var isComposing = false;
 
-    function waflashApplyAspectRatio(mode) {
-      try {
-        var m = mode || 'fit';
-        var vw = window.innerWidth;
-        var vh = window.innerHeight;
-        var bw, bh, bt, bl;
-        if (m === 'fit' || m === 'fill' || m === 'stretch') {
-          bw = vw; bh = vh; bt = 0; bl = 0;
-        } else {
-          var ratio;
-          if (m === '16:9') ratio = 16/9;
-          else if (m === '4:3') ratio = 4/3;
-          else if (m === '21:9') ratio = 21/9;
-          else if (m === '3:2') ratio = 3/2;
-          else if (m === '1:1') ratio = 1;
-          else {
-            var parts = m.split(':');
-            if (parts.length === 2) {
-              var a = parseFloat(parts[0]), b = parseFloat(parts[1]);
-              if (isFinite(a) && isFinite(b) && a > 0 && b > 0) ratio = a / b;
-              else ratio = vw / vh;
-            } else ratio = vw / vh;
-          }
-          if (vw / vh > ratio) { bh = vh; bw = Math.round(vh * ratio); }
-          else { bw = vw; bh = Math.round(vw / ratio); }
-          bt = Math.round((vh - bh) / 2);
-          bl = Math.round((vw - bw) / 2);
-        }
-        // 改 #waflashContainer 的 cssText (canvas 内部 100%×100% 填满)
-        waflashContainer.style.cssText = 'position:fixed;top:' + bt + 'px;left:' + bl + 'px;'
-          + 'width:' + bw + 'px;height:' + bh + 'px;background:#000;'
-          + 'margin:0;padding:0;';
-        return m;
-      } catch (e) {
-        console.error('waflashApplyAspectRatio failed:', e);
-        return null;
+    function showIme() {
+      if (hasNativeIme) {
+        try { window.NativeIme.showIme(); return; } catch(e) {}
+      }
+      // 回退：隐藏 input 聚焦
+      imeInput.value = '';
+      lastImeValue = '';
+      try { imeInput.focus(); } catch(e) {}
+    }
+
+    function hideIme() {
+      if (hasNativeIme) {
+        try { window.NativeIme.hideIme(); } catch(e) {}
+      } else {
+        try { imeInput.blur(); } catch(e) {}
       }
     }
 
-    window.__applyAspectRatio = function (mode) {
-      __waflashAspectMode = mode || 'fit';
-      return waflashApplyAspectRatio(__waflashAspectMode);
-    };
-    window.addEventListener('resize', function () {
-      if (__waflashAspectMode && __waflashAspectMode !== 'fit') {
-        waflashApplyAspectRatio(__waflashAspectMode);
+    // 双击 canvas 唤起输入法（部分游戏用双击输入文本）
+    var lastTap = 0;
+    canvas.addEventListener('click', function() {
+      var now = Date.now();
+      if (now - lastTap < 400) {
+        showIme();
       }
+      lastTap = now;
     });
-    // 首次进入:URL 带 ?ratio= 就应用
-    var __initialRatioWaf = params.get('ratio');
-    if (__initialRatioWaf) {
-      __waflashAspectMode = __initialRatioWaf;
-      setTimeout(function () { waflashApplyAspectRatio(__waflashAspectMode); }, 50);
+
+    // 长按 600ms 也唤起输入法
+    var touchTimer = null;
+    canvas.addEventListener('touchstart', function() {
+      touchTimer = setTimeout(function() { showIme(); }, 600);
+    }, { passive: true });
+    canvas.addEventListener('touchend', function() {
+      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+    }, { passive: true });
+    canvas.addEventListener('touchmove', function() {
+      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+    }, { passive: true });
+
+    // 隐藏 input 兜底：监听组合输入（仅无 NativeIme 时生效）
+    if (imeInput) {
+      imeInput.addEventListener('compositionstart', function() { isComposing = true; });
+      imeInput.addEventListener('compositionend', function(e) {
+        isComposing = false;
+        var text = e.data || imeInput.value || '';
+        if (text) sendTextToCanvas(text);
+        imeInput.value = '';
+        lastImeValue = '';
+      });
+      imeInput.addEventListener('input', function(e) {
+        if (isComposing) return;
+        var val = imeInput.value;
+        if (val && val !== lastImeValue) {
+          sendTextToCanvas(val);
+          lastImeValue = val;
+          imeInput.value = '';
+          lastImeValue = '';
+        }
+      });
+      // 阻止 input 上的键盘事件冒泡（避免重复输入）
+      imeInput.addEventListener('keydown', function(e) { e.stopPropagation(); });
+      imeInput.addEventListener('keyup', function(e) { e.stopPropagation(); });
     }
-    // 标注:WAFlash 改比例后需要 reload 才能真正应用
-    window.__waflashAspectNeedsReload = function () {
-      return __waflashAspectMode && __waflashAspectMode !== 'fit';
-    };
+
+    // 把文本以 keydown/keypress/keyup 序列注入到 canvas（供 WAFlash 接收）
+    function sendTextToCanvas(text) {
+      for (var i = 0; i < text.length; i++) {
+        var ch = text.charCodeAt(i);
+        canvas.dispatchEvent(new KeyboardEvent('keydown', { key: text[i], keyCode: ch, which: ch, bubbles: true }));
+        canvas.dispatchEvent(new KeyboardEvent('keypress', { key: text[i], keyCode: ch, which: ch, charCode: ch, bubbles: true }));
+        canvas.dispatchEvent(new InputEvent('input', { data: text[i], inputType: 'insertText', bubbles: true }));
+        canvas.dispatchEvent(new KeyboardEvent('keyup', { key: text[i], keyCode: ch, which: ch, bubbles: true }));
+      }
+      try { canvas.focus(); } catch(e) {}
+    }
 
     // === Canvas 交互处理（来自 WAFlash 官方源码） ===
     // 1. 点击 canvas 获取焦点（键盘输入需要）
@@ -256,8 +278,17 @@
       loadEngine(SWF_URL);
     }
 
-    document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); return false; }, true);
     document.addEventListener('selectstart', function(e) { e.preventDefault(); });
+
+    // 拦截 Fullscreen API：防止 WAFlash 内部触发原生全屏导致 WebView 卡死
+    if (Element.prototype.requestFullscreen) {
+      Element.prototype.requestFullscreen = function() { return Promise.reject(new Error('fullscreen disabled')); };
+    }
+    if (Element.prototype.webkitRequestFullscreen) {
+      Element.prototype.webkitRequestFullscreen = function() {};
+    }
+    document.addEventListener('dblclick', function(e) { e.preventDefault(); }, true);
 
     // WebGL 上下文丢失处理
     canvas.addEventListener('webglcontextlost', function(e) {

@@ -1,22 +1,34 @@
-# 4399 App ProGuard 规则
+# ─── Keep the Application class and its companion ───────────────────────────
+-keep class com.nesstation.app.NesApp { *; }
+-keep class com.nesstation.app.NesApp$Companion { *; }
 
-# 保留 WebView 与 JavascriptInterface（必须，否则 JS 回调 Native 失效）
--keepclassmembers class * {
-    @android.webkit.JavascriptInterface <methods>;
+# ─── JNI bridge: keep native methods + the object that declares them ──────
+-keep class com.nesstation.app.core.jni.** { *; }
+-keepclasseswithmembernames class * {
+    native <methods>;
 }
--keepclassmembers class com.game4399.app.webview.WebAppInterface {
-    public *;
-}
 
-# 保留 WebView 相关类
--keep class android.webkit.** { *; }
--keep class android.webkit.WebView { *; }
--keep class android.webkit.WebViewClient { *; }
--keep class android.webkit.WebChromeClient { *; }
+# ─── Engine + its companion (singleton pattern) ───────────────────────────
+-keep class com.nesstation.app.core.engine.NesEngine { *; }
+-keep class com.nesstation.app.core.engine.NesEngine$Companion { *; }
 
-# 保留数据模型
--keep class com.game4399.app.data.** { *; }
+# ─── Storage layer ─────────────────────────────────────────────────────────
+-keep class com.nesstation.app.core.storage.** { *; }
 
-# Kotlin 元数据
--keepattributes *Annotation*, InnerClasses, Signature, Exceptions
--dontwarn kotlin.**
+# ─── Room ──────────────────────────────────────────────────────────────────
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Dao interface * { *; }
+-keep class * implements androidx.room.Dao { *; }
+-dontwarn androidx.room.paging.**
+
+# ─── DataStore ─────────────────────────────────────────────────────────────
+-keep class androidx.datastore.** { *; }
+-dontwarn androidx.datastore.**
+
+# ─── Keep Kotlin metadata so reflection-based libs work ───────────────────
+-keepattributes Signature, InnerClasses, EnclosingMethod, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, AnnotationDefault
+
+# ─── Compose / Lifecycle (R8 sometimes over-strips) ───────────────────────
+-dontwarn androidx.compose.**
+-dontwarn androidx.lifecycle.**

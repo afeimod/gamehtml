@@ -4,16 +4,17 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 橙红圆角背景 -->
+    <!-- NES-style controller silhouette + pixel halo -->
     <path
-        android:fillColor="#FFC1072E"
-        android:pathData="M0,0h108v108h-108z" />
-    <!-- 飞镖形 4 -->
+        android:fillColor="#1E2A3A"
+        android:pathData="M30,46 L30,72 C30,76 32,78 36,78 L72,78 C76,78 78,76 78,72 L78,46 C78,42 76,40 72,40 L36,40 C32,40 30,42 30,46 Z" />
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M30,28 L30,80 L42,80 L42,58 L60,58 L60,46 L42,46 L42,40 L66,40 L66,28 Z" />
-    <!-- 闪电形 -->
+        android:fillColor="#FFD66B"
+        android:pathData="M40,56 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
     <path
-        android:fillColor="#FFFFC107"
-        android:pathData="M70,30 L82,30 L74,52 L86,52 L66,80 L72,60 L62,60 Z" />
+        android:fillColor="#E74C3C"
+        android:pathData="M68,56 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+    <path
+        android:fillColor="#B7D7F2"
+        android:pathData="M50,68 h8 v3 h-8 z" />
 </vector>
