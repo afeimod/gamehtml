@@ -144,27 +144,25 @@
     };
 
     // ===== 屏幕比例（aspect ratio）=====
-    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1" | "stretch"
+    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1"
     //
-    // Ruffle 渲染原理（读 ruffle.js 源码确认）：
-    //   - <ruffle-player> 是 web component,内部 shadow DOM
-    //   - width/height 属性 → attributeChangedCallback → updateStyles →
-    //     把 :host{width:..;height:..} 注入 shadow DOM,改 web component 自身尺寸
-    //   - ruffle().config.scale 决定 SWF 怎么塞进 web component 视口：
-    //       showAll  - 等比缩放,SWF 完整可见
-    //       exactFit - 非等比拉伸,铺满
-    //       noBorder - 等比缩放,裁掉超出部分
-    //       noScale  - 原始尺寸,可能裁掉
-    //   - ruffle().config.letterbox 决定黑边策略：
-    //       on         - 显示黑条
-    //       fullscreen - 在更大空间里显示(默认)
-    //       off        - 不显示黑条
+    // Ruffle 渲染 pipeline(读 ruffle-master 源码 + web/src/lib.rs 确认):
+    //   1. <ruffle-player> 是 web component,内部有 shadow DOM 装 <canvas>
+    //   2. 内部 main loop 每帧 tick 时读 instance.canvas.clientWidth/Height
+    //      (即 <canvas> 元素的 CSS 渲染尺寸,由 web component 自身的 box 决定)
+    //   3. 如果尺寸变了 → set_viewport_dimensions() → 内部 build_matrices()
+    //      按 scale_mode(默认 ShowAll)+ letterbox(默认 Fullscreen)算 viewport 矩阵
+    //   4. scale_mode 枚举(读 core/src/display_object/stage.rs:954):
+    //      ShowAll | ExactFit | NoBorder | NoScale
+    //   5. 关键限制(读 web/src/builder.rs:208):JS 端只能通过 Builder.setScale()
+    //      在 load 之前改 scale_mode;**load 之后没有 set_scale_mode 的 JS 绑定**
+    //   6. 同样:letterbox 也是 Builder 阶段,运行时改不到
     //
-    // 所以"屏幕比例"= 改 web component 的 width/height 属性 + 选 scale/letterbox。
+    // 所以"屏幕比例"实际 = 改 <ruffle-player> 的 CSS 尺寸,让 Ruffle 自动
+    // 按 ShowAll 把 SWF 内容居中在那个尺寸的画布里(多余区域就是 Ruffle 的
+    // letterbox 黑色填充)。这是真正能生效的方案。
     function parseAspectMode(mode) {
-      // 返回 { kind: 'fit' | 'ratio' | 'stretch', ratio?: number }
       if (!mode || mode === 'fit') return { kind: 'fit' };
-      if (mode === 'stretch') return { kind: 'stretch' };
       var parts = mode.split(':');
       if (parts.length !== 2) return { kind: 'fit' };
       var w = parseFloat(parts[0]);
@@ -177,82 +175,57 @@
       return document.querySelector('ruffle-player');
     }
 
-    function getPlayerInstance() {
-      var p = findRufflePlayer();
-      if (!p || !p.ruffle) return null;
-      try { return p.ruffle(); } catch (e) { return null; }
-    }
-
     function applyAspectRatio(mode) {
       try {
         var m = parseAspectMode(mode);
         var vw = window.innerWidth;
         var vh = window.innerHeight;
         var player = findRufflePlayer();
-        var inst = getPlayerInstance();
 
         if (m.kind === 'fit') {
-          // fit: 让 ruffle-player 撑满视口,Ruffle 默认 showAll + letterbox:fullscreen
+          // fit: 还原默认,ruffle-player 撑满视口
           if (player) {
             player.removeAttribute('width');
             player.removeAttribute('height');
-            player.style.width = '100%';
-            player.style.height = '100%';
             player.style.position = '';
             player.style.left = '';
             player.style.top = '';
+            player.style.width = '100%';
+            player.style.height = '100%';
+            player.style.margin = '';
+            player.style.transform = '';
           }
           stage.style.position = 'fixed';
           stage.style.inset = '0';
           stage.style.width = '100%';
           stage.style.height = '100%';
-          if (inst && inst.config) {
-            inst.config.scale = 'showAll';
-            inst.config.letterbox = 'fullscreen';
-          }
+          stage.style.left = '';
+          stage.style.top = '';
           return 'fit';
         }
 
-        if (m.kind === 'stretch') {
-          // stretch: 撑满视口,scale 改 exactFit,letterbox 关
-          if (player) {
-            player.removeAttribute('width');
-            player.removeAttribute('height');
-            player.style.width = '100%';
-            player.style.height = '100%';
-            player.style.position = '';
-            player.style.left = '';
-            player.style.top = '';
-          }
-          stage.style.position = 'fixed';
-          stage.style.inset = '0';
-          stage.style.width = '100%';
-          stage.style.height = '100%';
-          if (inst && inst.config) {
-            inst.config.scale = 'exactFit';
-            inst.config.letterbox = 'off';
-          }
-          return 'stretch';
-        }
-
-        // ratio 模式:16:9 / 4:3 / 3:2 / 1:1
-        // 在视口内按 ratio contain 居中,把 ruffle-player 设成该尺寸
+        // ratio 模式:在视口内 contain 居中,ruffle-player 设成该比例尺寸
         var ratio = m.ratio;
         var boxRatio = vw / vh;
         var bw, bh;
         if (boxRatio > ratio) {
+          // 视口比目标比例更宽 → 高贴满
           bh = vh; bw = vh * ratio;
         } else {
           bw = vw; bh = vw / ratio;
         }
-        // 关键:用属性(width/height)而不是 style,这样 Ruffle 的 updateStyles
-        // 才会把它注入 :host 选择器,WASM 端 layout 才会按这个尺寸重算
+        bw = Math.round(bw);
+        bh = Math.round(bh);
+
         if (player) {
-          player.setAttribute('width', Math.round(bw) + 'px');
-          player.setAttribute('height', Math.round(bh) + 'px');
-          player.style.position = 'absolute';
+          // 用 CSS 直接改,触发 Ruffle 下一帧 clientWidth/Height 变化,
+          // 它会调 set_viewport_dimensions + build_matrices 重算
+          player.style.position = 'fixed';
           player.style.left = ((vw - bw) / 2) + 'px';
           player.style.top = ((vh - bh) / 2) + 'px';
+          player.style.width = bw + 'px';
+          player.style.height = bh + 'px';
+          player.style.margin = '0';
         }
         stage.style.position = 'fixed';
         stage.style.inset = '0';
@@ -260,10 +233,6 @@
         stage.style.height = bh + 'px';
         stage.style.left = ((vw - bw) / 2) + 'px';
         stage.style.top = ((vh - bh) / 2) + 'px';
-        if (inst && inst.config) {
-          inst.config.scale = 'showAll';
-          inst.config.letterbox = 'on';
-        }
         return mode;
       } catch (e) {
         console.error('applyAspectRatio failed:', e);

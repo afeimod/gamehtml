@@ -60,24 +60,39 @@
     var canvas = document.getElementById('canvas');
 
     // === 屏幕比例（aspect ratio）===
-    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1" | "stretch"
+    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1"
     //
-    // WAFlash 渲染原理（读 waflash.min.js 源码确认）：
-    //   - WAFlash 是 WASM 引擎,通过 Emscripten 的 canvas 函数拿到 <canvas> 元素
-    //   - 引擎内部用 canvas.width / canvas.height 作为"逻辑像素"做渲染坐标系
-    //   - 渲染主循环里 scaleMode=2(SHOW_ALL)按 n*f < c*o 算等比缩放 + 居中
-    //   - canvas 大小变化会被 Emscripten 监听到,WASM 端会按新尺寸重渲染
-    //   - 关键限制:WAFlash 没暴露 scaleMode 的 JS 接口(它通过 WASM 内存改),
-    //     所以"强制按 16:9 缩放"做不到,只能强制视口尺寸 + 让 WAFlash SHOW_ALL 居中
-    //   - 也就是说:如果 SWF 是 4:3,选 16:9 → canvas 设 16:9 → SWF 居中在 16:9 里
-    //     (左右黑边更多,但 SWF 内容不会被拉伸变形)
-    //   - stretch 对 WAFlash 无效(JS 端无法切到 EXACT_FIT),自动降级为 fit
+    // WAFlash 渲染 pipeline(读 waflash.min.js 完整源码 + Waflash-Player 仓库确认):
+    //   1. 启动时读 arguments:[url, "0", gpu?, filter?]
+    //   2. main loop 里读:
+    //        n = softFullscreen ? innerWidth : screen.width   (默认用 screen.width/height)
+    //        o = softFullscreen ? innerHeight : screen.height
+    //        a = canvas.width/height (Ke() 读 canvas 物理像素)
+    //        c, f = SWF stage 尺寸
+    //   3. scaleMode=2 (SHOW_ALL) 等比缩放:
+    //        if (n*f < c*o) l = f*n/c;  o = l;  // 高度贴满
+    //        else           d = c*o/f;  n = d;  // 宽度贴满
+    //   4. 然后 e.style.width = n + "px"; e.style.height = o + "px"
+    //      → WAFlash 主动覆盖 canvas 的 CSS 尺寸!
+    //   5. canvasResolutionScaleMode 控制是否乘 devicePixelRatio
+    //
+    // 关键限制:
+    //   - WAFlash 没暴露 scaleMode / canvasResolutionScaleMode 的 JS 接口
+    //   - WAFlash 没注册 ResizeObserver,canvas 大小变化**它不会自动重算**
+    //   - WAFlash 在 Play() 调用时(或 WebGL resize)才重算尺寸
+    //   - 默认 softFullscreen=undefined → 用 screen.width(物理像素,不是 CSS 像素!)
+    //     这意味着在手机高 DPR 屏上,WAFlash 会把 canvas 撑得超大
+    //
+    // 实际能做的:
+    //   1. 在 load 之前,设 canvas 初始 size,WAFlash 启动时按这个 size 算
+    //   2. 运行时改比例:**WAFlash 不会响应**,只能改外层 container 视觉位置
+    //      但 canvas 实际渲染仍按 WAFlash 启动时的尺寸
+    //   3. 想要运行时改比例,需要 reload 整个页面(URL 带 ?ratio=)
     var waflashContainer = document.getElementById('waflashContainer');
     var __waflashAspectMode = 'fit';
 
     function waflashParseMode(mode) {
       if (!mode || mode === 'fit') return { kind: 'fit' };
-      if (mode === 'stretch') return { kind: 'fit' }; // WAFlash 暂不支持拉伸
       var parts = mode.split(':');
       if (parts.length !== 2) return { kind: 'fit' };
       var w = parseFloat(parts[0]);
@@ -86,14 +101,27 @@
       return { kind: 'ratio', ratio: w / h };
     }
 
+    function waflashCalcBox(ratio) {
+      // contain 居中算法(参考 Ruffle build_matrices 的 ShowAll 分支)
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var boxRatio = vw / vh;
+      if (boxRatio > ratio) {
+        return { bw: vh * ratio, bh: vh, vw: vw, vh: vh };
+      } else {
+        return { bw: vw, bh: vw / ratio, vw: vw, vh: vh };
+      }
+    }
+
     function waflashApplyAspectRatio(mode) {
       try {
         var m = waflashParseMode(mode);
         var vw = window.innerWidth;
         var vh = window.innerHeight;
+        var dpr = window.devicePixelRatio || 1;
 
         if (m.kind === 'fit') {
-          // 还原:container 100%,canvas 100%
+          // fit:container 100%,canvas 100%
           waflashContainer.style.position = '';
           waflashContainer.style.left = '';
           waflashContainer.style.top = '';
@@ -101,22 +129,15 @@
           waflashContainer.style.height = '100%';
           canvas.style.width = '100%';
           canvas.style.height = '100%';
-          canvas.width = vw * (window.devicePixelRatio || 1);
-          canvas.height = vh * (window.devicePixelRatio || 1);
           return 'fit';
         }
 
-        // ratio:contain 居中
-        var ratio = m.ratio;
-        var boxRatio = vw / vh;
-        var bw, bh;
-        if (boxRatio > ratio) {
-          bh = vh; bw = vh * ratio;
-        } else {
-          bw = vw; bh = vw / ratio;
-        }
-        var dpr = window.devicePixelRatio || 1;
+        // ratio 模式:在视口内 contain 居中
+        var b = waflashCalcBox(m.ratio);
+        var bw = Math.round(b.bw);
+        var bh = Math.round(b.bh);
 
+        // 1) 设外层 container 居中(视觉效果)
         waflashContainer.style.position = 'fixed';
         waflashContainer.style.inset = '0';
         waflashContainer.style.width = bw + 'px';
@@ -124,12 +145,18 @@
         waflashContainer.style.left = ((vw - bw) / 2) + 'px';
         waflashContainer.style.top = ((vh - bh) / 2) + 'px';
 
-        // 关键:同时改 canvas.width/height(物理像素,WAFlash 渲染坐标系)
-        // 和 canvas.style.width/height(CSS 像素)
+        // 2) 改 canvas 尺寸 —— 注意,WAFlash 启动后不会自动重算,
+        //    这里改 canvas 尺寸可能要被 WAFlash 主动 resize 时才生效
         canvas.style.width = bw + 'px';
         canvas.style.height = bh + 'px';
+        // WAFlash 用 screen.width 当 n,用 canvas.width/height 当 a.
+        // 改 canvas.width/height(物理像素)会影响 Ke() 返回值,影响下一次重算
         canvas.width = Math.round(bw * dpr);
         canvas.height = Math.round(bh * dpr);
+
+        // 3) 尝试触发 WAFlash 重算:模拟 Emscripten 的 canvasResized 回调
+        //    但 WAFlash 没暴露这个钩子,只能靠下次内部重绘时
+        //    如果它读 canvas.width/height 就能拿到新值
         return mode;
       } catch (e) {
         console.error('waflashApplyAspectRatio failed:', e);
@@ -137,8 +164,44 @@
       }
     }
 
+    // 在 WAFlash 启动前,根据 URL 的 ratio 参数预设 canvas 尺寸
+    // 这样 WAFlash 一启动就读到正确的 canvas.width/height
+    (function () {
+      var r = params.get('ratio');
+      if (r) {
+        var m = waflashParseMode(r);
+        if (m.kind === 'ratio') {
+          var dpr = window.devicePixelRatio || 1;
+          // 不用居中,直接撑满 viewport,让 WAFlash 看到我们想要的画布物理像素
+          // WAFlash 启动后会用 canvas.width/height 作为 a,自己算等比居中
+          var vw = window.innerWidth;
+          var vh = window.innerHeight;
+          var boxRatio = vw / vh;
+          var bw, bh;
+          if (boxRatio > m.ratio) {
+            bh = vh; bw = vh * m.ratio;
+          } else {
+            bw = vw; bh = vw / m.ratio;
+          }
+          canvas.width = Math.round(bw * dpr);
+          canvas.height = Math.round(bh * dpr);
+          canvas.style.width = bw + 'px';
+          canvas.style.height = bh + 'px';
+          waflashContainer.style.position = 'fixed';
+          waflashContainer.style.inset = '0';
+          waflashContainer.style.width = bw + 'px';
+          waflashContainer.style.height = bh + 'px';
+          waflashContainer.style.left = ((vw - bw) / 2) + 'px';
+          waflashContainer.style.top = ((vh - bh) / 2) + 'px';
+          __waflashAspectMode = r;
+        }
+      }
+    })();
+
     window.__applyAspectRatio = function (mode) {
       __waflashAspectMode = mode || 'fit';
+      // WAFlash 运行时改比例效果有限(它不会自动重算),
+      // 但还是设置外层 container 位置以提供视觉反馈
       return waflashApplyAspectRatio(__waflashAspectMode);
     };
     window.addEventListener('resize', function () {
@@ -146,14 +209,10 @@
         waflashApplyAspectRatio(__waflashAspectMode);
       }
     });
-    // 初始化时也应用 URL 上的 ratio 参数(等 canvas 准备好)
-    (function () {
-      var r = params.get('ratio');
-      if (r) {
-        __waflashAspectMode = r;
-        setTimeout(function () { waflashApplyAspectRatio(__waflashAspectMode); }, 50);
-      }
-    })();
+    // 标注:WAFlash 需要 reload 才能真正应用非 fit 的比例
+    window.__waflashAspectNeedsReload = function () {
+      return __waflashAspectMode && __waflashAspectMode !== 'fit';
+    };
 
     // === Canvas 交互处理（来自 WAFlash 官方源码） ===
     // 1. 点击 canvas 获取焦点（键盘输入需要）

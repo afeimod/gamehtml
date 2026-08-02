@@ -1358,18 +1358,19 @@ class GameActivity : AppCompatActivity() {
     // ============== 屏幕比例（Aspect Ratio） ==============
 
     /** 支持的比例模式：
-     *  - fit: 默认,Ruffle/WebView 撑满,引擎自己按 SWF 原比例 + letterbox 处理
-     *  - 16:9 / 4:3 / 3:2 / 1:1: 强制视口比例,SWF 在该视口里居中(Ruffle showAll + letterbox on;WAFlash 自动 SHOW_ALL 居中)
-     *  - stretch: 拉伸铺满(Ruffle scale=exactFit,letterbox=off;WAFlash 不支持,自动降级为 fit)
+     *  - fit: 默认,Ruffle/WAFlash 撑满视口,引擎自己按 SWF 原比例 + letterbox 居中
+     *  - 16:9 / 4:3 / 3:2 / 1:1: 强制视口比例,SWF 在该视口里居中
+     *    - Ruffle: 改 ruffle-player CSS 尺寸,Ruffle 下一帧 tick 时 set_viewport_dimensions
+     *    - WAFlash: 启动时预设 canvas 尺寸;运行时改需要 reload 整个 player 页面
+     *  注意:WAFlash 的比例切换需要 reload 才会真正生效。
      */
-    private val aspectRatioModes = arrayOf("fit", "16:9", "4:3", "3:2", "1:1", "stretch")
+    private val aspectRatioModes = arrayOf("fit", "16:9", "4:3", "3:2", "1:1")
     private val aspectRatioLabels = arrayOf(
         "默认 (Fit,引擎居中)",
         "宽屏 16:9",
         "标屏 4:3",
         "相机 3:2",
-        "正方 1:1",
-        "拉伸铺满 (Stretch,WAFlash 不支持)"
+        "正方 1:1"
     )
 
     /** 是否为内置 Flash 播放器页面（player.html / waflash.html） */
@@ -1383,13 +1384,24 @@ class GameActivity : AppCompatActivity() {
     /**
      * 把当前 screenRatio 设置应用到 WebView。
      * - 普通网页：忽略（不裁剪）
-     * - Flash 播放器页面：注入 JS 调用 `window.__applyAspectRatio(mode)`，
-     *   延迟到 webView 有真实尺寸后再调用，避免 0x0 时计算错误。
+     * - Ruffle 播放器页面：注入 JS 调 `window.__applyAspectRatio(mode)`，
+     *   Ruffle 会在下一帧 tick 时自动响应 clientWidth/Height 变化重算 viewport
+     * - WAFlash 播放器页面：WAFlash 不会响应运行时 canvas 尺寸变化
+     *   （无 ResizeObserver + scaleMode 改不到 JS）,所以这里不调,WAFlash 启动
+     *   时已经从 URL ?ratio= 参数读到了,只有用户切比例时通过 reload 重新加载
      */
     private fun applyScreenRatio() {
         val mode = PrefsManager.screenRatio
         val url = webView.url ?: currentUrl
         if (!isFlashPlayerUrl(url)) return
+        val isWaflash = url.startsWith("https://flash.local/waflash.html") ||
+            url.startsWith("file:///android_asset/waflash.html")
+        if (isWaflash) {
+            // WAFlash 已经在启动时从 URL ?ratio= 读取过初始比例;
+            // 运行时改比例无意义,跳过。如果用户改过比例,showAspectRatioPicker
+            // 会主动 reload WAFlash 页面(URL 带新 ratio 参数)
+            return
+        }
         // 延迟到下一帧,WebView 此时已经有 layout 尺寸
         binding.root.post {
             val js = "(function(){try{return window.__applyAspectRatio(" +
@@ -1409,8 +1421,27 @@ class GameActivity : AppCompatActivity() {
                 val mode = aspectRatioModes[which]
                 sp.edit().putString("screen_ratio", mode).apply()
                 applyScreenRatio()
-                Toast.makeText(this, "已切换: ${aspectRatioLabels[which]}", Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
+                // WAFlash 模式下,运行时改比例 WAFlash 不会自动重算
+                // (WAFlash 没暴露 scaleMode JS 接口 + 没监听 canvas resize),
+                // 需要 reload 整个 player 页面才会真正生效
+                val url = webView.url ?: currentUrl
+                val isWaflash = url.startsWith("https://flash.local/waflash.html") ||
+                    url.startsWith("file:///android_asset/waflash.html")
+                if (isWaflash && mode != "fit" && mode != current) {
+                    Toast.makeText(this, "已切换,正在重新加载以应用新比例…", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                    // 重新构造 URL,加上 ratio 参数让 waflash.html 启动时读
+                    binding.root.postDelayed({
+                        val swfUrl = Uri.parse(url).getQueryParameter("swf") ?: return@postDelayed
+                        val baseUrl = Uri.parse(url).getQueryParameter("base")
+                        val reloaded = NavHelper.playerUrl(swfUrl, base = baseUrl, title = currentTitle)
+                        val withRatio = reloaded + "&ratio=" + mode
+                        webView.loadUrl(withRatio)
+                    }, 300)
+                } else {
+                    Toast.makeText(this, "已切换: ${aspectRatioLabels[which]}", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                }
             }
             .setNegativeButton("取消", null)
             .show()
