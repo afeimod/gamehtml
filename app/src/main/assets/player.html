@@ -15,7 +15,18 @@
     text-rendering: optimizeLegibility;
   }
   #stage { position: fixed; inset: 0; width: 100%; height: 100%; background: #000; }
-  #stage canvas, #stage ruffle-player {
+  /* Ruffle/WAFlash 元素强制 absolute 填满 stage 容器,
+     这样改 stage 尺寸就能让引擎看到 clientWidth/Height 变化
+     (参考 APK:容器在外层,内层元素 100% 填满容器) */
+  #stage ruffle-player,
+  #stage ruffle-object,
+  #stage ruffle-embed,
+  #stage canvas {
+    position: absolute !important;
+    top: 0 !important; left: 0 !important;
+    width: 100% !important; height: 100% !important;
+    margin: 0 !important; padding: 0 !important;
+    display: block !important;
     font-family: "Microsoft YaHei", "微软雅黑", "Noto Sans CJK SC", "Source Han Sans SC",
                  "PingFang SC", "Heiti SC", "SimHei", "WenQuanYi Micro Hei",
                  Arial, Helvetica, sans-serif !important;
@@ -144,129 +155,86 @@
     };
 
     // ===== 屏幕比例（aspect ratio）=====
-    // mode: "fit" | "16:9" | "4:3" | "3:2" | "1:1"
+    // 模式:
+    //   "fit"      - 默认,stage 撑满视口
+    //   "fill"     - 撑满视口
+    //   "16:9" / "4:3" / "21:9" - 固定比例 contain 居中
+    //   "stretch"  - 拉伸铺满(等比不保持)
     //
-    // Ruffle 渲染 pipeline(读 ruffle-master 源码 + web/src/lib.rs 确认):
-    //   1. <ruffle-player> 是 web component,内部有 shadow DOM 装 <canvas>
-    //   2. 内部 main loop 每帧 tick 时读 instance.canvas.clientWidth/Height
-    //      (即 <canvas> 元素的 CSS 渲染尺寸,由 web component 自身的 box 决定)
-    //   3. 如果尺寸变了 → set_viewport_dimensions() → 内部 build_matrices()
-    //      按 scale_mode(默认 ShowAll)+ letterbox(默认 Fullscreen)算 viewport 矩阵
-    //   4. scale_mode 枚举(读 core/src/display_object/stage.rs:954):
-    //      ShowAll | ExactFit | NoBorder | NoScale
-    //   5. 关键限制(读 web/src/builder.rs:208):JS 端只能通过 Builder.setScale()
-    //      在 load 之前改 scale_mode;**load 之后没有 set_scale_mode 的 JS 绑定**
-    //   6. 同样:letterbox 也是 Builder 阶段,运行时改不到
-    //
-    // 所以"屏幕比例"实际 = 改 <ruffle-player> 的 CSS 尺寸,让 Ruffle 自动
-    // 按 ShowAll 把 SWF 内容居中在那个尺寸的画布里(多余区域就是 Ruffle 的
-    // letterbox 黑色填充)。这是真正能生效的方案。
-    function parseAspectMode(mode) {
-      if (!mode || mode === 'fit') return { kind: 'fit' };
-      var parts = mode.split(':');
-      if (parts.length !== 2) return { kind: 'fit' };
-      var w = parseFloat(parts[0]);
-      var h = parseFloat(parts[1]);
-      if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return { kind: 'fit' };
-      return { kind: 'ratio', ratio: w / h };
-    }
-
-    function findRufflePlayer() {
-      return document.querySelector('ruffle-player');
-    }
-
+    // 实现思路(从 ref APK 反编译学到):
+    //   改 #stage 容器的 cssText(position:absolute + top/left/width/height),
+    //   ruffle-player 内部 CSS 强制 100%×100% 填满 stage(CSS 已在 <style> 里定义),
+    //   Ruffle main loop 每帧 tick 时读 ruffle-player 的 clientWidth/Height,
+    //   看到变化就 set_viewport_dimensions + build_matrices 重算 viewport 矩阵。
+    //   关键:不要改 ruffle-player 自身的 style.width/height (会触发 updateStyles 注入
+    //   :host 样式,可能跟 Ruffle 内部状态冲突导致白屏)
     function applyAspectRatio(mode) {
       try {
-        var m = parseAspectMode(mode);
-        var vw = window.innerWidth;
-        var vh = window.innerHeight;
-        var player = findRufflePlayer();
-
-        if (m.kind === 'fit') {
-          // fit: 不动任何东西,跟原版 player.html 行为一致
-          // (CSS #stage { inset:0; width:100%; height:100% } 已经让它撑满)
-          return 'fit';
-        }
-
-        // ratio 模式:在视口内 contain 居中,ruffle-player 设成该比例尺寸
-        var ratio = m.ratio;
-        var boxRatio = vw / vh;
-        var bw, bh;
-        if (boxRatio > ratio) {
-          bh = vh; bw = vh * ratio;
+        var m = mode || 'fit';
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        var bw, bh, bt, bl;
+        if (m === 'fit' || m === 'fill') {
+          // 撑满
+          bw = w; bh = h; bt = 0; bl = 0;
+        } else if (m === 'stretch') {
+          // 拉伸铺满(等比不保持,可能变形)
+          bw = w; bh = h; bt = 0; bl = 0;
         } else {
-          bw = vw; bh = vw / ratio;
+          // 固定比例 contain 居中
+          var ratio;
+          if (m === '16:9') ratio = 16/9;
+          else if (m === '4:3') ratio = 4/3;
+          else if (m === '21:9') ratio = 21/9;
+          else if (m === '3:2') ratio = 3/2;
+          else if (m === '1:1') ratio = 1;
+          else {
+            // 尝试解析 "w:h"
+            var parts = m.split(':');
+            if (parts.length === 2) {
+              var a = parseFloat(parts[0]), b = parseFloat(parts[1]);
+              if (isFinite(a) && isFinite(b) && a > 0 && b > 0) {
+                ratio = a / b;
+              } else { ratio = w / h; }
+            } else { ratio = w / h; }
+          }
+          if (w / h > ratio) {
+            bh = h; bw = Math.round(h * ratio);
+          } else {
+            bw = w; bh = Math.round(w / ratio);
+          }
+          bt = Math.round((h - bh) / 2);
+          bl = Math.round((w - bw) / 2);
         }
-        bw = Math.round(bw);
-        bh = Math.round(bh);
-
-        if (player) {
-          player.style.position = 'fixed';
-          player.style.left = ((vw - bw) / 2) + 'px';
-          player.style.top = ((vh - bh) / 2) + 'px';
-          player.style.width = bw + 'px';
-          player.style.height = bh + 'px';
-          player.style.margin = '0';
-        } else {
-          // ruffle-player 还没出现,先动 stage 容器占位
-          // 等 MutationObserver 触发再补救
-        }
-        stage.style.position = 'fixed';
-        stage.style.inset = '0';
-        stage.style.width = bw + 'px';
-        stage.style.height = bh + 'px';
-        stage.style.left = ((vw - bw) / 2) + 'px';
-        stage.style.top = ((vh - bh) / 2) + 'px';
-        return mode;
+        // 改 #stage 的 cssText —— ruffle-player 内部 CSS 强制 100%×100% 填满,
+        // 跟着变,Ruffle 下一帧 set_viewport_dimensions 自动响应
+        stage.style.cssText = 'position:fixed;top:' + bt + 'px;left:' + bl + 'px;'
+          + 'width:' + bw + 'px;height:' + bh + 'px;background:#000;'
+          + 'margin:0;padding:0;';
+        return m;
       } catch (e) {
         console.error('applyAspectRatio failed:', e);
         return null;
       }
     }
 
-    // 窗口尺寸变化（旋转/全屏/分屏）时重应用当前比例
     var __currentAspectMode = 'fit';
-
-    // 等 ruffle-player 加入 DOM 再应用比例
-    // (Ruffle 加载 SWF 是异步的,可能几秒后才出现)
-    // 关键:fit 模式等于"什么都不做",所以 fit 模式下即使 ruffle-player 没出现也无所谓
-    function __observeRufflePlayer() {
-      if (__currentAspectMode === 'fit') return; // fit 不动 ruffle-player,无需观察
-      var existing = findRufflePlayer();
-      if (existing) {
-        setTimeout(function () { applyAspectRatio(__currentAspectMode); }, 200);
-        return;
-      }
-      var mo = new MutationObserver(function (mutations, observer) {
-        var p = findRufflePlayer();
-        if (p) {
-          observer.disconnect();
-          setTimeout(function () { applyAspectRatio(__currentAspectMode); }, 300);
-        }
-      });
-      mo.observe(document.body || document.documentElement, {
-        childList: true,
-        subtree: true,
-      });
-      setTimeout(function () { try { mo.disconnect(); } catch(e){} }, 10000);
-    }
-
+    // 暴露给 Android 调用
+    window.__applyAspectRatio = function (mode) {
+      __currentAspectMode = mode || 'fit';
+      return applyAspectRatio(__currentAspectMode);
+    };
     window.addEventListener('resize', function () {
       if (__currentAspectMode && __currentAspectMode !== 'fit') {
         applyAspectRatio(__currentAspectMode);
       }
     });
-    // 暴露给 Android 调用
-    window.__applyAspectRatio = function (mode) {
-      __currentAspectMode = mode || 'fit';
-      __observeRufflePlayer();
-      return applyAspectRatio(__currentAspectMode);
-    };
-    // 首次进入:如果 URL 带 ?ratio= 才需要等 ruffle-player
+    // 首次进入:URL 带 ?ratio= 就应用
     var __initialRatio = param('ratio', null);
     if (__initialRatio) {
       __currentAspectMode = __initialRatio;
-      __observeRufflePlayer();
+      // 等 stage 创建好
+      setTimeout(function () { applyAspectRatio(__currentAspectMode); }, 50);
     }
 
     // 禁用长按选择 / 上下文菜单 / 缩放

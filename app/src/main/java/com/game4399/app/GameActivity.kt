@@ -1359,20 +1359,21 @@ class GameActivity : AppCompatActivity() {
 
     // ============== 屏幕比例（Aspect Ratio） ==============
 
-    /** 支持的比例模式：
-     *  - fit: 默认,Ruffle/WAFlash 撑满视口,引擎自己按 SWF 原比例 + letterbox 居中
-     *  - 16:9 / 4:3 / 3:2 / 1:1: 强制视口比例,SWF 在该视口里居中
-     *    - Ruffle: 改 ruffle-player CSS 尺寸,Ruffle 下一帧 tick 时 set_viewport_dimensions
-     *    - WAFlash: 启动时预设 canvas 尺寸;运行时改需要 reload 整个 player 页面
-     *  注意:WAFlash 的比例切换需要 reload 才会真正生效。
+    /** 屏幕比例模式(从 ref APK 反编译学到的方案,改外层容器 CSS,
+     *  内层 ruffle-player/canvas 用 100%×100% 填满,改容器尺寸就能让引擎响应)
+     *  - fit: 默认,容器撑满视口
+     *  - fill: 撑满(同 fit)
+     *  - 16:9 / 4:3 / 21:9: 固定比例 contain 居中
+     *  - stretch: 拉伸铺满(Ruffle 端因 JS 限制实际等同 fit,WAFlash 端不响应)
      */
-    private val aspectRatioModes = arrayOf("fit", "16:9", "4:3", "3:2", "1:1")
+    private val aspectRatioModes = arrayOf("fit", "fill", "16:9", "4:3", "21:9", "stretch")
     private val aspectRatioLabels = arrayOf(
-        "默认 (Fit,引擎居中)",
+        "默认 (Fit,撑满)",
+        "满屏填充 (Fill)",
         "宽屏 16:9",
         "标屏 4:3",
-        "相机 3:2",
-        "正方 1:1"
+        "超宽 21:9",
+        "拉伸全屏 (Stretch,WAFlash 不支持)"
     )
 
     /** 是否为内置 Flash 播放器页面（player.html / waflash.html） */
